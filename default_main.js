@@ -34,7 +34,7 @@ const game = {cxScreen: 0, cyScreen: 0, width: 1, height: 1, xOffset: 0, yOffset
 const cxScreen = canvas.width, cyScreen = canvas.height;
 const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
 let source, scriptNode, button, state = '';
-export let instance, memory, view;
+let instance, memory, view;
 
 (window.onresize = () => {
 	const zoom = Math.max(1, Math.min(Math.floor(window.innerWidth / cxScreen), Math.floor(window.innerHeight / cyScreen)));
