@@ -196,7 +196,7 @@ export function init(bufferSource, roms) {
 				return 'triggerB' in instance.exports && instance.exports.triggerB();
 			}
 		});
-		canvas.addEventListener('click', () => instance.exports.coin())
+		canvas.addEventListener('click', () => instance.exports.coin());
 		void function loop() {
 			instance.exports.update();
 			updateGamepad(instance.exports);
