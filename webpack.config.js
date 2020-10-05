@@ -5,6 +5,7 @@ const HtmlWebpackInlineSourcePlugin = require('html-webpack-inline-source-plugin
 const list = [
 	{name: '1942', title: '1942', width: 224, height: 256},
 	{name: 'baraduke', title: 'Baraduke', width: 288, height: 224},
+	{name: 'chackn_pop', title: 'Chack\'n Pop', width: 256, height: 224},
 	{name: 'elevator_action', title: 'Elevator Action', width: 256, height: 224},
 	{name: 'star_force', title: 'Star Force', width: 224, height: 256},
 	{name: 'time_pilot', title: 'Time Pilot', width: 224, height: 256},
