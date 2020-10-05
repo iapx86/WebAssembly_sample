@@ -26,7 +26,7 @@ struct K005289 {
 
 	K005289(uint8_t *SND, int clock, int sampleRate = 48000, int resolution = 1, float gain = 0.1) {
 		for (int i = 0; i < 0x200; i++)
-			snd[i] = (float)((SND[i] & 0x0f) * 2 / 15.0 - 1);
+			snd[i] = (SND[i] & 0xf) * 2 / 15.0 - 1;
 		rate = (double)clock / sampleRate * (1 << 27);
 		this->sampleRate = sampleRate;
 		count = sampleRate - 1;
@@ -68,8 +68,8 @@ struct K005289 {
 				}
 			for (int j = 0; j < 2; j++)
 				if (reg[j + 2]) {
-					data[i] += snd[j << 8 | reg[j] & 0xe0 | phase[j] >> 27] * (reg[j] & 0x0f) / 15 * gain;
-					phase[j] += rate / reg[j + 2];
+					data[i] += snd[j << 8 | reg[j] & 0xe0 | phase[j] >> 27] * (reg[j] & 0xf) / 15 * gain;
+					phase[j] += (uint32_t)(rate / reg[j + 2]);
 				}
 		}
 	}

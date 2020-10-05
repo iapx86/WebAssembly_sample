@@ -159,9 +159,9 @@ struct ElevatorAction {
 			case 0xa:
 				return void(gfxaddr = gfxaddr & 0xff | data << 8);
 			case 0xb:
-				return (void)(cpu2_command = data, cpu2_flag = 1, cpu2_nmi = true);
+				return cpu2_command = data, cpu2_flag = 1, void(cpu2_nmi = true);
 			case 0xc:
-				return (void)(cpu2_flag2 = data & 1, cpu2_nmi2 = (data & 1) != 0);
+				return cpu2_flag2 = data & 1, void(cpu2_nmi2 = (data & 1) != 0);
 			}
 		};
 		cpu.memorymap[0xd6].write = [&](int addr, int data) { mode = data; };

@@ -87,7 +87,7 @@ struct StarForce {
 			case 2:
 				return void(cpu_irq = false);
 			case 4:
-				return (void)(cpu2_command = data, pio.irq = pio.fInterruptEnable);
+				return cpu2_command = data, void(pio.irq = pio.fInterruptEnable);
 			}
 		};
 

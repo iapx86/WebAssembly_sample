@@ -150,7 +150,7 @@ struct VLM5030 {
 				for (int j = 9; j >= 1; --j)
 					x[j] = x[j - 1] - (k[j - 1] * u[j - 1] >> 9);
 				x[0] = u[0];
-				output = (float)std::min(1.0, std::max(-1.0, u[0] / 511.0));
+				output = std::min(1.0, std::max(-1.0, u[0] / 511.0));
 				--scount;
 				if (++pcount >= pitch)
 					pcount = 0;

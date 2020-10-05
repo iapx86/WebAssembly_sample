@@ -636,10 +636,10 @@ struct TwinBee {
 	}
 
 	void init(int rate) {
-		sound0 = new AY_3_8910(14318180 / 8, rate, 58, 0.2);
-		sound1 = new AY_3_8910(14318180 / 8, rate, 58, 0.2);
-		sound2 = new K005289(SND, 14318180 / 4, rate, 58, 0.2);
-		sound3 = new VLM5030(vlm, sizeof(vlm), 14318180 / 4, rate, 3);
+		sound0 = new AY_3_8910(14318180 / 8, rate, 58, 0.3);
+		sound1 = new AY_3_8910(14318180 / 8, rate, 58, 0.3);
+		sound2 = new K005289(SND, 14318180 / 4, rate, 58, 0.3);
+		sound3 = new VLM5030(vlm, sizeof(vlm), 14318180 / 4, rate, 5);
 		Z80::init();
 	}
 };

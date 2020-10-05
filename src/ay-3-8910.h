@@ -43,12 +43,12 @@ struct AY_3_8910 {
 	}
 
 	int read(int addr) {
-		return ram[addr & 0x0f];
+		return ram[addr & 0xf];
 	}
 
 	void write(int addr, int data, int timer = 0) {
-		ram[addr &= 0x0f] = data;
-		if (addr >= 0x0e)
+		ram[addr &= 0xf] = data;
+		if (addr >= 0xe)
 			return;
 		tmpwheel[timer].push_back({addr, data});
 	}
@@ -85,7 +85,7 @@ struct AY_3_8910 {
 			for (int j = 0; j < 3; j++) {
 				auto& ch = channel[j];
 				ch.freq = reg[j * 2] | reg[1 + j * 2] << 8 & 0xf00;
-				const int vol = (reg[8 + j] >> 4 & 1) != 0 ? evol : reg[8 + j] & 0x0f;
+				const int vol = (reg[8 + j] >> 4 & 1) != 0 ? evol : reg[8 + j] & 0xf;
 				data[i] += ((((ch.freq == 0) | reg[7] >> j | ch.output) & (reg[7] >> j + 3 | rng) & 1) * 2 - 1) * (vol ? pow(10, (vol - 15) / 10.0) : 0.0) * gain;
 			}
 			for (cycles += rate; cycles >= sampleRate; cycles -= sampleRate) {

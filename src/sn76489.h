@@ -75,10 +75,10 @@ struct SN76489 {
 			for (int j = 0; j < 3; j++) {
 				auto& ch = channel[j];
 				ch.freq = reg[j * 2];
-				const int vol = ~reg[j * 2 + 1] & 0x0f;
+				const int vol = ~reg[j * 2 + 1] & 0xf;
 				data[i] += ((ch.output & 1) * 2 - 1) * (vol ? pow(10, (vol - 15) / 10.0) : 0.0) * gain;
 			}
-			const int nfreq = (reg[6] & 3) == 3 ? channel[2].freq << 1 : 32 << (reg[6] & 3), nvol = ~reg[7] & 0x0f;
+			const int nfreq = (reg[6] & 3) == 3 ? channel[2].freq << 1 : 32 << (reg[6] & 3), nvol = ~reg[7] & 0xf;
 			data[i] += ((rng & 1) * 2 - 1) * (nvol ? pow(10, (nvol - 15) / 10.0) : 0.0) * gain;
 			for (cycles += rate; cycles >= sampleRate; cycles -= sampleRate) {
 				for (auto& ch: channel) {
@@ -98,10 +98,10 @@ struct SN76489 {
 	void regwrite(int data) {
 		if ((data & 0x80) != 0) {
 			addr = data >> 4 & 7;
-			reg[addr] = reg[addr] & 0x3f0 | data & 0x0f;
+			reg[addr] = reg[addr] & 0x3f0 | data & 0xf;
 		}
 		else
-			reg[addr] = reg[addr] & 0x0f | data << 4 & 0x3f0;
+			reg[addr] = reg[addr] & 0xf | data << 4 & 0x3f0;
 		if (addr == 6)
 			rng = 0x4000;
 	}
