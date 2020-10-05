@@ -4,7 +4,7 @@
  *
  */
 
-import {init, read} from './default_main.js'
+import {init, read} from './default_main.js';
 import {bufferSource} from './dist/1942.wasm.js';
 
 read('1942.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {

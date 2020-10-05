@@ -26,48 +26,48 @@ export function init(bufferSource, roms) {
 		document.addEventListener('keydown', e => {
 			switch (e.code) {
 			case 'ArrowLeft':
-				return 'left' in instance.exports && instance.exports.left(true);
+				return void('left' in instance.exports && instance.exports.left(true));
 			case 'ArrowUp':
-				return 'up' in instance.exports && instance.exports.up(true);
+				return void('up' in instance.exports && instance.exports.up(true));
 			case 'ArrowRight':
-				return 'right' in instance.exports && instance.exports.right(true);
+				return void('right' in instance.exports && instance.exports.right(true));
 			case 'ArrowDown':
-				return 'down' in instance.exports && instance.exports.down(true);
+				return void('down' in instance.exports && instance.exports.down(true));
 			case 'Digit0':
-				return 'coin' in instance.exports && instance.exports.coin();
+				return void('coin' in instance.exports && instance.exports.coin());
 			case 'Digit1':
-				return 'start1P' in instance.exports && instance.exports.start1P();
+				return void('start1P' in instance.exports && instance.exports.start1P());
 			case 'Digit2':
-				return 'start2P' in instance.exports && instance.exports.start2P();
+				return void('start2P' in instance.exports && instance.exports.start2P());
 			case 'KeyR':
-				return 'reset' in instance.exports && instance.exports.reset();
+				return void('reset' in instance.exports && instance.exports.reset());
 			case 'KeyT':
-				return 'test' in instance.exports && instance.exports.test();
+				return void('test' in instance.exports && instance.exports.test());
 			case 'Space':
 			case 'KeyX':
-				return 'triggerA' in instance.exports && instance.exports.triggerA(true);
+				return void('triggerA' in instance.exports && instance.exports.triggerA(true));
 			case 'KeyZ':
-				return 'triggerB' in instance.exports && instance.exports.triggerB(true);
+				return void('triggerB' in instance.exports && instance.exports.triggerB(true));
 			}
 		});
 		document.addEventListener('keyup', e => {
 			switch (e.code) {
 			case 'ArrowLeft':
-				return 'left' in instance.exports && instance.exports.left();
+				return void('left' in instance.exports && instance.exports.left(false));
 			case 'ArrowUp':
-				return 'up' in instance.exports && instance.exports.up();
+				return void('up' in instance.exports && instance.exports.up(false));
 			case 'ArrowRight':
-				return 'right' in instance.exports && instance.exports.right();
+				return void('right' in instance.exports && instance.exports.right(false));
 			case 'ArrowDown':
-				return 'down' in instance.exports && instance.exports.down();
+				return void('down' in instance.exports && instance.exports.down(false));
 			case 'Space':
 			case 'KeyX':
-				return 'triggerA' in instance.exports && instance.exports.triggerA();
+				return void('triggerA' in instance.exports && instance.exports.triggerA(false));
 			case 'KeyZ':
-				return 'triggerB' in instance.exports && instance.exports.triggerB();
+				return void('triggerB' in instance.exports && instance.exports.triggerB(false));
 			}
 		});
-		canvas.addEventListener('click', () => instance.exports.coin());
+		canvas.addEventListener('click', () => void('coin' in instance.exports && instance.exports.coin()));
 		void function loop() {
 			instance.exports.update();
 			const data = new Uint8ClampedArray(memory, instance.exports.render(), game.width * game.height * 4);

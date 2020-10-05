@@ -4,7 +4,7 @@
  *
  */
 
-import {init, read} from './default_main.js'
+import {init, read} from './default_main.js';
 import {bufferSource} from './dist/elevator_action.wasm.js';
 
 read('elevator.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
@@ -17,4 +17,3 @@ read('elevator.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const PRI = zip.decompress('eb16.ic22');
 	init(bufferSource, {PRG1, PRG2, PRG3, GFX, PRI}).then();
 });
-

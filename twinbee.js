@@ -4,7 +4,7 @@
  *
  */
 
-import {init, read} from './default_main.js'
+import {init, read} from './default_main.js';
 import {bufferSource} from './dist/twinbee.wasm.js';
 
 read('twinbee.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
@@ -17,4 +17,3 @@ read('twinbee.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(
 	const SND = Uint8Array.concat(...['400-a01.fse', '400-a02.fse'].map(e => zip.decompress(e)));
 	init(bufferSource, {PRG1, PRG2, SND}).then();
 });
-

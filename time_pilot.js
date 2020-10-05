@@ -4,7 +4,7 @@
  *
  */
 
-import {init, read} from './default_main.js'
+import {init, read} from './default_main.js';
 import {bufferSource} from './dist/time_pilot.wasm.js';
 
 read('timeplt.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
@@ -18,4 +18,3 @@ read('timeplt.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(
 	const BGCOLOR = zip.decompress('timeplt.e12');
 	init(bufferSource, {PRG1, PRG2, BG, OBJ, RGB_H, RGB_L, OBJCOLOR, BGCOLOR}).then();
 });
-
