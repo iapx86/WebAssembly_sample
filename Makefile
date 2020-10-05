@@ -1,6 +1,6 @@
 targets = \
-	1942.wasm.js baraduke.wasm.js chackn_pop.wasm.js crush_roller.wasm.js elevator_action.wasm.js star_force.wasm.js \
-	time_pilot.wasm.js twinbee.wasm.js
+	1942.wasm.js baraduke.wasm.js chackn_pop.wasm.js crush_roller.wasm.js dragon_buster.wasm.js elevator_action.wasm.js \
+	star_force.wasm.js time_pilot.wasm.js twinbee.wasm.js
 
 .PHONY: all
 all: dist $(addprefix dist/,$(targets))
@@ -25,6 +25,9 @@ dist/chackn_pop.wasm: $(addprefix src/,chackn_pop.cpp z80.cpp cpu.cpp chackn_pop
 	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/crush_roller.wasm: $(addprefix src/,crush_roller.cpp z80.cpp cpu.cpp crush_roller.h z80.h cpu.h pac-man_sound.h)
+	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
+
+dist/dragon_buster.wasm: $(addprefix src/,dragon_buster.cpp cpu.cpp dragon_buster.h mc6809.h mc6801.h cpu.h c30.h)
 	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/elevator_action.wasm: $(addprefix src/,elevator_action.cpp z80.cpp cpu.cpp elevator_action.h z80.h mc6805.h cpu.h ay-3-8910.h sound_effect.h)
