@@ -162,7 +162,7 @@ export function init(bufferSource, roms) {
 				return 'start1P' in instance.exports && instance.exports.start1P();
 			case 'Digit2':
 				return 'start2P' in instance.exports && instance.exports.start2P();
-			case 'KeyM':
+			case 'KeyM': // MUTE
 				if (audioCtx.state === 'suspended')
 					audioCtx.resume().catch();
 				else if (audioCtx.state === 'running')
@@ -206,6 +206,28 @@ export function init(bufferSource, roms) {
 			requestAnimationFrame(loop);
 		}();
 		return instance;
+	});
+}
+
+/*
+ *
+ *	Array supplementary
+ *
+ */
+
+Uint8Array.concat = function (...args) {
+	const typed_array = new this(args.reduce((a, b) => a + b.length, 0));
+	for (let offset = 0, i = 0; i < args.length; offset += args[i++].length)
+		typed_array.set(args[i], offset);
+	return typed_array;
+};
+
+export function read(url) {
+	return fetch(url).then(response => {
+		if (response.ok)
+			return response.arrayBuffer();
+		alert(`failed to get: ${url}`);
+		throw new Error(url);
 	});
 }
 

@@ -77,3 +77,25 @@ export function init(bufferSource, roms) {
 		return instance;
 	});
 }
+
+/*
+ *
+ *	Array supplementary
+ *
+ */
+
+Uint8Array.concat = function (...args) {
+	const typed_array = new this(args.reduce((a, b) => a + b.length, 0));
+	for (let offset = 0, i = 0; i < args.length; offset += args[i++].length)
+		typed_array.set(args[i], offset);
+	return typed_array;
+};
+
+export function read(url) {
+	return fetch(url).then(response => {
+		if (response.ok)
+			return response.arrayBuffer();
+		alert(`failed to get: ${url}`);
+		throw new Error(url);
+	});
+}
