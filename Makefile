@@ -1,4 +1,4 @@
-targets = 1942.wasm.js elevator_action.wasm.js star_force.wasm.js time_pilot.wasm.js twinbee.wasm.js
+targets = 1942.wasm.js baraduke.wasm.js elevator_action.wasm.js star_force.wasm.js time_pilot.wasm.js twinbee.wasm.js
 
 .PHONY: all
 all: dist $(addprefix dist/,$(targets))
@@ -14,6 +14,9 @@ dist:
 	powershell -ExecutionPolicy RemoteSigned -File convert.ps1 $< $@
 
 dist/1942.wasm: $(addprefix src/,1942.cpp z80.cpp cpu.cpp 1942.h z80.h cpu.h ay-3-8910.h)
+	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
+
+dist/baraduke.wasm: $(addprefix src/,baraduke.cpp cpu.cpp baraduke.h mc6809.h mc6801.h cpu.h c30.h)
 	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/elevator_action.wasm: $(addprefix src/,elevator_action.cpp z80.cpp cpu.cpp elevator_action.h z80.h mc6805.h cpu.h ay-3-8910.h sound_effect.h)
