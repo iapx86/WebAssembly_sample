@@ -25,6 +25,7 @@ const list = [
 	{name: 'toypop', title: 'Toypop', width: 288, height: 224},
 	{name: 'twinbee', title: 'TwinBee', width: 224, height: 256},
 	{name: 'vulgus', title: 'Vulgus', width: 224, height: 256},
+	{name: 'zigzag', title: 'Zig Zag', width: 224, height: 256},
 ];
 
 module.exports = {
