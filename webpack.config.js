@@ -16,6 +16,7 @@ const list = [
 	{name: 'pac-land', title: 'Pac-Land', width: 288, height: 224},
 	{name: 'pac-man', title: 'Pac-Man', width: 224, height: 288},
 	{name: 'pengo', title: 'Pengo', width: 224, height: 288},
+	{name: 'sea_fighter_poseidon', title: 'Sea Fighter Poseidon', width: 256, height: 224},
 	{name: 'star_force', title: 'Star Force', width: 224, height: 256},
 	{name: 'time_pilot', title: 'Time Pilot', width: 224, height: 256},
 	{name: 'twinbee', title: 'TwinBee', width: 224, height: 256},
