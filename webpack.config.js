@@ -10,6 +10,7 @@ const list = [
 	{name: 'dragon_buster', title: 'Dragon Buster', width: 288, height: 224},
 	{name: 'elevator_action', title: 'Elevator Action', width: 256, height: 224},
 	{name: 'frogger', title: 'Frogger', width: 224, height: 256},
+	{name: 'gradius', title: 'Gradius', width: 256, height: 224},
 	{name: 'star_force', title: 'Star Force', width: 224, height: 256},
 	{name: 'time_pilot', title: 'Time Pilot', width: 224, height: 256},
 	{name: 'twinbee', title: 'TwinBee', width: 224, height: 256},
