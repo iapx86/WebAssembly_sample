@@ -24,6 +24,7 @@ const list = [
 	{name: 'time_tunnel', title: 'Time Tunnel', width: 256, height: 224},
 	{name: 'toypop', title: 'Toypop', width: 288, height: 224},
 	{name: 'twinbee', title: 'TwinBee', width: 224, height: 256},
+	{name: 'vulgus', title: 'Vulgus', width: 224, height: 256},
 ];
 
 module.exports = {

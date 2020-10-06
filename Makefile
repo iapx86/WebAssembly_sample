@@ -2,7 +2,7 @@ targets = \
 	1942.wasm.js baraduke.wasm.js chackn_pop.wasm.js crush_roller.wasm.js dragon_buster.wasm.js elevator_action.wasm.js \
 	frogger.wasm.js gradius.wasm.js libble_rabble.wasm.js metro-cross.wasm.js pac-land.wasm.js pac-man.wasm.js \
 	pengo.wasm.js sea_fighter_poseidon.wasm.js sky_kid.wasm.js star_force.wasm.js strategy_x.wasm.js time_pilot.wasm.js \
-	time_tunnel.wasm.js toypop.wasm.js twinbee.wasm.js
+	time_tunnel.wasm.js toypop.wasm.js twinbee.wasm.js vulgus.wasm.js
 
 .PHONY: all
 all: dist $(addprefix dist/,$(targets))
@@ -79,4 +79,7 @@ dist/toypop.wasm: $(addprefix src/,toypop.cpp cpu.cpp toypop.h mc6809.h mc68000.
 
 dist/twinbee.wasm: $(addprefix src/,twinbee.cpp z80.cpp cpu.cpp vlm5030.cpp twinbee.h mc68000.h z80.h cpu.h ay-3-8910.h k005289.h vlm5030.h)
 	emcc -O3 -s INITIAL_MEMORY=33554432 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
+
+dist/vulgus.wasm: $(addprefix src/,vulgus.cpp z80.cpp cpu.cpp vulgus.h z80.h cpu.h ay-3-8910.h)
+	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
