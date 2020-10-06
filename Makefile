@@ -1,7 +1,7 @@
 targets = \
 	1942.wasm.js baraduke.wasm.js chackn_pop.wasm.js crush_roller.wasm.js dragon_buster.wasm.js elevator_action.wasm.js \
-	frogger.wasm.js gradius.wasm.js libble_rabble.wasm.js metro-cross.wasm.js star_force.wasm.js time_pilot.wasm.js \
-	twinbee.wasm.js
+	frogger.wasm.js gradius.wasm.js libble_rabble.wasm.js metro-cross.wasm.js pac-land.wasm.js star_force.wasm.js \
+	time_pilot.wasm.js twinbee.wasm.js
 
 .PHONY: all
 all: dist $(addprefix dist/,$(targets))
@@ -44,6 +44,9 @@ dist/libble_rabble.wasm: $(addprefix src/,libble_rabble.cpp cpu.cpp libble_rabbl
 	emcc -O3 -s INITIAL_MEMORY=33554432 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/metro-cross.wasm: $(addprefix src/,metro-cross.cpp cpu.cpp metro-cross.h mc6809.h mc6801.h cpu.h c30.h)
+	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
+
+dist/pac-land.wasm: $(addprefix src/,pac-land.cpp cpu.cpp pac-land.h mc6809.h mc6801.h cpu.h c30.h)
 	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/star_force.wasm: $(addprefix src/,star_force.cpp z80.cpp cpu.cpp star_force.h z80.h cpu.h sn76489.h senjyo_sound.h)
