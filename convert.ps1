@@ -1,4 +1,4 @@
-﻿function uint8Array($var) {
+function uint8Array($var) {
     begin { $buf = @() }
     process { $buf += $_ }
     end {
@@ -11,4 +11,4 @@
     }
 }
 
-Get-Content $Args[0] -Encoding Byte -ReadCount 0 | uint8Array bufferSource | Set-Content $Args[1]
+Get-Content $Args[0] -AsByteStream -ReadCount 0 | uint8Array bufferSource | Set-Content $Args[1]

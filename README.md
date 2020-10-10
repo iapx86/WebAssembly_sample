@@ -5,6 +5,7 @@ $ npm install webpack webpack-cli html-webpack-plugin html-webpack-inline-source
 ```
 ※最新のhtml-webpack-inline-source-pluginに問題があるらしいです。
 ### その他必要なもの
+* 新しいPowerShell https://aka.ms/pscore6
 * make http://gnuwin32.sourceforge.net/packages/make.htm
 * emscripten https://emscripten.org/
 ### ビルド方法

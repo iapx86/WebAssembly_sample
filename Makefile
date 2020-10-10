@@ -15,7 +15,7 @@ dist:
 	mkdir dist
 
 %.wasm.js: %.wasm
-	powershell -ExecutionPolicy RemoteSigned -File convert.ps1 $< $@
+	pwsh -ExecutionPolicy RemoteSigned -File convert.ps1 $< $@
 
 dist/1942.wasm: $(addprefix src/,1942.cpp z80.cpp cpu.cpp 1942.h z80.h cpu.h ay-3-8910.h)
 	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
