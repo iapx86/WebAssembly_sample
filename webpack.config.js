@@ -7,6 +7,7 @@ const list = [
 	{name: 'baraduke', title: 'Baraduke', width: 288, height: 224},
 	{name: 'chackn_pop', title: 'Chack\'n Pop', width: 256, height: 224},
 	{name: 'crush_roller', title: 'Crush Roller', width: 224, height: 288},
+	{name: 'digdug_ii', title: 'DigDug II', width: 224, height: 288},
 	{name: 'dragon_buster', title: 'Dragon Buster', width: 288, height: 224},
 	{name: 'elevator_action', title: 'Elevator Action', width: 256, height: 224},
 	{name: 'frogger', title: 'Frogger', width: 224, height: 256},
