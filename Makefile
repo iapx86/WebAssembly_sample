@@ -2,8 +2,8 @@ targets = \
 	1942.wasm.js baraduke.wasm.js chackn_pop.wasm.js crush_roller.wasm.js digdug_ii.wasm.js dragon_buster.wasm.js \
 	elevator_action.wasm.js frogger.wasm.js gradius.wasm.js grobda.wasm.js libble_rabble.wasm.js mappy.wasm.js \
 	metro-cross.wasm.js motos.wasm.js pac-land.wasm.js pac-man.wasm.js pac_and_pal.wasm.js pengo.wasm.js phozon.wasm.js \
-	sea_fighter_poseidon.wasm.js sky_kid.wasm.js star_force.wasm.js strategy_x.wasm.js time_pilot.wasm.js \
-	time_tunnel.wasm.js toypop.wasm.js twinbee.wasm.js vulgus.wasm.js zigzag.wasm.js
+	sea_fighter_poseidon.wasm.js sky_kid.wasm.js star_force.wasm.js strategy_x.wasm.js super_pac-man.wasm.js \
+	time_pilot.wasm.js time_tunnel.wasm.js toypop.wasm.js twinbee.wasm.js vulgus.wasm.js zigzag.wasm.js
 
 .PHONY: all
 all: dist $(addprefix dist/,$(targets))
@@ -85,6 +85,9 @@ dist/star_force.wasm: $(addprefix src/,star_force.cpp z80.cpp cpu.cpp star_force
 	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/strategy_x.wasm: $(addprefix src/,strategy_x.cpp z80.cpp cpu.cpp strategy_x.h z80.h cpu.h ay-3-8910.h)
+	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
+
+dist/super_pac-man.wasm: $(addprefix src/,super_pac-man.cpp cpu.cpp super_pac-man.h mc6809.h cpu.h mappy_sound.h)
 	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/time_pilot.wasm: $(addprefix src/,time_pilot.cpp z80.cpp cpu.cpp time_pilot.h z80.h cpu.h ay-3-8910.h)
