@@ -14,6 +14,7 @@ const list = [
 	{name: 'gradius', title: 'Gradius', width: 256, height: 224},
 	{name: 'grobda', title: 'Grobda', width: 224, height: 288},
 	{name: 'libble_rabble', title: 'Libble Rabble', width: 288, height: 224},
+	{name: 'mappy', title: 'Mappy', width: 224, height: 288},
 	{name: 'metro-cross', title: 'Metro-Cross', width: 288, height: 224},
 	{name: 'pac-land', title: 'Pac-Land', width: 288, height: 224},
 	{name: 'pac-man', title: 'Pac-Man', width: 224, height: 288},

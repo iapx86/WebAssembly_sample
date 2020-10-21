@@ -1,9 +1,9 @@
 targets = \
 	1942.wasm.js baraduke.wasm.js chackn_pop.wasm.js crush_roller.wasm.js digdug_ii.wasm.js dragon_buster.wasm.js \
-	elevator_action.wasm.js frogger.wasm.js gradius.wasm.js grobda.wasm.js libble_rabble.wasm.js metro-cross.wasm.js \
-	pac-land.wasm.js pac-man.wasm.js pengo.wasm.js sea_fighter_poseidon.wasm.js sky_kid.wasm.js star_force.wasm.js \
-	strategy_x.wasm.js time_pilot.wasm.js time_tunnel.wasm.js toypop.wasm.js twinbee.wasm.js vulgus.wasm.js \
-	zigzag.wasm.js
+	elevator_action.wasm.js frogger.wasm.js gradius.wasm.js grobda.wasm.js libble_rabble.wasm.js mappy.wasm.js \
+	metro-cross.wasm.js pac-land.wasm.js pac-man.wasm.js pengo.wasm.js sea_fighter_poseidon.wasm.js sky_kid.wasm.js \
+	star_force.wasm.js strategy_x.wasm.js time_pilot.wasm.js time_tunnel.wasm.js toypop.wasm.js twinbee.wasm.js \
+	vulgus.wasm.js zigzag.wasm.js
 
 .PHONY: all
 all: dist $(addprefix dist/,$(targets))
@@ -50,6 +50,9 @@ dist/grobda.wasm: $(addprefix src/,grobda.cpp cpu.cpp grobda.h mc6809.h cpu.h ma
 
 dist/libble_rabble.wasm: $(addprefix src/,libble_rabble.cpp cpu.cpp libble_rabble.h mc6809.h mc68000.h cpu.h mappy_sound.h)
 	emcc -O3 -s INITIAL_MEMORY=33554432 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
+
+dist/mappy.wasm: $(addprefix src/,mappy.cpp cpu.cpp mappy.h mc6809.h cpu.h mappy_sound.h)
+	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/metro-cross.wasm: $(addprefix src/,metro-cross.cpp cpu.cpp metro-cross.h mc6809.h mc6801.h cpu.h c30.h)
 	emcc -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
