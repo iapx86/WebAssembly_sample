@@ -8,9 +8,11 @@
 #define LIBBLE_RABBLE_H
 
 #include <cstring>
+#include <vector>
 #include "mc6809.h"
 #include "mc68000.h"
 #include "mappy_sound.h"
+using namespace std;
 
 enum {
 	BONUS_A_H, BONUS_B_I, BONUS_C_J, BONUS_D_K, BONUS_E_L, BONUS_F_M, BONUS_G_N, BONUS_NOTHING,
@@ -36,25 +38,26 @@ struct LibbleRabble {
 	bool fReset = true;
 	bool fTest = false;
 	bool fDIPSwitchChanged = true;
-	bool fCoin = false;
-	bool fStart1P = false;
-	bool fStart2P = false;
+	int fCoin = 0;
+	int fStart1P = 0;
+	int fStart2P = 0;
 	int nLibbleRabble = 3;
 	int nBonus = BONUS_A_H;
 	bool fRound = false;
 	bool fAttract = true;
 	bool fPractice = true;
-	int nRank = 'A';
+	int nRank = RANK_A;
 
-	// CPU周りの初期化
 	bool fInterruptEnable = false;
 	bool fInterruptEnable2 = false;
 
-	uint8_t ram[0x2100] = {};
+	uint8_t ram[0x2000] = {};
 	uint8_t ram2[0x800] = {};
 	uint8_t ram3[0x40000] = {};
 	uint8_t vram[0x10000] = {};
-	uint8_t port[0x30] = {};
+	uint8_t port[0x40] = {};
+	uint8_t in[15] = {};
+	int edge = 0xf;
 
 	uint8_t bg[0x8000] = {};
 	uint8_t obj[0x10000] = {};
@@ -78,8 +81,8 @@ struct LibbleRabble {
 			cpu.memorymap[0x60 + i].read = [&](int addr) { return sound0->read(addr); };
 			cpu.memorymap[0x60 + i].write = [&](int addr, int data) { sound0->write(addr, data); };
 		}
-		cpu.memorymap[0x68].base = ram + 0x2000;
-		cpu.memorymap[0x68].write = nullptr;
+		cpu.memorymap[0x68].read = [&](int addr) { return port[addr & 0x3f] | 0xf0; };
+		cpu.memorymap[0x68].write = [&](int addr, int data) { port[addr & 0x3f] = data & 0xf; };
 		for (int i = 0; i < 0x10; i++)
 			cpu.memorymap[0x70 + i].write = [&](int addr, int data) { fInterruptEnable = (addr & 0x800) == 0; };
 		for (int i = 0; i < 0x80; i++)
@@ -148,80 +151,72 @@ struct LibbleRabble {
 			fDIPSwitchChanged = false;
 			switch (nLibbleRabble) {
 			case 1:
-				port[0x13] = port[0x13] & ~3 | 1;
+				in[8] = in[8] & ~3 | 1;
 				break;
 			case 2:
-				port[0x13] |= 3;
+				in[8] |= 3;
 				break;
 			case 3:
-				port[0x13] &= ~3;
+				in[8] &= ~3;
 				break;
 			case 5:
-				port[0x13] = port[0x13] & ~3 | 2;
+				in[8] = in[8] & ~3 | 2;
 				break;
 			}
 			switch (nBonus) {
 			case BONUS_A_H: // 1st 40000 2nd 120000 3rd 200000 4th 400000 5th 600000 6th 1000000
-				port[0x13] &= ~0xc;
-				port[0x10] &= ~1;
+				in[8] &= ~0xc, in[5] &= ~1;
 				break;
 			case BONUS_B_I: // 1st 40000 2nd 140000 3rd 250000 4th 400000 5th 700000 6th 1000000
-				port[0x13] &= ~0xc;
-				port[0x10] |= 1;
+				in[8] &= ~0xc, in[5] |= 1;
 				break;
 			case BONUS_C_J: // C: 1st 50000 2nd 150000 3rd 320000 4th 500000 5th 700000 6th 1000000
 							// J: 1st 20000 2nd 120000
-				port[0x13] = port[0x13] & ~0xc | 8;
-				port[0x10] &= ~1;
+				in[8] = in[8] & ~0xc | 8, in[5] &= ~1;
 				break;
 			case BONUS_D_K: // D: 1st 40000 2nd 120000 Every 120000
 							// K: 1st 50000 2nd 150000
-				port[0x13] = port[0x13] & ~0xc | 8;
-				port[0x10] |= 1;
+				in[8] = in[8] & ~0xc | 8, in[5] |= 1;
 				break;
 			case BONUS_E_L: // 1st 50000 2nd 150000 Every 150000
-				port[0x13] = port[0x13] & ~0xc | 4;
-				port[0x10] &= ~1;
+				in[8] = in[8] & ~0xc | 4, in[5] &= ~1;
 				break;
 			case BONUS_F_M: // F: 1st 50000 2nd 150000 3rd 300000
 							// M: 1st 60000 2nd 200000 Every 200000
-				port[0x13] = port[0x13] & ~0xc | 4;
-				port[0x10] |= 1;
+				in[8] = in[8] & ~0xc | 4, in[5] |= 1;
 				break;
 			case BONUS_G_N: // G: 1st 40000 2nd 120000 3rd 200000
 							// N: 1st 50000
-				port[0x13] |= 0xc;
-				port[0x10] &= ~1;
+				in[8] |= 0xc, in[5] &= ~1;
 				break;
 			case BONUS_NOTHING:
-				port[0x13] |= 0xc;
-				port[0x10] |= 1;
+				in[8] |= 0xc, in[5] |= 1;
 				break;
 			}
 			if (fRound)
-				port[0x11] |= 2;
+				in[6] |= 2;
 			else
-				port[0x11] &= ~2;
+				in[6] &= ~2;
 			if (fAttract)
-				port[0x11] &= ~4;
+				in[6] &= ~4;
 			else
-				port[0x11] |= 4;
+				in[6] |= 4;
 			if (fPractice)
-				port[0x12] &= ~2;
+				in[7] &= ~2;
 			else
-				port[0x12] |= 2;
+				in[7] |= 2;
 			switch (nRank) {
 			case RANK_A:
-				port[0x12] &= ~0xc;
+				in[7] &= ~0xc;
 				break;
 			case RANK_B:
-				port[0x12] = port[0x12] & ~0xc | 8;
+				in[7] = in[7] & ~0xc | 8;
 				break;
 			case RANK_C:
-				port[0x12] = port[0x12] & ~0xc | 4;
+				in[7] = in[7] & ~0xc | 4;
 				break;
 			case RANK_D:
-				port[0x12] |= 0xc;
+				in[7] |= 0xc;
 				break;
 			}
 			if (!fTest)
@@ -229,9 +224,9 @@ struct LibbleRabble {
 		}
 
 		if (fTest)
-			port[0x27] |= 8;
+			in[13] |= 8;
 		else
-			port[0x27] &= ~8;
+			in[13] &= ~8;
 
 		// リセット処理
 		if (fReset) {
@@ -244,141 +239,81 @@ struct LibbleRabble {
 	}
 
 	LibbleRabble *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin && ram[0x2008] == 3) {
-			int i = (ram[0x2002] & 0xf) * 10 + (ram[0x2003] & 0xf);
-			if (i < 150) {
-				i++;
-				if (i > 99)
-					i = 99;
-				ram[0x2002] = i / 10;
-				ram[0x2003] = i % 10;
-				ram[0x2000] = 1;
-			}
-		}
-		if (fStart1P && ram[0x2008] == 3) {
-			int i = (ram[0x2002] & 0xf) * 10 + (ram[0x2003] & 0xf);
-			if (i >= 150)
-				ram[0x2001] |= 1 << 0;
-			else if (i > 0) {
-				ram[0x2001] |= 1 << 0;
-				--i;
-				ram[0x2002] = i / 10;
-				ram[0x2003] = i % 10;
-			}
-		}
-		if (fStart2P && ram[0x2008] == 3) {
-			int i = (ram[0x2002] & 0xf) * 10 + (ram[0x2003] & 0xf);
-			if (i >= 150)
-				ram[0x2001] |= 1 << 1;
-			else if (i > 1) {
-				ram[0x2001] |= 1 << 1;
-				i -= 2;
-				ram[0x2002] = i / 10;
-				ram[0x2003] = i % 10;
-			}
-		}
-		fCoin = fStart1P = fStart2P = false;
-
-		// Port Emulations
-		uint8_t key[7] = {0, 0xf, 0xd, 9, 1, 0xc, 0xc};
-		switch (ram[0x2008] & 0xf) {
-		case 1:
-		case 3:
-			memcpy(ram + 0x2004, port + 4, 4);
-			break;
-		case 5:
-			memcpy(ram + 0x2001, key, 7);
-			break;
-		}
-		switch (ram[0x2018] & 0xf) {
-		case 1:
-			memcpy(ram + 0x2010, port + 0x10, 4);
-			break;
-		case 7:
-			ram[0x2012] = 0xe;
-			break;
-		}
-		switch (ram[0x2028] & 0xf) {
-		case 7:
-			ram[0x2027] = 6;
-			break;
-		case 9:
-			memcpy(ram + 0x2020, port + 0x20, 8);
-			break;
-		}
-		return this;
+		in[0] = (fCoin != 0) << 3, in[3] = in[3] & 3 | (fStart1P != 0) << 2 | (fStart2P != 0) << 3;
+		fCoin -= (fCoin > 0), fStart1P -= (fStart1P > 0), fStart2P -= (fStart2P > 0);
+		edge &= in[3];
+		if (port[8] == 1)
+			memcpy(port + 4, in, 4);
+		else if (port[8] == 3) {
+			// クレジット/スタートボタン処理
+			int credit = port[2] * 10 + port[3];
+			if (fCoin && credit < 150)
+				port[0] += 1, credit = min(credit + 1, 99);
+			if (!port[9] && fStart1P && credit > 0)
+				port[1] += 1, credit -= (credit < 150);
+			if (!port[9] && fStart2P && credit > 1)
+				port[1] += 2, credit -= (credit < 150) * 2;
+			port[2] = credit / 10, port[3] = credit % 10;
+			memcpy(port + 4, vector<uint8_t>{in[1], uint8_t(in[3] << 1 & 0xa | edge & 5), in[2], uint8_t(in[3] & 0xa | edge >> 1 & 5)}.data(), 4);
+		} else if (port[8] == 5)
+			memcpy(port + 1, vector<uint8_t>{0, 0xf, 0xd, 9, 1, 0xc, 0xc}.data(), 7);
+		if (port[0x18] == 1)
+			memcpy(port + 0x10, in + 5, 4);
+		else if (port[0x18] == 7)
+			port[0x12] = 0xe;
+		if (port[0x28] == 7)
+			port[0x27] = 6;
+		else if (port[0x28] == 9)
+			memcpy(port + 0x20, vector<uint8_t>{in[10], in[14], in[11], in[11], in[12], in[12], in[13], in[13]}.data(), 8);
+		return edge = in[3] ^ 0xf, this;
 	}
 
 	void coin() {
-		fCoin = true;
+		fCoin = 2;
 	}
 
 	void start1P() {
-		fStart1P = true;
+		fStart1P = 2;
 	}
 
 	void start2P() {
-		fStart2P = true;
+		fStart2P = 2;
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			port[0x22] = port[0x22] & ~(1 << 2) | 1 << 0;
-		else
-			port[0x22] &= ~(1 << 0);
+		in[11] = fDown ? in[11] & ~(1 << 2) | 1 << 0 : in[11] & ~(1 << 0);
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			port[0x22] = port[0x22] & ~(1 << 3) | 1 << 1;
-		else
-			port[0x22] &= ~(1 << 1);
+		in[11] = fDown ? in[11] & ~(1 << 3) | 1 << 1 : in[11] & ~(1 << 1);
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			port[0x22] = port[0x22] & ~(1 << 0) | 1 << 2;
-		else
-			port[0x22] &= ~(1 << 2);
+		in[11] = fDown ? in[11] & ~(1 << 0) | 1 << 2 : in[11] & ~(1 << 2);
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			port[0x22] = port[0x22] & ~(1 << 1) | 1 << 3;
-		else
-			port[0x22] &= ~(1 << 3);
+		in[11] = fDown ? in[11] & ~(1 << 1) | 1 << 3 : in[11] & ~(1 << 3);
 	}
 
 	void up2(bool fDown) {
-		if (fDown)
-			port[4] = port[4] & ~(1 << 2) | 1 << 0;
-		else
-			port[4] &= ~(1 << 0);
+		in[1] = fDown ? in[1] & ~(1 << 2) | 1 << 0 : in[1] & ~(1 << 0);
 	}
 
 	void right2(bool fDown) {
-		if (fDown)
-			port[4] = port[4] & ~(1 << 3) | 1 << 1;
-		else
-			port[4] &= ~(1 << 1);
+		in[1] = fDown ? in[1] & ~(1 << 3) | 1 << 1 : in[1] & ~(1 << 1);
 	}
 
 	void down2(bool fDown) {
-		if (fDown)
-			port[4] = port[4] & ~(1 << 0) | 1 << 2;
-		else
-			port[4] &= ~(1 << 2);
+		in[1] = fDown ? in[1] & ~(1 << 0) | 1 << 2 : in[1] & ~(1 << 2);
 	}
 
 	void left2(bool fDown) {
-		if (fDown)
-			port[4] = port[4] & ~(1 << 1) | 1 << 3;
-		else
-			port[4] &= ~(1 << 3);
+		in[1] = fDown ? in[1] & ~(1 << 1) | 1 << 3 : in[1] & ~(1 << 3);
 	}
 
 	void triggerA(bool fDown) {
+		in[3] = fDown ? in[3] | 1 << 0: in[3] & ~(1 << 0);
 	}
 
 	void triggerB(bool fDown) {

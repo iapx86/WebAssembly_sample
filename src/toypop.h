@@ -8,9 +8,11 @@
 #define TOYPOP_H
 
 #include <cstring>
+#include <vector>
 #include "mc6809.h"
 #include "mc68000.h"
 #include "mappy_sound.h"
+using namespace std;
 
 enum {
 	BONUS_A, BONUS_B,
@@ -49,11 +51,12 @@ struct Toypop {
 	bool fInterruptEnable = false;
 	bool fInterruptEnable2 = false;
 
-	uint8_t ram[0x2100] = {};
+	uint8_t ram[0x2000] = {};
 	uint8_t ram2[0x800] = {};
 	uint8_t ram3[0x40000] = {};
 	uint8_t vram[0x10000] = {};
-	uint8_t port[0x30] = {};
+	uint8_t port[0x40] = {};
+	uint8_t in[15] = {};
 
 	uint8_t bg[0x8000] = {};
 	uint8_t obj[0x10000] = {};
@@ -73,8 +76,8 @@ struct Toypop {
 			cpu.memorymap[0x28 + i].base = ram2 + i * 0x100;
 			cpu.memorymap[0x28 + i].write = nullptr;
 		}
-		cpu.memorymap[0x60].base = ram + 0x2000;
-		cpu.memorymap[0x60].write = nullptr;
+		cpu.memorymap[0x60].read = [&](int addr) { return port[addr & 0x3f] | 0xf0; };
+		cpu.memorymap[0x60].write = [&](int addr, int data) { port[addr & 0x3f] = data & 0xf; };
 		for (int i = 0; i < 4; i++) {
 			cpu.memorymap[0x68 + i].read = [&](int addr) { return sound0->read(addr); };
 			cpu.memorymap[0x68 + i].write = [&](int addr, int data) { sound0->write(addr, data); };
@@ -147,56 +150,56 @@ struct Toypop {
 			fDIPSwitchChanged = false;
 			switch (nPino) {
 			case 1:
-				port[0x13] = port[0x13] & ~3 | 1;
+				in[8] = in[8] & ~3 | 1;
 				break;
 			case 2:
-				port[0x13] = port[0x13] & ~3 | 2;
+				in[8] = in[8] & ~3 | 2;
 				break;
 			case 3:
-				port[0x13] &= ~3;
+				in[8] &= ~3;
 				break;
 			case 5:
-				port[0x13] |= 3;
+				in[8] |= 3;
 				break;
 			}
 			switch (nBonus) {
 			case BONUS_A:
-				port[0x12] &= ~8;
+				in[7] &= ~8;
 				break;
 			case BONUS_B:
-				port[0x12] |= 8;
+				in[7] |= 8;
 				break;
 			}
 			switch (nRank) {
 			case RANK_EASY:
-				port[0x12] = port[0x12] & ~6 | 2;
+				in[7] = in[7] & ~6 | 2;
 				break;
 			case RANK_NORMAL:
-				port[0x12] &= ~6;
+				in[7] &= ~6;
 				break;
 			case RANK_HARD:
-				port[0x12] = port[0x12] & ~6 | 4;
+				in[7] = in[7] & ~6 | 4;
 				break;
 			case RANK_VERY_HARD:
-				port[0x12] |= 6;
+				in[7] |= 6;
 				break;
 			}
 			if (fAttract)
-				port[0x11] &= ~8;
+				in[6] &= ~8;
 			else
-				port[0x11] |= 8;
+				in[6] |= 8;
 			if (fRound)
-				port[0x11] |= 2;
+				in[6] |= 2;
 			else
-				port[0x11] &= ~2;
+				in[6] &= ~2;
 			if (!fTest)
 				fReset = true;
 		}
 
 		if (fTest)
-			port[0x10] |= 8;
+			in[5] |= 8;
 		else
-			port[0x10] &= ~8;
+			in[5] &= ~8;
 
 		// リセット処理
 		if (fReset) {
@@ -209,42 +212,20 @@ struct Toypop {
 	}
 
 	Toypop *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			port[4] |= 1 << 0, --fCoin;
-		else
-			port[4] &= ~(1 << 0);
-		if (fStart1P)
-			port[7] |= 1 << 2, --fStart1P;
-		else
-			port[7] &= ~(1 << 2);
-		if (fStart2P)
-			port[7] |= 1 << 3, --fStart2P;
-		else
-			port[7] &= ~(1 << 3);
-
-		// Port Emulations
-		memcpy(ram + 0x2004, port + 4, 4);
-		memcpy(ram + 0x2010, port + 0x10, 4);
-		memcpy(ram + 0x2020, port + 0x20, 8);
-		if ((ram[0x2008] & 0xf) == 5) {
-			ram[0x2002] = 0xf;
-			ram[0x2006] = 0xc;
-		}
-		if ((ram[0x2018] & 0xf) == 8) {
-			int sum = 0;
-			for (int i = 0x2019; i < 0x2020; i++)
-				sum += ram[i] & 0xf;
-			ram[0x2010] = sum >> 4 & 0xf;
-			ram[0x2011] = sum & 0xf;
-		}
-		if ((ram[0x2028] & 0xf) == 8) {
-			int sum = 0;
-			for (int i = 0x2029; i < 0x2030; i++)
-				sum += ram[i] & 0xf;
-			ram[0x2020] = sum >> 4 & 0xf;
-			ram[0x2021] = sum & 0xf;
-		}
+		in[0] = (fCoin != 0) << 3, in[3] = in[3] & 3 | (fStart1P != 0) << 2 | (fStart2P != 0) << 3;
+		fCoin -= (fCoin > 0), fStart1P -= (fStart1P > 0), fStart2P -= (fStart2P > 0);
+		if (port[8] == 1)
+			memcpy(port + 4, in, 4);
+		else if (port[8] == 5)
+			port[2] = 0xf, port[6] = 0xc;
+		if (port[0x18] == 1)
+			memcpy(port + 0x10, in + 5, 4);
+		else if (port[0x18] == 8)
+			port[0x10] = 6, port[0x11] = 9;
+		if (port[0x28] == 8)
+			port[0x20] = 6, port[0x21] = 9;
+		else if (port[0x28] == 9)
+			memcpy(port + 0x20, vector<uint8_t>{in[10], in[14], in[11], in[11], in[12], in[12], in[13], in[13]}.data(), 8);
 		return this;
 	}
 
@@ -261,38 +242,23 @@ struct Toypop {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			port[5] = port[5] & 0xf0 | 1 << 0;
-		else
-			port[5] &= ~(1 << 0);
+		in[1] = fDown ? in[1] & ~(1 << 2) | 1 << 0 : in[1] & ~(1 << 0);
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			port[5] = port[5] & 0xf0 | 1 << 1;
-		else
-			port[5] &= ~(1 << 1);
+		in[1] = fDown ? in[1] & ~(1 << 3) | 1 << 1 : in[1] & ~(1 << 1);
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			port[5] = port[5] & 0xf0 | 1 << 2;
-		else
-			port[5] &= ~(1 << 2);
+		in[1] = fDown ? in[1] & ~(1 << 0) | 1 << 2 : in[1] & ~(1 << 2);
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			port[5] = port[5] & 0xf0 | 1 << 3;
-		else
-			port[5] &= ~(1 << 3);
+		in[1] = fDown ? in[1] & ~(1 << 1) | 1 << 3 : in[1] & ~(1 << 3);
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			port[7] |= 1 << 0;
-		else
-			port[7] &= ~(1 << 0);
+		in[3] = fDown ? in[3] | 1 << 0: in[3] & ~(1 << 0);
 	}
 
 	void triggerB(bool fDown) {
