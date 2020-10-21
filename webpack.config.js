@@ -27,6 +27,7 @@ const list = [
 	{name: 'star_force', title: 'Star Force', width: 224, height: 256},
 	{name: 'strategy_x', title: 'Strategy X', width: 256, height: 224},
 	{name: 'super_pac-man', title: 'Super Pac-Man', width: 224, height: 288},
+	{name: 'the_tower_of_druaga', title: 'The Tower of Druaga', width: 224, height: 288},
 	{name: 'time_pilot', title: 'Time Pilot', width: 224, height: 256},
 	{name: 'time_tunnel', title: 'Time Tunnel', width: 256, height: 224},
 	{name: 'toypop', title: 'Toypop', width: 288, height: 224},
