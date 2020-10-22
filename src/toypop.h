@@ -47,10 +47,8 @@ struct Toypop {
 	bool fAttract = true;
 	bool fRound = false;
 
-	// CPU周りの初期化
 	bool fInterruptEnable = false;
 	bool fInterruptEnable2 = false;
-
 	uint8_t ram[0x2000] = {};
 	uint8_t ram2[0x800] = {};
 	uint8_t ram3[0x40000] = {};

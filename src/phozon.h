@@ -45,7 +45,6 @@ struct Phozon {
 	bool fInterruptEnable1 = false;
 	bool fInterruptEnable2 = false;
 	bool fSoundEnable = false;
-
 	uint8_t ram[0x2800] = {};
 	uint8_t port[0x40] = {};
 	uint8_t in[10] = {};
@@ -74,7 +73,7 @@ struct Phozon {
 			cpu.memorymap[0x48 + i].write = [&](int addr, int data) { port[addr & 0x3f] = data & 0xf; };
 		}
 		cpu.memorymap[0x50].write = [&](int addr, int data) {
-		switch (addr & 0xff) {
+			switch (addr & 0xff) {
 			case 0x00: // INTERRUPT STOP
 				return void(fInterruptEnable2 = false);
 			case 0x01: // INTERRUPT START

@@ -134,6 +134,7 @@ struct Grobda {
 	}
 
 	Grobda *execute() {
+//		sound0->mute(!fSoundEnable);
 		if (fInterruptEnable0)
 			cpu.interrupt();
 		if (fInterruptEnable1)

@@ -10484,7 +10484,7 @@ struct MC68000 : Cpu {
 			r -= 6;
 		if ((c & 0x80) != 0 && (r & 0xf0) > 0x50 || (r & 0xf0) > 0x90)
 			r -= 0x60, c |= 0x80;
-		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | !r << 2 | c >> 7 & 1, r;
+		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | sr & !r << 2 | c >> 7 & 1, r;
 	}
 
 	int divs(int src, int dst) {
@@ -10498,17 +10498,17 @@ struct MC68000 : Cpu {
 
 	static int subx8(int src, int dst, int& sr) {
 		const int r = dst - src - (sr >> 4 & 1) & 0xff, v = dst & ~src & ~r | ~dst & src & r, c = ~dst & src | src & r | r & ~dst;
-		return sr = sr & ~0x1f | c >> 3 & 0x10 | r >> 4 & 8 | !r << 2 | v >> 6 & 2 | c >> 7 & 1, r;
+		return sr = sr & ~0x1f | c >> 3 & 0x10 | r >> 4 & 8 | sr & !r << 2 | v >> 6 & 2 | c >> 7 & 1, r;
 	}
 
 	static int subx16(int src, int dst, int& sr) {
 		const int r = dst - src - (sr >> 4 & 1) & 0xffff, v = dst & ~src & ~r | ~dst & src & r, c = ~dst & src | src & r | r & ~dst;
-		return sr = sr & ~0x1f | c >> 11 & 0x10 | r >> 12 & 8 | !r << 2 | v >> 14 & 2 | c >> 15 & 1, r;
+		return sr = sr & ~0x1f | c >> 11 & 0x10 | r >> 12 & 8 | sr & !r << 2 | v >> 14 & 2 | c >> 15 & 1, r;
 	}
 
 	static int subx32(int src, int dst, int& sr) {
 		const int r = dst - src - (sr >> 4 & 1), v = dst & ~src & ~r | ~dst & src & r, c = ~dst & src | src & r | r & ~dst;
-		return sr = sr & ~0x1f | c >> 27 & 0x10 | r >> 28 & 8 | !r << 2 | v >> 30 & 2 | c >> 31 & 1, r;
+		return sr = sr & ~0x1f | c >> 27 & 0x10 | r >> 28 & 8 | sr & !r << 2 | v >> 30 & 2 | c >> 31 & 1, r;
 	}
 
 	void cmpa16(int src, int dst) {
@@ -10533,7 +10533,7 @@ struct MC68000 : Cpu {
 				c |= 0x80;
 		if ((c & 0x80) != 0 && (r & 0xf0) < 0x40 || (r & 0xf0) > 0x90)
 			r += 0x60, c |= 0x80;
-		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | !r << 2 | c >> 7 & 1, r;
+		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | sr & !r << 2 | c >> 7 & 1, r;
 	}
 
 	static int muls(int src, int dst, int& sr) {
@@ -10543,179 +10543,183 @@ struct MC68000 : Cpu {
 
 	static int addx8(int src, int dst, int& sr) {
 		const int r = dst + src + (sr >> 4 & 1) & 0xff, v = dst & src & ~r | ~dst & ~src & r, c = dst & src | src & ~r | ~r & dst;
-		return sr = sr & ~0x1f | c >> 3 & 0x10 | r >> 4 & 8 | !r << 2 | v >> 6 & 2 | c >> 7 & 1, r;
+		return sr = sr & ~0x1f | c >> 3 & 0x10 | r >> 4 & 8 | sr & !r << 2 | v >> 6 & 2 | c >> 7 & 1, r;
 	}
 
 	static int addx16(int src, int dst, int& sr) {
 		const int r = dst + src + (sr >> 4 & 1) & 0xffff, v = dst & src & ~r | ~dst & ~src & r, c = dst & src | src & ~r | ~r & dst;
-		return sr = sr & ~0x1f | c >> 11 & 0x10 | r >> 12 & 8 | !r << 2 | v >> 14 & 2 | c >> 15 & 1, r;
+		return sr = sr & ~0x1f | c >> 11 & 0x10 | r >> 12 & 8 | sr & !r << 2 | v >> 14 & 2 | c >> 15 & 1, r;
 	}
 
 	static int addx32(int src, int dst, int& sr) {
 		const int r = dst + src + (sr >> 4 & 1), v = dst & src & ~r | ~dst & ~src & r, c = dst & src | src & ~r | ~r & dst;
-		return sr = sr & ~0x1f | c >> 27 & 0x10 | r >> 28 & 8 | !r << 2 | v >> 30 & 2 | c >> 31 & 1, r;
+		return sr = sr & ~0x1f | c >> 27 & 0x10 | r >> 28 & 8 | sr & !r << 2 | v >> 30 & 2 | c >> 31 & 1, r;
 	}
 
 	static int asr8(int src, int dst, int& sr) {
 		src &= 63, dst = dst << 24 >> 24;
-		const int r = dst >> src & 0xff, x = src ? dst >> (src - 1) & 1 : sr >> 4 & 1, c = src ? dst >> (src - 1) & 1 : 0;
+		const int r = dst >> min(src, 7) & 0xff, c = (src > 0) & dst >> min(src - 1, 7), x = src > 0 ? c : sr >> 4 & 1;
 		return sr = sr & ~0x1f | x << 4 | r >> 4 & 8 | !r << 2 | c, r;
 	}
 
 	static int asr16(int src, int dst, int& sr) {
 		src &= 63, dst = dst << 16 >> 16;
-		const int r = dst >> src & 0xffff, x = src ? dst >> (src - 1) & 1 : sr >> 4 & 1, c = src ? dst >> (src - 1) & 1 : 0;
+		const int r = dst >> min(src, 15) & 0xffff, c = (src > 0) & dst >> min(src - 1, 15), x = src > 0 ? c : sr >> 4 & 1;
 		return sr = sr & ~0x1f | x << 4 | r >> 12 & 8 | !r << 2 | c, r;
 	}
 
 	static int asr32(int src, int dst, int& sr) {
 		src &= 63;
-		const int r = dst >> src, x = src ? dst >> (src - 1) & 1 : sr >> 4 & 1, c = src ? dst >> (src - 1) & 1 : 0;
+		const int r = dst >> min(src, 31), c = (src > 0) & dst >> min(src - 1, 31), x = src > 0 ? c : sr >> 4 & 1;
 		return sr = sr & ~0x1f | x << 4 | r >> 28 & 8 | !r << 2 | c, r;
 	}
 
 	static int lsr8(int src, int dst, int& sr) {
 		src &= 63, dst &= 0xff;
-		const int r = dst >> src, x = src ? dst >> (src - 1) & 1 : sr >> 4 & 1, c = src ? dst >> (src - 1) & 1 : 0;
+		const int r = -(src < 8) & dst >> src, c = (src > 0 && src < 9) & dst >> src - 1, x = src > 0 ? c : sr >> 4 & 1;
 		return sr = sr & ~0x1f | x << 4 | r >> 4 & 8 | !r << 2 | c, r;
 	}
 
 	static int lsr16(int src, int dst, int& sr) {
 		src &= 63, dst &= 0xffff;
-		const int r = dst >> src, x = src ? dst >> (src - 1) & 1 : sr >> 4 & 1, c = src ? dst >> (src - 1) & 1 : 0;
+		const int r = -(src < 16) & dst >> src, c = (src > 0 && src < 17) & dst >> src - 1, x = src > 0 ? c : sr >> 4 & 1;
 		return sr = sr & ~0x1f | x << 4 | r >> 12 & 8 | !r << 2 | c, r;
 	}
 
 	static int lsr32(int src, int dst, int& sr) {
 		src &= 63;
-		const int r = (unsigned int)dst >> src, x = src ? (unsigned int)dst >> (src - 1) & 1 : sr >> 4 & 1, c = src ? (unsigned int)dst >> (src - 1) & 1 : 0;
+		const int r = -(src < 32) & (unsigned int)dst >> src, c = (src > 0 && src < 33) & dst >> src - 1, x = src > 0 ? c : sr >> 4 & 1;
 		return sr = sr & ~0x1f | x << 4 | r >> 28 & 8 | !r << 2 | c, r;
 	}
 
 	static int roxr8(int src, int dst, int& sr) {
 		src = (src & 63) % 9, dst &= 0xff;
-		const int r = (dst >> src | dst << 9 - src | (sr >> 4 & 1) << 8 - src) & 0xff, x = src ? dst >> src - 1 & 1 : sr >> 4 & 1;
+		int x = sr >> 4 & 1, r = (dst | x << 8 | dst << 9) >> src & 0xff;
+		x = src > 0 ? dst >> src - 1 & 1 : x;
 		return sr = sr & ~0x1f | x << 4 | r >> 4 & 8 | !r << 2 | x, r;
 	}
 
 	static int roxr16(int src, int dst, int& sr) {
 		src = (src & 63) % 17, dst &= 0xffff;
-		const int r = (dst >> src | dst << 17 - src | (sr >> 4 & 1) << 16 - src) & 0xffff, x = src ? dst >> src - 1 & 1 : sr >> 4 & 1;
+		int x = sr >> 4 & 1, r = (dst | x << 16 | dst << 17) >> src & 0xffff;
+		x = src > 0 ? dst >> src - 1 & 1 : x;
 		return sr = sr & ~0x1f | x << 4 | r >> 12 & 8 | !r << 2 | x, r;
 	}
 
 	static int roxr32(int src, int dst, int& sr) {
 		src = (src & 63) % 33;
-		const int r = (unsigned int)dst >> src | dst << 33 - src | (sr >> 4 & 1) << 32 - src, x = src ? (unsigned int)dst >> src - 1 & 1 : sr >> 4 & 1;
+		int x = sr >> 4 & 1, r = -(src > 1) & dst << 33 - src | -(src > 0) & x << 32 - src | -(src < 32) & (unsigned int)dst >> src;
+		x = src > 0 ? dst >> src - 1 & 1 : x;
 		return sr = sr & ~0x1f | x << 4 | r >> 28 & 8 | !r << 2 | x, r;
 	}
 
 	static int ror8(int src, int dst, int& sr) {
-		src &= 63, dst &= 0xff;
-		const int r = dst >> (src & 7) | dst << (~src & 7) + 1 & 0xff, c = src ? dst >> (src - 1 & 7) & 1 : 0;
+		dst &= 0xff;
+		const int r = (dst | dst << 8) >> (src & 7) & 0xff, c = (src > 0) & r >> 7;
 		return sr = sr & ~0x0f | r >> 4 & 8 | !r << 2 | c, r;
 	}
 
 	static int ror16(int src, int dst, int& sr) {
-		src &= 63, dst &= 0xffff;
-		const int r = dst >> (src & 15) | dst << (~src & 15) + 1 & 0xffff, c = src ? dst >> (src - 1 & 15) & 1 : 0;
+		dst &= 0xffff;
+		const int r = (dst | dst << 16) >> (src & 15) & 0xffff, c = (src > 0) & r >> 15;
 		return sr = sr & ~0x0f | r >> 12 & 8 | !r << 2 | c, r;
 	}
 
 	static int ror32(int src, int dst, int& sr) {
-		src &= 63;
-		const int r = (unsigned int)dst >> (src & 31) | dst << (~src & 31) + 1, c = src ? (unsigned int)dst >> (src - 1 & 31) & 1 : 0;
+		const int r = dst << (-src & 31) | (unsigned int)dst >> (src & 31), c = (src > 0) & r >> 31;
 		return sr = sr & ~0x0f | r >> 28 & 8 | !r << 2 | c, r;
 	}
 
 	static int asl8(int src, int dst, int& sr) {
-		int x = sr >> 4 & 1, v = 0, c = 0;
-		src &= 63, dst &= 0xff;
-		for (int i = 0; i < src; i++)
-			v |= (dst >> 7 ^ dst >> 6) & 1, x = dst >> 7, c = dst >> 7, dst = dst << 1 & 0xff;
-		return sr = sr & ~0x1f | x << 4 | dst >> 4 & 8 | !dst << 2 | v << 1 | c, dst;
+		src &= 63;
+		const int r = -(src < 8) & dst << src & 0xff, c = (src > 0 && src < 9) & dst << src - 1 >> 7, x = src > 0 ? c : sr >> 4 & 1;
+		const int m = ~0x7f >> min(src - 1, 7) & 0xff, v = src > 0 ? dst >> 7 & ((~(dst << 1) & m) != 0) | ~dst >> 7 & ((dst << 1 & m) != 0) : 0;
+		return sr = sr & ~0x1f | x << 4 | r >> 4 & 8 | !r << 2 | v << 1 | c, r;
 	}
 
 	static int asl16(int src, int dst, int& sr) {
-		int x = sr >> 4 & 1, v = 0, c = 0;
-		src &= 63, dst &= 0xffff;
-		for (int i = 0; i < src; i++)
-			v |= (dst >> 15 ^ dst >> 14) & 1, x = dst >> 15, c = dst >> 15, dst = dst << 1 & 0xffff;
-		return sr = sr & ~0x1f | x << 4 | dst >> 12 & 8 | !dst << 2 | v << 1 | c, dst;
+		src &= 63;
+		const int r = -(src < 16) & dst << src & 0xffff, c = (src > 0 && src < 17) & dst << src - 1 >> 15, x = src > 0 ? c : sr >> 4 & 1;
+		const int m = ~0x7fff >> min(src - 1, 15) & 0xffff, v = src > 0 ? dst >> 15 & ((~(dst << 1) & m) != 0) | ~dst >> 15 & ((dst << 1 & m) != 0) : 0;
+		return sr = sr & ~0x1f | x << 4 | r >> 12 & 8 | !r << 2 | v << 1 | c, r;
 	}
 
 	static int asl32(int src, int dst, int& sr) {
-		int x = sr >> 4 & 1, v = 0, c = 0;
 		src &= 63;
-		for (int i = 0; i < src; i++)
-			v |= (dst >> 31 ^ dst >> 30) & 1, x = (unsigned int)dst >> 31, c = (unsigned int)dst >> 31, dst = dst << 1;
-		return sr = sr & ~0x1f | x << 4 | dst >> 28 & 8 | !dst << 2 | v << 1 | c, dst;
+		const int r = -(src < 32) & dst << src, c = (src > 0 && src < 33) & dst << src - 1 >> 31, x = src > 0 ? c : sr >> 4 & 1;
+		const int m = ~0x7fffffff >> min(src - 1, 31), v = src > 0 ? dst >> 31 & ((~(dst << 1) & m) != 0) | ~dst >> 31 & ((dst << 1 & m) != 0) : 0;
+		return sr = sr & ~0x1f | x << 4 | r >> 28 & 8 | !r << 2 | v << 1 | c, r;
 	}
 
 	static int lsl8(int src, int dst, int& sr) {
-		const int r = dst << (src &= 63) & 0xff, x = src ? dst << (src - 1) >> 7 & 1 : sr >> 4 & 1, c = src ? dst << (src - 1) >> 7 & 1 : 0;
+		src &= 63;
+		const int r = -(src < 8) & dst << src & 0xff, c = (src > 0 && src < 9) & dst << src - 1 >> 7, x = src > 0 ? c : sr >> 4 & 1;
 		return sr = sr & ~0x1f | x << 4 | r >> 4 & 8 | !r << 2 | c, r;
 	}
 
 	static int lsl16(int src, int dst, int& sr) {
-		const int r = dst << (src &= 63) & 0xffff, x = src ? dst << (src - 1) >> 15 & 1 : sr >> 4 & 1, c = src ? dst << (src - 1) >> 15 & 1 : 0;
+		src &= 63;
+		const int r = -(src < 16) & dst << src & 0xffff, c = (src > 0 && src < 17) & dst << src - 1 >> 15, x = src > 0 ? c : sr >> 4 & 1;
 		return sr = sr & ~0x1f | x << 4 | r >> 12 & 8 | !r << 2 | c, r;
 	}
 
 	static int lsl32(int src, int dst, int& sr) {
-		const int r = dst << (src &= 63), x = src ? dst << (src - 1) >> 31 & 1 : sr >> 4 & 1, c = src ? dst << (src - 1) >> 31 & 1 : 0;
+		src &= 63;
+		const int r = -(src < 32) & dst << src, c = (src > 0 && src < 33) & dst << src - 1 >> 31, x = src > 0 ? c : sr >> 4 & 1;
 		return sr = sr & ~0x1f | x << 4 | r >> 28 & 8 | !r << 2 | c, r;
 	}
 
 	static int roxl8(int src, int dst, int& sr) {
 		src = (src & 63) % 9, dst &= 0xff;
-		const int r = (dst << src | dst >> 9 - src | (sr << 3 & 0x80) >> 8 - src) & 0xff, x = src ? dst >> 8 - src & 1 : sr >> 4 & 1;
+		int x = sr >> 4 & 1, r = (dst >> 1 | x << 7 | dst << 8) >> 8 - src & 0xff;
+		x = src > 0 ? dst >> 8 - src & 1 : x;
 		return sr = sr & ~0x1f | x << 4 | r >> 4 & 8 | !r << 2 | x, r;
 	}
 
 	static int roxl16(int src, int dst, int& sr) {
 		src = (src & 63) % 17, dst &= 0xffff;
-		const int r = (dst << src | dst >> 17 - src | (sr << 11 & 0x8000) >> 16 - src) & 0xffff, x = src ? dst >> 16 - src & 1 : sr >> 4 & 1;
+		int x = sr >> 4 & 1, r = (dst >> 1 | x << 15 | dst << 16) >> 16 - src & 0xffff;
+		x = src > 0 ? dst >> 16 - src & 1 : x;
 		return sr = sr & ~0x1f | x << 4 | r >> 12 & 8 | !r << 2 | x, r;
 	}
 
 	static int roxl32(int src, int dst, int& sr) {
 		src = (src & 63) % 33;
-		const int r = dst << src | (unsigned int)dst >> 33 - src | ((unsigned int)sr << 27 & 0x80000000) >> 32 - src, x = src ? (unsigned int)dst >> 32 - src & 1 : sr >> 4 & 1;
+		int x = sr >> 4 & 1, r = -(src < 32) & dst << src | -(src > 0) & x << src - 1 | -(src > 1) & (unsigned int)dst >> 33 - src;
+		x = src > 0 ? dst >> 32 - src & 1 : x;
 		return sr = sr & ~0x1f | x << 4 | r >> 28 & 8 | !r << 2 | x, r;
 	}
 
 	static int rol8(int src, int dst, int& sr) {
-		src &= 63, dst &= 0xff;
-		const int r = dst << (src & 7) & 0xff | dst >> (~src & 7) + 1, c = src ? dst >> (-src & 7) & 1 : 0;
+		dst &= 0xff;
+		const int r = (dst | dst << 8) >> (-src & 7) & 0xff, c = (src > 0) & r;
 		return sr = sr & ~0x0f | r >> 4 & 8 | !r << 2 | c, r;
 	}
 
 	static int rol16(int src, int dst, int& sr) {
-		src &= 63, dst &= 0xffff;
-		const int r = dst << (src & 15) & 0xffff | dst >> (~src & 15) + 1, c = src ? dst >> (-src & 15) & 1 : 0;
+		dst &= 0xffff;
+		const int r = (dst | dst << 16) >> (-src & 15) & 0xffff, c = (src > 0) & r;
 		return sr = sr & ~0x0f | r >> 12 & 8 | !r << 2 | c, r;
 	}
 
 	static int rol32(int src, int dst, int& sr) {
-		src &= 63;
-		const int r = dst << (src & 31) | (unsigned int)dst >> (~src & 31) + 1, c = src ? dst >> (-src & 31) & 1 : 0;
+		const int r = dst << (src & 31) | (unsigned int)dst >> (-src & 31), c = (src > 0) & r;
 		return sr = sr & ~0x0f | r >> 28 & 8 | !r << 2 | c, r;
 	}
 
 	static int negx8(int src, int dst, int& sr) {
 		const int r = -dst - (sr >> 4 & 1) & 0xff, v = dst & r, c = dst | r;
-		return sr = sr & ~0x1f | c >> 3 & 0x10 | r >> 4 & 8 | !r << 2 | v >> 6 & 2 | c >> 7 & 1, r;
+		return sr = sr & ~0x1f | c >> 3 & 0x10 | r >> 4 & 8 | sr & !r << 2 | v >> 6 & 2 | c >> 7 & 1, r;
 	}
 
 	static int negx16(int src, int dst, int& sr) {
 		const int r = -dst - (sr >> 4 & 1) & 0xffff, v = dst & r, c = dst | r;
-		return sr = sr & ~0x1f | c >> 11 & 0x10 | r >> 12 & 8 | !r << 2 | v >> 14 & 2 | c >> 15 & 1, r;
+		return sr = sr & ~0x1f | c >> 11 & 0x10 | r >> 12 & 8 | sr & !r << 2 | v >> 14 & 2 | c >> 15 & 1, r;
 	}
 
 	static int negx32(int src, int dst, int& sr) {
 		const int r = -dst - (sr >> 4 & 1), v = dst & r, c = dst | r;
-		return sr = sr & ~0x1f | c >> 27 & 0x10 | r >> 28 & 8 | !r << 2 | v >> 30 & 2 | c >> 31 & 1, r;
+		return sr = sr & ~0x1f | c >> 27 & 0x10 | r >> 28 & 8 | sr & !r << 2 | v >> 30 & 2 | c >> 31 & 1, r;
 	}
 
 	static int clr(int src, int dst, int& sr) {
@@ -10758,7 +10762,7 @@ struct MC68000 : Cpu {
 			r -= 6;
 		if ((c & 0x80) != 0 && (r & 0xf0) > 0x50 || (r & 0xf0) > 0x90)
 			r -= 0x60, c |= 0x80;
-		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | !r << 2 | c >> 7 & 1, r;
+		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | sr & !r << 2 | c >> 7 & 1, r;
 	}
 
 	static int swap(int src, int dst, int& sr) {
