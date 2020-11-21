@@ -19,5 +19,5 @@ read('vulgus.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(z
 	const FGCOLOR = zip.decompress('d1.bin');
 	const BGCOLOR = zip.decompress('c9.bin');
 	const OBJCOLOR = zip.decompress('j2.bin');
-	init(bufferSource, {PRG1, PRG2, FG, BG, OBJ, RED, GREEN, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR}).then();
+	return init(bufferSource, {PRG1, PRG2, FG, BG, OBJ, RED, GREEN, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR});
 });

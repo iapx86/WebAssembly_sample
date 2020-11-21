@@ -69,14 +69,13 @@ struct ZigZag {
 			else if (range(page, 0x40, 0x43, 0x04)) {
 				cpu.memorymap[page].base = ram + (page & 3) * 0x100;
 				cpu.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0x48, 0x48, 0x07))
+			} else if (range(page, 0x48, 0x48, 0x07))
 				cpu.memorymap[page].write = [&](int addr, int data) {
 					switch (addr & 0x0300) {
 					case 0x0000:
-						if ((addr & 1) == 0)
+						if (~addr & 1)
 							return;
-						if ((addr & 2) == 0)
+						if (~addr & 2)
 							return sound0->write(psg.addr, psg.latch);
 						else
 							return void(psg.addr = psg.latch);
@@ -87,31 +86,29 @@ struct ZigZag {
 			else if (range(page, 0x50, 0x53, 0x04)) {
 				cpu.memorymap[page].base = ram + (4 | page & 3) * 0x100;
 				cpu.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0x58, 0x58, 0x07)) {
+			} else if (range(page, 0x58, 0x58, 0x07)) {
 				cpu.memorymap[page].base = ram + 0x800;
 				cpu.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0x60, 0x60, 0x07))
+			} else if (range(page, 0x60, 0x60, 0x07))
 				cpu.memorymap[page].read = [&](int addr) -> int { return in[0]; };
 			else if (range(page, 0x68, 0x68, 0x07))
 				cpu.memorymap[page].read = [&](int addr) -> int { return in[1]; };
 			else if (range(page, 0x70, 0x70, 0x07)) {
 				cpu.memorymap[page].read = [&](int addr) -> int { return in[2]; };
 				cpu.memorymap[page].write = [&](int addr, int data) {
-					int bank;
+					int _bank;
 					switch (addr & 7) {
 					case 1:
 						return void(fInterruptEnable = (data & 1) != 0);
 					case 2:
-						bank = data << 4 & 0x10 | 0x20;
-						if (bank == this->bank)
+						_bank = data << 4 & 0x10 | 0x20;
+						if (_bank == bank)
 							return;
 						for (int i = 0; i < 0x10; i++) {
-							cpu.memorymap[0x20 + i].base = PRG + (bank + i) * 0x100;
-							cpu.memorymap[0x30 + i].base = PRG + ((bank ^ 0x10) + i) * 0x100;
+							cpu.memorymap[0x20 + i].base = PRG + (_bank + i) * 0x100;
+							cpu.memorymap[0x30 + i].base = PRG + ((_bank ^ 0x10) + i) * 0x100;
 						}
-						return void(this->bank = bank);
+						return void(bank = _bank);
 					case 4:
 						return void(fStarEnable = (data & 1) != 0);
 					}
@@ -177,19 +174,9 @@ struct ZigZag {
 	}
 
 	ZigZag *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			in[0] |= 1 << 0, --fCoin;
-		else
-			in[0] &= ~(1 << 0);
-		if (fStart1P)
-			in[1] |= 1 << 0, --fStart1P;
-		else
-			in[1] &= ~(1 << 0);
-		if (fStart2P)
-			in[1] |= 1 << 1, --fStart2P;
-		else
-			in[1] &= ~(1 << 1);
+		in[0] = in[0] & ~(1 << 0) | (fCoin != 0) << 0;
+		in[1] = in[1] & ~3 | (fStart1P != 0) << 0 | (fStart2P != 0) << 1;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		return this;
 	}
 
@@ -206,41 +193,23 @@ struct ZigZag {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 6) | 1 << 5;
-		else
-			in[0] &= ~(1 << 5);
+		in[0] = in[0] & ~(1 << 5 | fDown << 6) | fDown << 5;
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 2) | 1 << 3;
-		else
-			in[0] &= ~(1 << 3);
+		in[0] = in[0] & ~(1 << 3 | fDown << 2) | fDown << 3;
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 5) | 1 << 6;
-		else
-			in[0] &= ~(1 << 6);
+		in[0] = in[0] & ~(1 << 6 | fDown << 5) | fDown << 6;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 3) | 1 << 2;
-		else
-			in[0] &= ~(1 << 2);
+		in[0] = in[0] & ~(1 << 2 | fDown << 3) | fDown << 2;
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			in[0] |= 1 << 4;
-		else
-			in[0] &= ~(1 << 4);
-	}
-
-	void triggerB(bool fDown) {
+		in[0] = in[0] & ~(1 << 4) | fDown << 4;
 	}
 
 	void convertRGB() {
@@ -288,7 +257,7 @@ struct ZigZag {
 			for (int y = 0; y < 256; y++) {
 				const int cy = sr >> 4 ^ ~sr >> 16;
 				sr = cy & 1 | sr << 1;
-				if ((sr & 0x100ff) == 0xff && (color = sr >> 8 & 0x3f) != 0 && color != 0x3f) {
+				if ((sr & 0x100ff) == 0xff && (color = sr >> 8 & 0x3f) && color != 0x3f) {
 					stars[i].x = x & 0xff;
 					stars[i].y = y;
 					stars[i].color = color;
@@ -311,8 +280,7 @@ struct ZigZag {
 	void makeBitmap(int *data) {
 		// bg描画
 		int p = 256 * 32;
-		int k = 0x7e2;
-		for (int i = 2; i < 32; p += 256 * 8, k += 0x401, i++) {
+		for (int k = 0x7e2, i = 2; i < 32; p += 256 * 8, k += 0x401, i++) {
 			int dwScroll = ram[0x800 + i * 2];
 			for (int j = 0; j < 32; k -= 0x20, j++) {
 				xfer8x8(data, p + dwScroll, k, i);
@@ -342,8 +310,7 @@ struct ZigZag {
 
 		// bg描画
 		p = 256 * 16;
-		k = 0x7e0;
-		for (int i = 0; i < 2; p += 256 * 8, k += 0x401, i++) {
+		for (int k = 0x7e0, i = 0; i < 2; p += 256 * 8, k += 0x401, i++) {
 			int dwScroll = ram[0x800 + i * 2];
 			for (int j = 0; j < 32; k -= 0x20, j++) {
 				xfer8x8(data, p + dwScroll, k, i);
@@ -359,9 +326,9 @@ struct ZigZag {
 				if (!px)
 					break;
 				const int x = stars[i].x, y = stars[i].y;
-				if ((x & 1) != 0 && (y & 8) == 0 && (data[p + (x | y << 8)] & 3) == 0)
+				if (x & 1 && ~y & 8 && !(data[p + (x | y << 8)] & 3))
 					data[p + (x | y << 8)] = 0x40 | px;
-				else if ((x & 1) == 0 && (y & 8) != 0 && (data[p + (x | y << 8)] & 3) == 0)
+				else if (~x & 1 && y & 8 && !(data[p + (x | y << 8)] & 3))
 					data[p + (x | y << 8)] = 0x40 | px;
 			}
 		}
@@ -451,7 +418,7 @@ struct ZigZag {
 		src = src << 8 & 0x3f00;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[src++]) != 0)
+				if ((px = obj[src++]))
 					data[dst] = idx | px;
 	}
 
@@ -464,7 +431,7 @@ struct ZigZag {
 		src = (src << 8 & 0x3f00) + 256 - 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src -= 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[src++]) != 0)
+				if ((px = obj[src++]))
 					data[dst] = idx | px;
 	}
 
@@ -477,7 +444,7 @@ struct ZigZag {
 		src = (src << 8 & 0x3f00) + 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src += 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[--src]) != 0)
+				if ((px = obj[--src]))
 					data[dst] = idx | px;
 	}
 
@@ -490,7 +457,7 @@ struct ZigZag {
 		src = (src << 8 & 0x3f00) + 256;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[--src]) != 0)
+				if ((px = obj[--src]))
 					data[dst] = idx | px;
 	}
 

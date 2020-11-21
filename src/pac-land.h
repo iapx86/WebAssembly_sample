@@ -74,13 +74,13 @@ struct PacLand {
 		cpu.memorymap[0x38].write = [&](int addr, int data) { dwScroll0 = data | addr << 8 & 0x100; };
 		cpu.memorymap[0x3a].write = [&](int addr, int data) { dwScroll1 = data | addr << 8 & 0x100; };
 		cpu.memorymap[0x3c].write = [&](int addr, int data) {
-			const int bank = (data << 5 & 0xe0) + 0x80;
-			if ((addr & 0xff) != 0)
+			const int _bank = (data << 5 & 0xe0) + 0x80;
+			if (addr & 0xff)
 				return;
-			if (bank != this->bank) {
+			if (_bank != bank) {
 				for (int i = 0; i < 0x20; i++)
-					cpu.memorymap[0x40 + i].base = PRG1 + (bank + i) * 0x100;
-				this->bank = bank;
+					cpu.memorymap[0x40 + i].base = PRG1 + (_bank + i) * 0x100;
+				bank = _bank;
 			}
 			palette = data << 5 & 0x300;
 		};
@@ -91,13 +91,13 @@ struct PacLand {
 			cpu.memorymap[0x68 + i].write = [&](int addr, int data) { sound0->write(addr, data); };
 		}
 		for (int i = 0; i < 0x10; i++)
-			cpu.memorymap[0x70 + i].write = [&](int addr, int data) { fInterruptEnable0 = (addr & 0x800) == 0; };
+			cpu.memorymap[0x70 + i].write = [&](int addr, int data) { fInterruptEnable0 = !(addr & 0x800); };
 		for (int i = 0; i < 0x80; i++)
 			cpu.memorymap[0x80 + i].base = PRG1 + i * 0x100;
 		for (int i = 0; i < 0x10; i++)
-			cpu.memorymap[0x80 + i].write = [&](int addr, int data) { (addr & 0x800) == 0 ? mcu.enable() : mcu.disable(); };
+			cpu.memorymap[0x80 + i].write = [&](int addr, int data) { addr & 0x800 ? mcu.disable() : mcu.enable(); };
 		for (int i = 0; i < 0x10; i++)
-			cpu.memorymap[0x90 + i].write = [&](int addr, int data) { fFlip = (addr & 0x800) == 0; };
+			cpu.memorymap[0x90 + i].write = [&](int addr, int data) { fFlip = !(addr & 0x800); };
 
 		mcu.memorymap[0].base = ram2;
 		mcu.memorymap[0].read = [&](int addr) -> int { return addr == 2 ? in[4] : ram2[addr]; };
@@ -107,14 +107,14 @@ struct PacLand {
 			mcu.memorymap[0x10 + i].write = [&](int addr, int data) { sound0->write(addr, data); };
 		}
 		for (int i = 0; i < 0x40; i++)
-			mcu.memorymap[0x40 + i].write = [&](int addr, int data) { fInterruptEnable1 = (addr & 0x2000) == 0; };
+			mcu.memorymap[0x40 + i].write = [&](int addr, int data) { fInterruptEnable1 = !(addr & 0x2000); };
 		for (int i = 0; i < 0x20; i++)
 			mcu.memorymap[0x80 + i].base = PRG2 + i * 0x100;
 		for (int i = 0; i < 8; i++) {
 			mcu.memorymap[0xc0 + i].base = ram2 + 0x100 + i * 0x100;
 			mcu.memorymap[0xc0 + i].write = nullptr;
 		}
-		mcu.memorymap[0xd0].read = [&](int addr) -> int { return (addr & 0xfc) == 0 ? in[addr & 3] : 0xff; };
+		mcu.memorymap[0xd0].read = [&](int addr) -> int { return addr & 0xfc ? 0xff : in[addr & 3]; };
 		for (int i = 0; i < 0x10; i++)
 			mcu.memorymap[0xf0 + i].base = PRG2I + i * 0x100;
 
@@ -132,7 +132,7 @@ struct PacLand {
 			mcu.interrupt();
 		for (int i = 0; i < 800; i++)
 			cpu.execute(5), mcu.execute(6);
-		if ((ram2[8] & 8) != 0)
+		if (ram2[8] & 8)
 			mcu.interrupt(MC6801_OCF);
 		for (int i = 0; i < 800; i++)
 			cpu.execute(5), mcu.execute(6);
@@ -224,19 +224,9 @@ struct PacLand {
 	}
 
 	PacLand *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			in[3] &= ~(1 << 5), --fCoin;
-		else
-			in[3] |= 1 << 5;
-		if (fStart1P)
-			in[2] &= ~(1 << 4), --fStart1P;
-		else
-			in[2] |= 1 << 4;
-		if (fStart2P)
-			in[2] &= ~(1 << 5), --fStart2P;
-		else
-			in[2] |= 1 << 5;
+		in[3] = in[3] & ~(1 << 5) | !fCoin << 5;
+		in[2] = in[2] & ~0x30 | !fStart1P << 4 | !fStart2P << 5;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		return this;
 	}
 
@@ -252,34 +242,16 @@ struct PacLand {
 		fStart2P = 2;
 	}
 
-	void up(bool fDown) {
-	}
-
 	void right(bool fDown) {
-		if (fDown)
-			in[4] &= ~(1 << 5);
-		else
-			in[4] |= 1 << 5;
-	}
-
-	void down(bool fDown) {
+		in[4] = in[4] & ~(1 << 5) | !fDown << 5;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			in[4] &= ~(1 << 4);
-		else
-			in[4] |= 1 << 4;
+		in[4] = in[4] & ~(1 << 4) | !fDown << 4;
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			in[4] &= ~(1 << 3);
-		else
-			in[4] |= 1 << 3;
-	}
-
-	void triggerB(bool fDown) {
+		in[4] = in[4] & ~(1 << 3) | !fDown << 3;
 	}
 
 	void convertRGB() {
@@ -368,18 +340,18 @@ struct PacLand {
 		k = 0x280 | (fFlip ? (1 + dwScroll0 >> 2) + 0x30 : (dwScroll0 >> 2) + 6) & 0x7e;
 		for (int i = 0; i < 24; k = k + 54 & 0x7e | k + 0x80 & 0x1f80, p -= 256 * 8 * 37 + 8, i++)
 			for (int j = 0; j < 37; k = k + 2 & 0x7e | k & 0x1f80, p += 256 * 8, j++)
-				if ((ram[k + 1] & 0x20) == 0)
+				if (~ram[k + 1] & 0x20)
 					xfer8x8(data, FGCOLOR, fg, ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 232;
 		k = fFlip ? 0x132 : 0x106;
 		for (int i = 0; i < 3; p -= 256 * 8 * 36 + 8, k += 56, i++)
 			for (int j = 0; j < 36; p += 256 * 8, k += 2, j++)
-				if ((ram[k + 1] & 0x20) == 0)
+				if (~ram[k + 1] & 0x20)
 					xfer8x8(data, FGCOLOR, fg, ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 16;
 		k = fFlip ? 0xeb2 : 0xe86;
 		for (int i = 0; i < 36; p += 256 * 8, k += 2, i++)
-			if ((ram[k + 1] & 0x20) == 0)
+			if (~ram[k + 1] & 0x20)
 				xfer8x8(data, FGCOLOR, fg, ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 
 		// obj描画
@@ -390,18 +362,18 @@ struct PacLand {
 		k = 0x280 | (fFlip ? (1 + dwScroll0 >> 2) + 0x30 : (dwScroll0 >> 2) + 6) & 0x7e;
 		for (int i = 0; i < 24; k = k + 54 & 0x7e | k + 0x80 & 0x1f80, p -= 256 * 8 * 37 + 8, i++)
 			for (int j = 0; j < 37; k = k + 2 & 0x7e | k & 0x1f80, p += 256 * 8, j++)
-				if ((ram[k + 1] & 0x20) != 0)
+				if (ram[k + 1] & 0x20)
 					xfer8x8(data, FGCOLOR, fg, ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 232;
 		k = fFlip ? 0x132 : 0x106;
 		for (int i = 0; i < 3; p -= 256 * 8 * 36 + 8, k += 56, i++)
 			for (int j = 0; j < 36; p += 256 * 8, k += 2, j++)
-				if ((ram[k + 1] & 0x20) != 0)
+				if (ram[k + 1] & 0x20)
 					xfer8x8(data, FGCOLOR, fg, ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 16;
 		k = fFlip ? 0xeb2 : 0xe86;
 		for (int i = 0; i < 36; p += 256 * 8, k += 2, i++)
-			if ((ram[k + 1] & 0x20) != 0)
+			if (ram[k + 1] & 0x20)
 				xfer8x8(data, FGCOLOR, fg, ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 
 		// obj描画
@@ -491,8 +463,7 @@ struct PacLand {
 					break;
 				}
 			}
-		}
-		else {
+		} else {
 			for (int k = 0x2780, i = 64; i != 0; k += 2, --i) {
 				const int x = ram[k + 0x800] + 7 & 0xff;
 				const int y = (ram[k + 0x801] | ram[k + 0x1001] << 8) - 55 & 0x1ff;
@@ -577,268 +548,268 @@ struct PacLand {
 
 		switch (ram[k + 1] >> 6) {
 		case 0: // ノーマル
-			if ((px = color[idx | pattern[q | 0x00]]) != 0xff) data[p + 0x000] = px;
-			if ((px = color[idx | pattern[q | 0x01]]) != 0xff) data[p + 0x001] = px;
-			if ((px = color[idx | pattern[q | 0x02]]) != 0xff) data[p + 0x002] = px;
-			if ((px = color[idx | pattern[q | 0x03]]) != 0xff) data[p + 0x003] = px;
-			if ((px = color[idx | pattern[q | 0x04]]) != 0xff) data[p + 0x004] = px;
-			if ((px = color[idx | pattern[q | 0x05]]) != 0xff) data[p + 0x005] = px;
-			if ((px = color[idx | pattern[q | 0x06]]) != 0xff) data[p + 0x006] = px;
-			if ((px = color[idx | pattern[q | 0x07]]) != 0xff) data[p + 0x007] = px;
-			if ((px = color[idx | pattern[q | 0x08]]) != 0xff) data[p + 0x100] = px;
-			if ((px = color[idx | pattern[q | 0x09]]) != 0xff) data[p + 0x101] = px;
-			if ((px = color[idx | pattern[q | 0x0a]]) != 0xff) data[p + 0x102] = px;
-			if ((px = color[idx | pattern[q | 0x0b]]) != 0xff) data[p + 0x103] = px;
-			if ((px = color[idx | pattern[q | 0x0c]]) != 0xff) data[p + 0x104] = px;
-			if ((px = color[idx | pattern[q | 0x0d]]) != 0xff) data[p + 0x105] = px;
-			if ((px = color[idx | pattern[q | 0x0e]]) != 0xff) data[p + 0x106] = px;
-			if ((px = color[idx | pattern[q | 0x0f]]) != 0xff) data[p + 0x107] = px;
-			if ((px = color[idx | pattern[q | 0x10]]) != 0xff) data[p + 0x200] = px;
-			if ((px = color[idx | pattern[q | 0x11]]) != 0xff) data[p + 0x201] = px;
-			if ((px = color[idx | pattern[q | 0x12]]) != 0xff) data[p + 0x202] = px;
-			if ((px = color[idx | pattern[q | 0x13]]) != 0xff) data[p + 0x203] = px;
-			if ((px = color[idx | pattern[q | 0x14]]) != 0xff) data[p + 0x204] = px;
-			if ((px = color[idx | pattern[q | 0x15]]) != 0xff) data[p + 0x205] = px;
-			if ((px = color[idx | pattern[q | 0x16]]) != 0xff) data[p + 0x206] = px;
-			if ((px = color[idx | pattern[q | 0x17]]) != 0xff) data[p + 0x207] = px;
-			if ((px = color[idx | pattern[q | 0x18]]) != 0xff) data[p + 0x300] = px;
-			if ((px = color[idx | pattern[q | 0x19]]) != 0xff) data[p + 0x301] = px;
-			if ((px = color[idx | pattern[q | 0x1a]]) != 0xff) data[p + 0x302] = px;
-			if ((px = color[idx | pattern[q | 0x1b]]) != 0xff) data[p + 0x303] = px;
-			if ((px = color[idx | pattern[q | 0x1c]]) != 0xff) data[p + 0x304] = px;
-			if ((px = color[idx | pattern[q | 0x1d]]) != 0xff) data[p + 0x305] = px;
-			if ((px = color[idx | pattern[q | 0x1e]]) != 0xff) data[p + 0x306] = px;
-			if ((px = color[idx | pattern[q | 0x1f]]) != 0xff) data[p + 0x307] = px;
-			if ((px = color[idx | pattern[q | 0x20]]) != 0xff) data[p + 0x400] = px;
-			if ((px = color[idx | pattern[q | 0x21]]) != 0xff) data[p + 0x401] = px;
-			if ((px = color[idx | pattern[q | 0x22]]) != 0xff) data[p + 0x402] = px;
-			if ((px = color[idx | pattern[q | 0x23]]) != 0xff) data[p + 0x403] = px;
-			if ((px = color[idx | pattern[q | 0x24]]) != 0xff) data[p + 0x404] = px;
-			if ((px = color[idx | pattern[q | 0x25]]) != 0xff) data[p + 0x405] = px;
-			if ((px = color[idx | pattern[q | 0x26]]) != 0xff) data[p + 0x406] = px;
-			if ((px = color[idx | pattern[q | 0x27]]) != 0xff) data[p + 0x407] = px;
-			if ((px = color[idx | pattern[q | 0x28]]) != 0xff) data[p + 0x500] = px;
-			if ((px = color[idx | pattern[q | 0x29]]) != 0xff) data[p + 0x501] = px;
-			if ((px = color[idx | pattern[q | 0x2a]]) != 0xff) data[p + 0x502] = px;
-			if ((px = color[idx | pattern[q | 0x2b]]) != 0xff) data[p + 0x503] = px;
-			if ((px = color[idx | pattern[q | 0x2c]]) != 0xff) data[p + 0x504] = px;
-			if ((px = color[idx | pattern[q | 0x2d]]) != 0xff) data[p + 0x505] = px;
-			if ((px = color[idx | pattern[q | 0x2e]]) != 0xff) data[p + 0x506] = px;
-			if ((px = color[idx | pattern[q | 0x2f]]) != 0xff) data[p + 0x507] = px;
-			if ((px = color[idx | pattern[q | 0x30]]) != 0xff) data[p + 0x600] = px;
-			if ((px = color[idx | pattern[q | 0x31]]) != 0xff) data[p + 0x601] = px;
-			if ((px = color[idx | pattern[q | 0x32]]) != 0xff) data[p + 0x602] = px;
-			if ((px = color[idx | pattern[q | 0x33]]) != 0xff) data[p + 0x603] = px;
-			if ((px = color[idx | pattern[q | 0x34]]) != 0xff) data[p + 0x604] = px;
-			if ((px = color[idx | pattern[q | 0x35]]) != 0xff) data[p + 0x605] = px;
-			if ((px = color[idx | pattern[q | 0x36]]) != 0xff) data[p + 0x606] = px;
-			if ((px = color[idx | pattern[q | 0x37]]) != 0xff) data[p + 0x607] = px;
-			if ((px = color[idx | pattern[q | 0x38]]) != 0xff) data[p + 0x700] = px;
-			if ((px = color[idx | pattern[q | 0x39]]) != 0xff) data[p + 0x701] = px;
-			if ((px = color[idx | pattern[q | 0x3a]]) != 0xff) data[p + 0x702] = px;
-			if ((px = color[idx | pattern[q | 0x3b]]) != 0xff) data[p + 0x703] = px;
-			if ((px = color[idx | pattern[q | 0x3c]]) != 0xff) data[p + 0x704] = px;
-			if ((px = color[idx | pattern[q | 0x3d]]) != 0xff) data[p + 0x705] = px;
-			if ((px = color[idx | pattern[q | 0x3e]]) != 0xff) data[p + 0x706] = px;
-			if ((px = color[idx | pattern[q | 0x3f]]) != 0xff) data[p + 0x707] = px;
+			(px = color[idx | pattern[q | 0x00]]) != 0xff && (data[p + 0x000] = px);
+			(px = color[idx | pattern[q | 0x01]]) != 0xff && (data[p + 0x001] = px);
+			(px = color[idx | pattern[q | 0x02]]) != 0xff && (data[p + 0x002] = px);
+			(px = color[idx | pattern[q | 0x03]]) != 0xff && (data[p + 0x003] = px);
+			(px = color[idx | pattern[q | 0x04]]) != 0xff && (data[p + 0x004] = px);
+			(px = color[idx | pattern[q | 0x05]]) != 0xff && (data[p + 0x005] = px);
+			(px = color[idx | pattern[q | 0x06]]) != 0xff && (data[p + 0x006] = px);
+			(px = color[idx | pattern[q | 0x07]]) != 0xff && (data[p + 0x007] = px);
+			(px = color[idx | pattern[q | 0x08]]) != 0xff && (data[p + 0x100] = px);
+			(px = color[idx | pattern[q | 0x09]]) != 0xff && (data[p + 0x101] = px);
+			(px = color[idx | pattern[q | 0x0a]]) != 0xff && (data[p + 0x102] = px);
+			(px = color[idx | pattern[q | 0x0b]]) != 0xff && (data[p + 0x103] = px);
+			(px = color[idx | pattern[q | 0x0c]]) != 0xff && (data[p + 0x104] = px);
+			(px = color[idx | pattern[q | 0x0d]]) != 0xff && (data[p + 0x105] = px);
+			(px = color[idx | pattern[q | 0x0e]]) != 0xff && (data[p + 0x106] = px);
+			(px = color[idx | pattern[q | 0x0f]]) != 0xff && (data[p + 0x107] = px);
+			(px = color[idx | pattern[q | 0x10]]) != 0xff && (data[p + 0x200] = px);
+			(px = color[idx | pattern[q | 0x11]]) != 0xff && (data[p + 0x201] = px);
+			(px = color[idx | pattern[q | 0x12]]) != 0xff && (data[p + 0x202] = px);
+			(px = color[idx | pattern[q | 0x13]]) != 0xff && (data[p + 0x203] = px);
+			(px = color[idx | pattern[q | 0x14]]) != 0xff && (data[p + 0x204] = px);
+			(px = color[idx | pattern[q | 0x15]]) != 0xff && (data[p + 0x205] = px);
+			(px = color[idx | pattern[q | 0x16]]) != 0xff && (data[p + 0x206] = px);
+			(px = color[idx | pattern[q | 0x17]]) != 0xff && (data[p + 0x207] = px);
+			(px = color[idx | pattern[q | 0x18]]) != 0xff && (data[p + 0x300] = px);
+			(px = color[idx | pattern[q | 0x19]]) != 0xff && (data[p + 0x301] = px);
+			(px = color[idx | pattern[q | 0x1a]]) != 0xff && (data[p + 0x302] = px);
+			(px = color[idx | pattern[q | 0x1b]]) != 0xff && (data[p + 0x303] = px);
+			(px = color[idx | pattern[q | 0x1c]]) != 0xff && (data[p + 0x304] = px);
+			(px = color[idx | pattern[q | 0x1d]]) != 0xff && (data[p + 0x305] = px);
+			(px = color[idx | pattern[q | 0x1e]]) != 0xff && (data[p + 0x306] = px);
+			(px = color[idx | pattern[q | 0x1f]]) != 0xff && (data[p + 0x307] = px);
+			(px = color[idx | pattern[q | 0x20]]) != 0xff && (data[p + 0x400] = px);
+			(px = color[idx | pattern[q | 0x21]]) != 0xff && (data[p + 0x401] = px);
+			(px = color[idx | pattern[q | 0x22]]) != 0xff && (data[p + 0x402] = px);
+			(px = color[idx | pattern[q | 0x23]]) != 0xff && (data[p + 0x403] = px);
+			(px = color[idx | pattern[q | 0x24]]) != 0xff && (data[p + 0x404] = px);
+			(px = color[idx | pattern[q | 0x25]]) != 0xff && (data[p + 0x405] = px);
+			(px = color[idx | pattern[q | 0x26]]) != 0xff && (data[p + 0x406] = px);
+			(px = color[idx | pattern[q | 0x27]]) != 0xff && (data[p + 0x407] = px);
+			(px = color[idx | pattern[q | 0x28]]) != 0xff && (data[p + 0x500] = px);
+			(px = color[idx | pattern[q | 0x29]]) != 0xff && (data[p + 0x501] = px);
+			(px = color[idx | pattern[q | 0x2a]]) != 0xff && (data[p + 0x502] = px);
+			(px = color[idx | pattern[q | 0x2b]]) != 0xff && (data[p + 0x503] = px);
+			(px = color[idx | pattern[q | 0x2c]]) != 0xff && (data[p + 0x504] = px);
+			(px = color[idx | pattern[q | 0x2d]]) != 0xff && (data[p + 0x505] = px);
+			(px = color[idx | pattern[q | 0x2e]]) != 0xff && (data[p + 0x506] = px);
+			(px = color[idx | pattern[q | 0x2f]]) != 0xff && (data[p + 0x507] = px);
+			(px = color[idx | pattern[q | 0x30]]) != 0xff && (data[p + 0x600] = px);
+			(px = color[idx | pattern[q | 0x31]]) != 0xff && (data[p + 0x601] = px);
+			(px = color[idx | pattern[q | 0x32]]) != 0xff && (data[p + 0x602] = px);
+			(px = color[idx | pattern[q | 0x33]]) != 0xff && (data[p + 0x603] = px);
+			(px = color[idx | pattern[q | 0x34]]) != 0xff && (data[p + 0x604] = px);
+			(px = color[idx | pattern[q | 0x35]]) != 0xff && (data[p + 0x605] = px);
+			(px = color[idx | pattern[q | 0x36]]) != 0xff && (data[p + 0x606] = px);
+			(px = color[idx | pattern[q | 0x37]]) != 0xff && (data[p + 0x607] = px);
+			(px = color[idx | pattern[q | 0x38]]) != 0xff && (data[p + 0x700] = px);
+			(px = color[idx | pattern[q | 0x39]]) != 0xff && (data[p + 0x701] = px);
+			(px = color[idx | pattern[q | 0x3a]]) != 0xff && (data[p + 0x702] = px);
+			(px = color[idx | pattern[q | 0x3b]]) != 0xff && (data[p + 0x703] = px);
+			(px = color[idx | pattern[q | 0x3c]]) != 0xff && (data[p + 0x704] = px);
+			(px = color[idx | pattern[q | 0x3d]]) != 0xff && (data[p + 0x705] = px);
+			(px = color[idx | pattern[q | 0x3e]]) != 0xff && (data[p + 0x706] = px);
+			(px = color[idx | pattern[q | 0x3f]]) != 0xff && (data[p + 0x707] = px);
 			break;
 		case 1: // V反転
-			if ((px = color[idx | pattern[q | 0x38]]) != 0xff) data[p + 0x000] = px;
-			if ((px = color[idx | pattern[q | 0x39]]) != 0xff) data[p + 0x001] = px;
-			if ((px = color[idx | pattern[q | 0x3a]]) != 0xff) data[p + 0x002] = px;
-			if ((px = color[idx | pattern[q | 0x3b]]) != 0xff) data[p + 0x003] = px;
-			if ((px = color[idx | pattern[q | 0x3c]]) != 0xff) data[p + 0x004] = px;
-			if ((px = color[idx | pattern[q | 0x3d]]) != 0xff) data[p + 0x005] = px;
-			if ((px = color[idx | pattern[q | 0x3e]]) != 0xff) data[p + 0x006] = px;
-			if ((px = color[idx | pattern[q | 0x3f]]) != 0xff) data[p + 0x007] = px;
-			if ((px = color[idx | pattern[q | 0x30]]) != 0xff) data[p + 0x100] = px;
-			if ((px = color[idx | pattern[q | 0x31]]) != 0xff) data[p + 0x101] = px;
-			if ((px = color[idx | pattern[q | 0x32]]) != 0xff) data[p + 0x102] = px;
-			if ((px = color[idx | pattern[q | 0x33]]) != 0xff) data[p + 0x103] = px;
-			if ((px = color[idx | pattern[q | 0x34]]) != 0xff) data[p + 0x104] = px;
-			if ((px = color[idx | pattern[q | 0x35]]) != 0xff) data[p + 0x105] = px;
-			if ((px = color[idx | pattern[q | 0x36]]) != 0xff) data[p + 0x106] = px;
-			if ((px = color[idx | pattern[q | 0x37]]) != 0xff) data[p + 0x107] = px;
-			if ((px = color[idx | pattern[q | 0x28]]) != 0xff) data[p + 0x200] = px;
-			if ((px = color[idx | pattern[q | 0x29]]) != 0xff) data[p + 0x201] = px;
-			if ((px = color[idx | pattern[q | 0x2a]]) != 0xff) data[p + 0x202] = px;
-			if ((px = color[idx | pattern[q | 0x2b]]) != 0xff) data[p + 0x203] = px;
-			if ((px = color[idx | pattern[q | 0x2c]]) != 0xff) data[p + 0x204] = px;
-			if ((px = color[idx | pattern[q | 0x2d]]) != 0xff) data[p + 0x205] = px;
-			if ((px = color[idx | pattern[q | 0x2e]]) != 0xff) data[p + 0x206] = px;
-			if ((px = color[idx | pattern[q | 0x2f]]) != 0xff) data[p + 0x207] = px;
-			if ((px = color[idx | pattern[q | 0x20]]) != 0xff) data[p + 0x300] = px;
-			if ((px = color[idx | pattern[q | 0x21]]) != 0xff) data[p + 0x301] = px;
-			if ((px = color[idx | pattern[q | 0x22]]) != 0xff) data[p + 0x302] = px;
-			if ((px = color[idx | pattern[q | 0x23]]) != 0xff) data[p + 0x303] = px;
-			if ((px = color[idx | pattern[q | 0x24]]) != 0xff) data[p + 0x304] = px;
-			if ((px = color[idx | pattern[q | 0x25]]) != 0xff) data[p + 0x305] = px;
-			if ((px = color[idx | pattern[q | 0x26]]) != 0xff) data[p + 0x306] = px;
-			if ((px = color[idx | pattern[q | 0x27]]) != 0xff) data[p + 0x307] = px;
-			if ((px = color[idx | pattern[q | 0x18]]) != 0xff) data[p + 0x400] = px;
-			if ((px = color[idx | pattern[q | 0x19]]) != 0xff) data[p + 0x401] = px;
-			if ((px = color[idx | pattern[q | 0x1a]]) != 0xff) data[p + 0x402] = px;
-			if ((px = color[idx | pattern[q | 0x1b]]) != 0xff) data[p + 0x403] = px;
-			if ((px = color[idx | pattern[q | 0x1c]]) != 0xff) data[p + 0x404] = px;
-			if ((px = color[idx | pattern[q | 0x1d]]) != 0xff) data[p + 0x405] = px;
-			if ((px = color[idx | pattern[q | 0x1e]]) != 0xff) data[p + 0x406] = px;
-			if ((px = color[idx | pattern[q | 0x1f]]) != 0xff) data[p + 0x407] = px;
-			if ((px = color[idx | pattern[q | 0x10]]) != 0xff) data[p + 0x500] = px;
-			if ((px = color[idx | pattern[q | 0x11]]) != 0xff) data[p + 0x501] = px;
-			if ((px = color[idx | pattern[q | 0x12]]) != 0xff) data[p + 0x502] = px;
-			if ((px = color[idx | pattern[q | 0x13]]) != 0xff) data[p + 0x503] = px;
-			if ((px = color[idx | pattern[q | 0x14]]) != 0xff) data[p + 0x504] = px;
-			if ((px = color[idx | pattern[q | 0x15]]) != 0xff) data[p + 0x505] = px;
-			if ((px = color[idx | pattern[q | 0x16]]) != 0xff) data[p + 0x506] = px;
-			if ((px = color[idx | pattern[q | 0x17]]) != 0xff) data[p + 0x507] = px;
-			if ((px = color[idx | pattern[q | 0x08]]) != 0xff) data[p + 0x600] = px;
-			if ((px = color[idx | pattern[q | 0x09]]) != 0xff) data[p + 0x601] = px;
-			if ((px = color[idx | pattern[q | 0x0a]]) != 0xff) data[p + 0x602] = px;
-			if ((px = color[idx | pattern[q | 0x0b]]) != 0xff) data[p + 0x603] = px;
-			if ((px = color[idx | pattern[q | 0x0c]]) != 0xff) data[p + 0x604] = px;
-			if ((px = color[idx | pattern[q | 0x0d]]) != 0xff) data[p + 0x605] = px;
-			if ((px = color[idx | pattern[q | 0x0e]]) != 0xff) data[p + 0x606] = px;
-			if ((px = color[idx | pattern[q | 0x0f]]) != 0xff) data[p + 0x607] = px;
-			if ((px = color[idx | pattern[q | 0x00]]) != 0xff) data[p + 0x700] = px;
-			if ((px = color[idx | pattern[q | 0x01]]) != 0xff) data[p + 0x701] = px;
-			if ((px = color[idx | pattern[q | 0x02]]) != 0xff) data[p + 0x702] = px;
-			if ((px = color[idx | pattern[q | 0x03]]) != 0xff) data[p + 0x703] = px;
-			if ((px = color[idx | pattern[q | 0x04]]) != 0xff) data[p + 0x704] = px;
-			if ((px = color[idx | pattern[q | 0x05]]) != 0xff) data[p + 0x705] = px;
-			if ((px = color[idx | pattern[q | 0x06]]) != 0xff) data[p + 0x706] = px;
-			if ((px = color[idx | pattern[q | 0x07]]) != 0xff) data[p + 0x707] = px;
+			(px = color[idx | pattern[q | 0x38]]) != 0xff && (data[p + 0x000] = px);
+			(px = color[idx | pattern[q | 0x39]]) != 0xff && (data[p + 0x001] = px);
+			(px = color[idx | pattern[q | 0x3a]]) != 0xff && (data[p + 0x002] = px);
+			(px = color[idx | pattern[q | 0x3b]]) != 0xff && (data[p + 0x003] = px);
+			(px = color[idx | pattern[q | 0x3c]]) != 0xff && (data[p + 0x004] = px);
+			(px = color[idx | pattern[q | 0x3d]]) != 0xff && (data[p + 0x005] = px);
+			(px = color[idx | pattern[q | 0x3e]]) != 0xff && (data[p + 0x006] = px);
+			(px = color[idx | pattern[q | 0x3f]]) != 0xff && (data[p + 0x007] = px);
+			(px = color[idx | pattern[q | 0x30]]) != 0xff && (data[p + 0x100] = px);
+			(px = color[idx | pattern[q | 0x31]]) != 0xff && (data[p + 0x101] = px);
+			(px = color[idx | pattern[q | 0x32]]) != 0xff && (data[p + 0x102] = px);
+			(px = color[idx | pattern[q | 0x33]]) != 0xff && (data[p + 0x103] = px);
+			(px = color[idx | pattern[q | 0x34]]) != 0xff && (data[p + 0x104] = px);
+			(px = color[idx | pattern[q | 0x35]]) != 0xff && (data[p + 0x105] = px);
+			(px = color[idx | pattern[q | 0x36]]) != 0xff && (data[p + 0x106] = px);
+			(px = color[idx | pattern[q | 0x37]]) != 0xff && (data[p + 0x107] = px);
+			(px = color[idx | pattern[q | 0x28]]) != 0xff && (data[p + 0x200] = px);
+			(px = color[idx | pattern[q | 0x29]]) != 0xff && (data[p + 0x201] = px);
+			(px = color[idx | pattern[q | 0x2a]]) != 0xff && (data[p + 0x202] = px);
+			(px = color[idx | pattern[q | 0x2b]]) != 0xff && (data[p + 0x203] = px);
+			(px = color[idx | pattern[q | 0x2c]]) != 0xff && (data[p + 0x204] = px);
+			(px = color[idx | pattern[q | 0x2d]]) != 0xff && (data[p + 0x205] = px);
+			(px = color[idx | pattern[q | 0x2e]]) != 0xff && (data[p + 0x206] = px);
+			(px = color[idx | pattern[q | 0x2f]]) != 0xff && (data[p + 0x207] = px);
+			(px = color[idx | pattern[q | 0x20]]) != 0xff && (data[p + 0x300] = px);
+			(px = color[idx | pattern[q | 0x21]]) != 0xff && (data[p + 0x301] = px);
+			(px = color[idx | pattern[q | 0x22]]) != 0xff && (data[p + 0x302] = px);
+			(px = color[idx | pattern[q | 0x23]]) != 0xff && (data[p + 0x303] = px);
+			(px = color[idx | pattern[q | 0x24]]) != 0xff && (data[p + 0x304] = px);
+			(px = color[idx | pattern[q | 0x25]]) != 0xff && (data[p + 0x305] = px);
+			(px = color[idx | pattern[q | 0x26]]) != 0xff && (data[p + 0x306] = px);
+			(px = color[idx | pattern[q | 0x27]]) != 0xff && (data[p + 0x307] = px);
+			(px = color[idx | pattern[q | 0x18]]) != 0xff && (data[p + 0x400] = px);
+			(px = color[idx | pattern[q | 0x19]]) != 0xff && (data[p + 0x401] = px);
+			(px = color[idx | pattern[q | 0x1a]]) != 0xff && (data[p + 0x402] = px);
+			(px = color[idx | pattern[q | 0x1b]]) != 0xff && (data[p + 0x403] = px);
+			(px = color[idx | pattern[q | 0x1c]]) != 0xff && (data[p + 0x404] = px);
+			(px = color[idx | pattern[q | 0x1d]]) != 0xff && (data[p + 0x405] = px);
+			(px = color[idx | pattern[q | 0x1e]]) != 0xff && (data[p + 0x406] = px);
+			(px = color[idx | pattern[q | 0x1f]]) != 0xff && (data[p + 0x407] = px);
+			(px = color[idx | pattern[q | 0x10]]) != 0xff && (data[p + 0x500] = px);
+			(px = color[idx | pattern[q | 0x11]]) != 0xff && (data[p + 0x501] = px);
+			(px = color[idx | pattern[q | 0x12]]) != 0xff && (data[p + 0x502] = px);
+			(px = color[idx | pattern[q | 0x13]]) != 0xff && (data[p + 0x503] = px);
+			(px = color[idx | pattern[q | 0x14]]) != 0xff && (data[p + 0x504] = px);
+			(px = color[idx | pattern[q | 0x15]]) != 0xff && (data[p + 0x505] = px);
+			(px = color[idx | pattern[q | 0x16]]) != 0xff && (data[p + 0x506] = px);
+			(px = color[idx | pattern[q | 0x17]]) != 0xff && (data[p + 0x507] = px);
+			(px = color[idx | pattern[q | 0x08]]) != 0xff && (data[p + 0x600] = px);
+			(px = color[idx | pattern[q | 0x09]]) != 0xff && (data[p + 0x601] = px);
+			(px = color[idx | pattern[q | 0x0a]]) != 0xff && (data[p + 0x602] = px);
+			(px = color[idx | pattern[q | 0x0b]]) != 0xff && (data[p + 0x603] = px);
+			(px = color[idx | pattern[q | 0x0c]]) != 0xff && (data[p + 0x604] = px);
+			(px = color[idx | pattern[q | 0x0d]]) != 0xff && (data[p + 0x605] = px);
+			(px = color[idx | pattern[q | 0x0e]]) != 0xff && (data[p + 0x606] = px);
+			(px = color[idx | pattern[q | 0x0f]]) != 0xff && (data[p + 0x607] = px);
+			(px = color[idx | pattern[q | 0x00]]) != 0xff && (data[p + 0x700] = px);
+			(px = color[idx | pattern[q | 0x01]]) != 0xff && (data[p + 0x701] = px);
+			(px = color[idx | pattern[q | 0x02]]) != 0xff && (data[p + 0x702] = px);
+			(px = color[idx | pattern[q | 0x03]]) != 0xff && (data[p + 0x703] = px);
+			(px = color[idx | pattern[q | 0x04]]) != 0xff && (data[p + 0x704] = px);
+			(px = color[idx | pattern[q | 0x05]]) != 0xff && (data[p + 0x705] = px);
+			(px = color[idx | pattern[q | 0x06]]) != 0xff && (data[p + 0x706] = px);
+			(px = color[idx | pattern[q | 0x07]]) != 0xff && (data[p + 0x707] = px);
 			break;
 		case 2: // H反転
-			if ((px = color[idx | pattern[q | 0x07]]) != 0xff) data[p + 0x000] = px;
-			if ((px = color[idx | pattern[q | 0x06]]) != 0xff) data[p + 0x001] = px;
-			if ((px = color[idx | pattern[q | 0x05]]) != 0xff) data[p + 0x002] = px;
-			if ((px = color[idx | pattern[q | 0x04]]) != 0xff) data[p + 0x003] = px;
-			if ((px = color[idx | pattern[q | 0x03]]) != 0xff) data[p + 0x004] = px;
-			if ((px = color[idx | pattern[q | 0x02]]) != 0xff) data[p + 0x005] = px;
-			if ((px = color[idx | pattern[q | 0x01]]) != 0xff) data[p + 0x006] = px;
-			if ((px = color[idx | pattern[q | 0x00]]) != 0xff) data[p + 0x007] = px;
-			if ((px = color[idx | pattern[q | 0x0f]]) != 0xff) data[p + 0x100] = px;
-			if ((px = color[idx | pattern[q | 0x0e]]) != 0xff) data[p + 0x101] = px;
-			if ((px = color[idx | pattern[q | 0x0d]]) != 0xff) data[p + 0x102] = px;
-			if ((px = color[idx | pattern[q | 0x0c]]) != 0xff) data[p + 0x103] = px;
-			if ((px = color[idx | pattern[q | 0x0b]]) != 0xff) data[p + 0x104] = px;
-			if ((px = color[idx | pattern[q | 0x0a]]) != 0xff) data[p + 0x105] = px;
-			if ((px = color[idx | pattern[q | 0x09]]) != 0xff) data[p + 0x106] = px;
-			if ((px = color[idx | pattern[q | 0x08]]) != 0xff) data[p + 0x107] = px;
-			if ((px = color[idx | pattern[q | 0x17]]) != 0xff) data[p + 0x200] = px;
-			if ((px = color[idx | pattern[q | 0x16]]) != 0xff) data[p + 0x201] = px;
-			if ((px = color[idx | pattern[q | 0x15]]) != 0xff) data[p + 0x202] = px;
-			if ((px = color[idx | pattern[q | 0x14]]) != 0xff) data[p + 0x203] = px;
-			if ((px = color[idx | pattern[q | 0x13]]) != 0xff) data[p + 0x204] = px;
-			if ((px = color[idx | pattern[q | 0x12]]) != 0xff) data[p + 0x205] = px;
-			if ((px = color[idx | pattern[q | 0x11]]) != 0xff) data[p + 0x206] = px;
-			if ((px = color[idx | pattern[q | 0x10]]) != 0xff) data[p + 0x207] = px;
-			if ((px = color[idx | pattern[q | 0x1f]]) != 0xff) data[p + 0x300] = px;
-			if ((px = color[idx | pattern[q | 0x1e]]) != 0xff) data[p + 0x301] = px;
-			if ((px = color[idx | pattern[q | 0x1d]]) != 0xff) data[p + 0x302] = px;
-			if ((px = color[idx | pattern[q | 0x1c]]) != 0xff) data[p + 0x303] = px;
-			if ((px = color[idx | pattern[q | 0x1b]]) != 0xff) data[p + 0x304] = px;
-			if ((px = color[idx | pattern[q | 0x1a]]) != 0xff) data[p + 0x305] = px;
-			if ((px = color[idx | pattern[q | 0x19]]) != 0xff) data[p + 0x306] = px;
-			if ((px = color[idx | pattern[q | 0x18]]) != 0xff) data[p + 0x307] = px;
-			if ((px = color[idx | pattern[q | 0x27]]) != 0xff) data[p + 0x400] = px;
-			if ((px = color[idx | pattern[q | 0x26]]) != 0xff) data[p + 0x401] = px;
-			if ((px = color[idx | pattern[q | 0x25]]) != 0xff) data[p + 0x402] = px;
-			if ((px = color[idx | pattern[q | 0x24]]) != 0xff) data[p + 0x403] = px;
-			if ((px = color[idx | pattern[q | 0x23]]) != 0xff) data[p + 0x404] = px;
-			if ((px = color[idx | pattern[q | 0x22]]) != 0xff) data[p + 0x405] = px;
-			if ((px = color[idx | pattern[q | 0x21]]) != 0xff) data[p + 0x406] = px;
-			if ((px = color[idx | pattern[q | 0x20]]) != 0xff) data[p + 0x407] = px;
-			if ((px = color[idx | pattern[q | 0x2f]]) != 0xff) data[p + 0x500] = px;
-			if ((px = color[idx | pattern[q | 0x2e]]) != 0xff) data[p + 0x501] = px;
-			if ((px = color[idx | pattern[q | 0x2d]]) != 0xff) data[p + 0x502] = px;
-			if ((px = color[idx | pattern[q | 0x2c]]) != 0xff) data[p + 0x503] = px;
-			if ((px = color[idx | pattern[q | 0x2b]]) != 0xff) data[p + 0x504] = px;
-			if ((px = color[idx | pattern[q | 0x2a]]) != 0xff) data[p + 0x505] = px;
-			if ((px = color[idx | pattern[q | 0x29]]) != 0xff) data[p + 0x506] = px;
-			if ((px = color[idx | pattern[q | 0x28]]) != 0xff) data[p + 0x507] = px;
-			if ((px = color[idx | pattern[q | 0x37]]) != 0xff) data[p + 0x600] = px;
-			if ((px = color[idx | pattern[q | 0x36]]) != 0xff) data[p + 0x601] = px;
-			if ((px = color[idx | pattern[q | 0x35]]) != 0xff) data[p + 0x602] = px;
-			if ((px = color[idx | pattern[q | 0x34]]) != 0xff) data[p + 0x603] = px;
-			if ((px = color[idx | pattern[q | 0x33]]) != 0xff) data[p + 0x604] = px;
-			if ((px = color[idx | pattern[q | 0x32]]) != 0xff) data[p + 0x605] = px;
-			if ((px = color[idx | pattern[q | 0x31]]) != 0xff) data[p + 0x606] = px;
-			if ((px = color[idx | pattern[q | 0x30]]) != 0xff) data[p + 0x607] = px;
-			if ((px = color[idx | pattern[q | 0x3f]]) != 0xff) data[p + 0x700] = px;
-			if ((px = color[idx | pattern[q | 0x3e]]) != 0xff) data[p + 0x701] = px;
-			if ((px = color[idx | pattern[q | 0x3d]]) != 0xff) data[p + 0x702] = px;
-			if ((px = color[idx | pattern[q | 0x3c]]) != 0xff) data[p + 0x703] = px;
-			if ((px = color[idx | pattern[q | 0x3b]]) != 0xff) data[p + 0x704] = px;
-			if ((px = color[idx | pattern[q | 0x3a]]) != 0xff) data[p + 0x705] = px;
-			if ((px = color[idx | pattern[q | 0x39]]) != 0xff) data[p + 0x706] = px;
-			if ((px = color[idx | pattern[q | 0x38]]) != 0xff) data[p + 0x707] = px;
+			(px = color[idx | pattern[q | 0x07]]) != 0xff && (data[p + 0x000] = px);
+			(px = color[idx | pattern[q | 0x06]]) != 0xff && (data[p + 0x001] = px);
+			(px = color[idx | pattern[q | 0x05]]) != 0xff && (data[p + 0x002] = px);
+			(px = color[idx | pattern[q | 0x04]]) != 0xff && (data[p + 0x003] = px);
+			(px = color[idx | pattern[q | 0x03]]) != 0xff && (data[p + 0x004] = px);
+			(px = color[idx | pattern[q | 0x02]]) != 0xff && (data[p + 0x005] = px);
+			(px = color[idx | pattern[q | 0x01]]) != 0xff && (data[p + 0x006] = px);
+			(px = color[idx | pattern[q | 0x00]]) != 0xff && (data[p + 0x007] = px);
+			(px = color[idx | pattern[q | 0x0f]]) != 0xff && (data[p + 0x100] = px);
+			(px = color[idx | pattern[q | 0x0e]]) != 0xff && (data[p + 0x101] = px);
+			(px = color[idx | pattern[q | 0x0d]]) != 0xff && (data[p + 0x102] = px);
+			(px = color[idx | pattern[q | 0x0c]]) != 0xff && (data[p + 0x103] = px);
+			(px = color[idx | pattern[q | 0x0b]]) != 0xff && (data[p + 0x104] = px);
+			(px = color[idx | pattern[q | 0x0a]]) != 0xff && (data[p + 0x105] = px);
+			(px = color[idx | pattern[q | 0x09]]) != 0xff && (data[p + 0x106] = px);
+			(px = color[idx | pattern[q | 0x08]]) != 0xff && (data[p + 0x107] = px);
+			(px = color[idx | pattern[q | 0x17]]) != 0xff && (data[p + 0x200] = px);
+			(px = color[idx | pattern[q | 0x16]]) != 0xff && (data[p + 0x201] = px);
+			(px = color[idx | pattern[q | 0x15]]) != 0xff && (data[p + 0x202] = px);
+			(px = color[idx | pattern[q | 0x14]]) != 0xff && (data[p + 0x203] = px);
+			(px = color[idx | pattern[q | 0x13]]) != 0xff && (data[p + 0x204] = px);
+			(px = color[idx | pattern[q | 0x12]]) != 0xff && (data[p + 0x205] = px);
+			(px = color[idx | pattern[q | 0x11]]) != 0xff && (data[p + 0x206] = px);
+			(px = color[idx | pattern[q | 0x10]]) != 0xff && (data[p + 0x207] = px);
+			(px = color[idx | pattern[q | 0x1f]]) != 0xff && (data[p + 0x300] = px);
+			(px = color[idx | pattern[q | 0x1e]]) != 0xff && (data[p + 0x301] = px);
+			(px = color[idx | pattern[q | 0x1d]]) != 0xff && (data[p + 0x302] = px);
+			(px = color[idx | pattern[q | 0x1c]]) != 0xff && (data[p + 0x303] = px);
+			(px = color[idx | pattern[q | 0x1b]]) != 0xff && (data[p + 0x304] = px);
+			(px = color[idx | pattern[q | 0x1a]]) != 0xff && (data[p + 0x305] = px);
+			(px = color[idx | pattern[q | 0x19]]) != 0xff && (data[p + 0x306] = px);
+			(px = color[idx | pattern[q | 0x18]]) != 0xff && (data[p + 0x307] = px);
+			(px = color[idx | pattern[q | 0x27]]) != 0xff && (data[p + 0x400] = px);
+			(px = color[idx | pattern[q | 0x26]]) != 0xff && (data[p + 0x401] = px);
+			(px = color[idx | pattern[q | 0x25]]) != 0xff && (data[p + 0x402] = px);
+			(px = color[idx | pattern[q | 0x24]]) != 0xff && (data[p + 0x403] = px);
+			(px = color[idx | pattern[q | 0x23]]) != 0xff && (data[p + 0x404] = px);
+			(px = color[idx | pattern[q | 0x22]]) != 0xff && (data[p + 0x405] = px);
+			(px = color[idx | pattern[q | 0x21]]) != 0xff && (data[p + 0x406] = px);
+			(px = color[idx | pattern[q | 0x20]]) != 0xff && (data[p + 0x407] = px);
+			(px = color[idx | pattern[q | 0x2f]]) != 0xff && (data[p + 0x500] = px);
+			(px = color[idx | pattern[q | 0x2e]]) != 0xff && (data[p + 0x501] = px);
+			(px = color[idx | pattern[q | 0x2d]]) != 0xff && (data[p + 0x502] = px);
+			(px = color[idx | pattern[q | 0x2c]]) != 0xff && (data[p + 0x503] = px);
+			(px = color[idx | pattern[q | 0x2b]]) != 0xff && (data[p + 0x504] = px);
+			(px = color[idx | pattern[q | 0x2a]]) != 0xff && (data[p + 0x505] = px);
+			(px = color[idx | pattern[q | 0x29]]) != 0xff && (data[p + 0x506] = px);
+			(px = color[idx | pattern[q | 0x28]]) != 0xff && (data[p + 0x507] = px);
+			(px = color[idx | pattern[q | 0x37]]) != 0xff && (data[p + 0x600] = px);
+			(px = color[idx | pattern[q | 0x36]]) != 0xff && (data[p + 0x601] = px);
+			(px = color[idx | pattern[q | 0x35]]) != 0xff && (data[p + 0x602] = px);
+			(px = color[idx | pattern[q | 0x34]]) != 0xff && (data[p + 0x603] = px);
+			(px = color[idx | pattern[q | 0x33]]) != 0xff && (data[p + 0x604] = px);
+			(px = color[idx | pattern[q | 0x32]]) != 0xff && (data[p + 0x605] = px);
+			(px = color[idx | pattern[q | 0x31]]) != 0xff && (data[p + 0x606] = px);
+			(px = color[idx | pattern[q | 0x30]]) != 0xff && (data[p + 0x607] = px);
+			(px = color[idx | pattern[q | 0x3f]]) != 0xff && (data[p + 0x700] = px);
+			(px = color[idx | pattern[q | 0x3e]]) != 0xff && (data[p + 0x701] = px);
+			(px = color[idx | pattern[q | 0x3d]]) != 0xff && (data[p + 0x702] = px);
+			(px = color[idx | pattern[q | 0x3c]]) != 0xff && (data[p + 0x703] = px);
+			(px = color[idx | pattern[q | 0x3b]]) != 0xff && (data[p + 0x704] = px);
+			(px = color[idx | pattern[q | 0x3a]]) != 0xff && (data[p + 0x705] = px);
+			(px = color[idx | pattern[q | 0x39]]) != 0xff && (data[p + 0x706] = px);
+			(px = color[idx | pattern[q | 0x38]]) != 0xff && (data[p + 0x707] = px);
 			break;
 		case 3: // HV反転
-			if ((px = color[idx | pattern[q | 0x3f]]) != 0xff) data[p + 0x000] = px;
-			if ((px = color[idx | pattern[q | 0x3e]]) != 0xff) data[p + 0x001] = px;
-			if ((px = color[idx | pattern[q | 0x3d]]) != 0xff) data[p + 0x002] = px;
-			if ((px = color[idx | pattern[q | 0x3c]]) != 0xff) data[p + 0x003] = px;
-			if ((px = color[idx | pattern[q | 0x3b]]) != 0xff) data[p + 0x004] = px;
-			if ((px = color[idx | pattern[q | 0x3a]]) != 0xff) data[p + 0x005] = px;
-			if ((px = color[idx | pattern[q | 0x39]]) != 0xff) data[p + 0x006] = px;
-			if ((px = color[idx | pattern[q | 0x38]]) != 0xff) data[p + 0x007] = px;
-			if ((px = color[idx | pattern[q | 0x37]]) != 0xff) data[p + 0x100] = px;
-			if ((px = color[idx | pattern[q | 0x36]]) != 0xff) data[p + 0x101] = px;
-			if ((px = color[idx | pattern[q | 0x35]]) != 0xff) data[p + 0x102] = px;
-			if ((px = color[idx | pattern[q | 0x34]]) != 0xff) data[p + 0x103] = px;
-			if ((px = color[idx | pattern[q | 0x33]]) != 0xff) data[p + 0x104] = px;
-			if ((px = color[idx | pattern[q | 0x32]]) != 0xff) data[p + 0x105] = px;
-			if ((px = color[idx | pattern[q | 0x31]]) != 0xff) data[p + 0x106] = px;
-			if ((px = color[idx | pattern[q | 0x30]]) != 0xff) data[p + 0x107] = px;
-			if ((px = color[idx | pattern[q | 0x2f]]) != 0xff) data[p + 0x200] = px;
-			if ((px = color[idx | pattern[q | 0x2e]]) != 0xff) data[p + 0x201] = px;
-			if ((px = color[idx | pattern[q | 0x2d]]) != 0xff) data[p + 0x202] = px;
-			if ((px = color[idx | pattern[q | 0x2c]]) != 0xff) data[p + 0x203] = px;
-			if ((px = color[idx | pattern[q | 0x2b]]) != 0xff) data[p + 0x204] = px;
-			if ((px = color[idx | pattern[q | 0x2a]]) != 0xff) data[p + 0x205] = px;
-			if ((px = color[idx | pattern[q | 0x29]]) != 0xff) data[p + 0x206] = px;
-			if ((px = color[idx | pattern[q | 0x28]]) != 0xff) data[p + 0x207] = px;
-			if ((px = color[idx | pattern[q | 0x27]]) != 0xff) data[p + 0x300] = px;
-			if ((px = color[idx | pattern[q | 0x26]]) != 0xff) data[p + 0x301] = px;
-			if ((px = color[idx | pattern[q | 0x25]]) != 0xff) data[p + 0x302] = px;
-			if ((px = color[idx | pattern[q | 0x24]]) != 0xff) data[p + 0x303] = px;
-			if ((px = color[idx | pattern[q | 0x23]]) != 0xff) data[p + 0x304] = px;
-			if ((px = color[idx | pattern[q | 0x22]]) != 0xff) data[p + 0x305] = px;
-			if ((px = color[idx | pattern[q | 0x21]]) != 0xff) data[p + 0x306] = px;
-			if ((px = color[idx | pattern[q | 0x20]]) != 0xff) data[p + 0x307] = px;
-			if ((px = color[idx | pattern[q | 0x1f]]) != 0xff) data[p + 0x400] = px;
-			if ((px = color[idx | pattern[q | 0x1e]]) != 0xff) data[p + 0x401] = px;
-			if ((px = color[idx | pattern[q | 0x1d]]) != 0xff) data[p + 0x402] = px;
-			if ((px = color[idx | pattern[q | 0x1c]]) != 0xff) data[p + 0x403] = px;
-			if ((px = color[idx | pattern[q | 0x1b]]) != 0xff) data[p + 0x404] = px;
-			if ((px = color[idx | pattern[q | 0x1a]]) != 0xff) data[p + 0x405] = px;
-			if ((px = color[idx | pattern[q | 0x19]]) != 0xff) data[p + 0x406] = px;
-			if ((px = color[idx | pattern[q | 0x18]]) != 0xff) data[p + 0x407] = px;
-			if ((px = color[idx | pattern[q | 0x17]]) != 0xff) data[p + 0x500] = px;
-			if ((px = color[idx | pattern[q | 0x16]]) != 0xff) data[p + 0x501] = px;
-			if ((px = color[idx | pattern[q | 0x15]]) != 0xff) data[p + 0x502] = px;
-			if ((px = color[idx | pattern[q | 0x14]]) != 0xff) data[p + 0x503] = px;
-			if ((px = color[idx | pattern[q | 0x13]]) != 0xff) data[p + 0x504] = px;
-			if ((px = color[idx | pattern[q | 0x12]]) != 0xff) data[p + 0x505] = px;
-			if ((px = color[idx | pattern[q | 0x11]]) != 0xff) data[p + 0x506] = px;
-			if ((px = color[idx | pattern[q | 0x10]]) != 0xff) data[p + 0x507] = px;
-			if ((px = color[idx | pattern[q | 0x0f]]) != 0xff) data[p + 0x600] = px;
-			if ((px = color[idx | pattern[q | 0x0e]]) != 0xff) data[p + 0x601] = px;
-			if ((px = color[idx | pattern[q | 0x0d]]) != 0xff) data[p + 0x602] = px;
-			if ((px = color[idx | pattern[q | 0x0c]]) != 0xff) data[p + 0x603] = px;
-			if ((px = color[idx | pattern[q | 0x0b]]) != 0xff) data[p + 0x604] = px;
-			if ((px = color[idx | pattern[q | 0x0a]]) != 0xff) data[p + 0x605] = px;
-			if ((px = color[idx | pattern[q | 0x09]]) != 0xff) data[p + 0x606] = px;
-			if ((px = color[idx | pattern[q | 0x08]]) != 0xff) data[p + 0x607] = px;
-			if ((px = color[idx | pattern[q | 0x07]]) != 0xff) data[p + 0x700] = px;
-			if ((px = color[idx | pattern[q | 0x06]]) != 0xff) data[p + 0x701] = px;
-			if ((px = color[idx | pattern[q | 0x05]]) != 0xff) data[p + 0x702] = px;
-			if ((px = color[idx | pattern[q | 0x04]]) != 0xff) data[p + 0x703] = px;
-			if ((px = color[idx | pattern[q | 0x03]]) != 0xff) data[p + 0x704] = px;
-			if ((px = color[idx | pattern[q | 0x02]]) != 0xff) data[p + 0x705] = px;
-			if ((px = color[idx | pattern[q | 0x01]]) != 0xff) data[p + 0x706] = px;
-			if ((px = color[idx | pattern[q | 0x00]]) != 0xff) data[p + 0x707] = px;
+			(px = color[idx | pattern[q | 0x3f]]) != 0xff && (data[p + 0x000] = px);
+			(px = color[idx | pattern[q | 0x3e]]) != 0xff && (data[p + 0x001] = px);
+			(px = color[idx | pattern[q | 0x3d]]) != 0xff && (data[p + 0x002] = px);
+			(px = color[idx | pattern[q | 0x3c]]) != 0xff && (data[p + 0x003] = px);
+			(px = color[idx | pattern[q | 0x3b]]) != 0xff && (data[p + 0x004] = px);
+			(px = color[idx | pattern[q | 0x3a]]) != 0xff && (data[p + 0x005] = px);
+			(px = color[idx | pattern[q | 0x39]]) != 0xff && (data[p + 0x006] = px);
+			(px = color[idx | pattern[q | 0x38]]) != 0xff && (data[p + 0x007] = px);
+			(px = color[idx | pattern[q | 0x37]]) != 0xff && (data[p + 0x100] = px);
+			(px = color[idx | pattern[q | 0x36]]) != 0xff && (data[p + 0x101] = px);
+			(px = color[idx | pattern[q | 0x35]]) != 0xff && (data[p + 0x102] = px);
+			(px = color[idx | pattern[q | 0x34]]) != 0xff && (data[p + 0x103] = px);
+			(px = color[idx | pattern[q | 0x33]]) != 0xff && (data[p + 0x104] = px);
+			(px = color[idx | pattern[q | 0x32]]) != 0xff && (data[p + 0x105] = px);
+			(px = color[idx | pattern[q | 0x31]]) != 0xff && (data[p + 0x106] = px);
+			(px = color[idx | pattern[q | 0x30]]) != 0xff && (data[p + 0x107] = px);
+			(px = color[idx | pattern[q | 0x2f]]) != 0xff && (data[p + 0x200] = px);
+			(px = color[idx | pattern[q | 0x2e]]) != 0xff && (data[p + 0x201] = px);
+			(px = color[idx | pattern[q | 0x2d]]) != 0xff && (data[p + 0x202] = px);
+			(px = color[idx | pattern[q | 0x2c]]) != 0xff && (data[p + 0x203] = px);
+			(px = color[idx | pattern[q | 0x2b]]) != 0xff && (data[p + 0x204] = px);
+			(px = color[idx | pattern[q | 0x2a]]) != 0xff && (data[p + 0x205] = px);
+			(px = color[idx | pattern[q | 0x29]]) != 0xff && (data[p + 0x206] = px);
+			(px = color[idx | pattern[q | 0x28]]) != 0xff && (data[p + 0x207] = px);
+			(px = color[idx | pattern[q | 0x27]]) != 0xff && (data[p + 0x300] = px);
+			(px = color[idx | pattern[q | 0x26]]) != 0xff && (data[p + 0x301] = px);
+			(px = color[idx | pattern[q | 0x25]]) != 0xff && (data[p + 0x302] = px);
+			(px = color[idx | pattern[q | 0x24]]) != 0xff && (data[p + 0x303] = px);
+			(px = color[idx | pattern[q | 0x23]]) != 0xff && (data[p + 0x304] = px);
+			(px = color[idx | pattern[q | 0x22]]) != 0xff && (data[p + 0x305] = px);
+			(px = color[idx | pattern[q | 0x21]]) != 0xff && (data[p + 0x306] = px);
+			(px = color[idx | pattern[q | 0x20]]) != 0xff && (data[p + 0x307] = px);
+			(px = color[idx | pattern[q | 0x1f]]) != 0xff && (data[p + 0x400] = px);
+			(px = color[idx | pattern[q | 0x1e]]) != 0xff && (data[p + 0x401] = px);
+			(px = color[idx | pattern[q | 0x1d]]) != 0xff && (data[p + 0x402] = px);
+			(px = color[idx | pattern[q | 0x1c]]) != 0xff && (data[p + 0x403] = px);
+			(px = color[idx | pattern[q | 0x1b]]) != 0xff && (data[p + 0x404] = px);
+			(px = color[idx | pattern[q | 0x1a]]) != 0xff && (data[p + 0x405] = px);
+			(px = color[idx | pattern[q | 0x19]]) != 0xff && (data[p + 0x406] = px);
+			(px = color[idx | pattern[q | 0x18]]) != 0xff && (data[p + 0x407] = px);
+			(px = color[idx | pattern[q | 0x17]]) != 0xff && (data[p + 0x500] = px);
+			(px = color[idx | pattern[q | 0x16]]) != 0xff && (data[p + 0x501] = px);
+			(px = color[idx | pattern[q | 0x15]]) != 0xff && (data[p + 0x502] = px);
+			(px = color[idx | pattern[q | 0x14]]) != 0xff && (data[p + 0x503] = px);
+			(px = color[idx | pattern[q | 0x13]]) != 0xff && (data[p + 0x504] = px);
+			(px = color[idx | pattern[q | 0x12]]) != 0xff && (data[p + 0x505] = px);
+			(px = color[idx | pattern[q | 0x11]]) != 0xff && (data[p + 0x506] = px);
+			(px = color[idx | pattern[q | 0x10]]) != 0xff && (data[p + 0x507] = px);
+			(px = color[idx | pattern[q | 0x0f]]) != 0xff && (data[p + 0x600] = px);
+			(px = color[idx | pattern[q | 0x0e]]) != 0xff && (data[p + 0x601] = px);
+			(px = color[idx | pattern[q | 0x0d]]) != 0xff && (data[p + 0x602] = px);
+			(px = color[idx | pattern[q | 0x0c]]) != 0xff && (data[p + 0x603] = px);
+			(px = color[idx | pattern[q | 0x0b]]) != 0xff && (data[p + 0x604] = px);
+			(px = color[idx | pattern[q | 0x0a]]) != 0xff && (data[p + 0x605] = px);
+			(px = color[idx | pattern[q | 0x09]]) != 0xff && (data[p + 0x606] = px);
+			(px = color[idx | pattern[q | 0x08]]) != 0xff && (data[p + 0x607] = px);
+			(px = color[idx | pattern[q | 0x07]]) != 0xff && (data[p + 0x700] = px);
+			(px = color[idx | pattern[q | 0x06]]) != 0xff && (data[p + 0x701] = px);
+			(px = color[idx | pattern[q | 0x05]]) != 0xff && (data[p + 0x702] = px);
+			(px = color[idx | pattern[q | 0x04]]) != 0xff && (data[p + 0x703] = px);
+			(px = color[idx | pattern[q | 0x03]]) != 0xff && (data[p + 0x704] = px);
+			(px = color[idx | pattern[q | 0x02]]) != 0xff && (data[p + 0x705] = px);
+			(px = color[idx | pattern[q | 0x01]]) != 0xff && (data[p + 0x706] = px);
+			(px = color[idx | pattern[q | 0x00]]) != 0xff && (data[p + 0x707] = px);
 			break;
 		}
 	}

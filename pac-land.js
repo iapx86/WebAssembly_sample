@@ -21,5 +21,5 @@ read('pacland.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(
 	const FGCOLOR = zip.decompress('pl1-5.5t');
 	const BGCOLOR = zip.decompress('pl1-4.4n');
 	const OBJCOLOR = zip.decompress('pl1-3.6l');
-	init(bufferSource, {PRG1, PRG2, PRG2I, FG, BG, OBJ, RED, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR}).then();
+	return init(bufferSource, {PRG1, PRG2, PRG2I, FG, BG, OBJ, RED, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR});
 });

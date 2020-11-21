@@ -19,5 +19,5 @@ read('phozon.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(z
 	const BGCOLOR = zip.decompress('chr.prm');
 	const OBJCOLOR = zip.decompress('sprite.prm');
 	const SND = zip.decompress('sound.prm');
-	init(bufferSource, {PRG1, PRG2, PRG3, RED, BLUE, GREEN, SND, BG, BGCOLOR, OBJ, OBJCOLOR}).then();
+	return init(bufferSource, {PRG1, PRG2, PRG3, RED, BLUE, GREEN, SND, BG, BGCOLOR, OBJ, OBJCOLOR});
 });

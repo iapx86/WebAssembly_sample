@@ -16,5 +16,5 @@ read('superpac.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const BGCOLOR = zip.decompress('superpac.4e');
 	const OBJCOLOR = zip.decompress('superpac.3l');
 	const SND = zip.decompress('superpac.3m');
-	init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2}).then();
+	return init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2});
 });

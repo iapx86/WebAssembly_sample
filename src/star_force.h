@@ -104,7 +104,7 @@ struct StarForce {
 		cpu2.memorymap[0xa0].write = [&](int addr, int data) { sound2->write(data, count); };
 		cpu2.memorymap[0xd0].write = [&](int addr, int data) { sound3->write(1, data & 15, count); };
 		for (int i = 0; i < 0x100; i++) {
-			cpu2.iomap[i].read = [&](int addr) { return (addr & 0xff) == 0 ? cpu2_command : 0xff; };
+			cpu2.iomap[i].read = [&](int addr) { return addr & 0xff ? 0xff : cpu2_command; };
 			cpu2.iomap[i].write = [&](int addr, int data) {
 				switch (addr & 0xff) {
 				case 1:
@@ -112,11 +112,10 @@ struct StarForce {
 				case 9:
 					return void(data == 0xd7 && (ctc.fInterruptEnable = true));
 				case 0xa:
-					if ((ctc.cmd & 4) != 0) {
-						sound3->write(0, (data ? data : 256) * ((ctc.cmd & 0x20) != 0 ? 16 : 1), count);
+					if (ctc.cmd & 4) {
+						sound3->write(0, (data ? data : 256) * (ctc.cmd & 0x20 ? 16 : 1), count);
 						ctc.cmd &= ~4;
-					}
-					else if ((data & 1) != 0)
+					} else if (data & 1)
 						ctc.cmd = data;
 					return;
 				}
@@ -138,14 +137,12 @@ struct StarForce {
 	}
 
 	StarForce *execute() {
+		Cpu *cpus[] = {&cpu, &cpu2};
 		cpu_irq = true;
 		for (count = 0; count < 3; count++) {
-			if (timer == 0)
-				ctc.irq = ctc.fInterruptEnable;
-			Cpu *cpus[] = {&cpu, &cpu2};
+			!timer && (ctc.irq = ctc.fInterruptEnable);
 			Cpu::multiple_execute(2, cpus, 0x800);
-			if (++timer >= 2)
-				timer = 0;
+			++timer >= 2 && (timer = 0);
 		}
 		return this;
 	}
@@ -242,23 +239,9 @@ struct StarForce {
 	}
 
 	StarForce *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			in[2] |= 1 << 0, --fCoin;
-		else
-			in[2] &= ~(1 << 0);
-		if (fStart1P)
-			in[2] |= 1 << 2, --fStart1P;
-		else
-			in[2] &= ~(1 << 2);
-		if (fStart2P)
-			in[2] |= 1 << 3, --fStart2P;
-		else
-			in[2] &= ~(1 << 3);
-
-		// 連射処理
-		if (fTurbo)
-			in[0] ^= 1 << 4;
+		in[2] = in[2] & ~0xd | (fCoin != 0) << 0 | (fStart1P != 0) << 2 | (fStart2P != 0) << 3;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
+		fTurbo && (in[0] ^= 1 << 4);
 		return this;
 	}
 
@@ -275,43 +258,27 @@ struct StarForce {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 3) | 1 << 2;
-		else
-			in[0] &= ~(1 << 2);
+		in[0] = in[0] & ~(1 << 2 | fDown << 3) | fDown << 2;
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 1) | 1 << 0;
-		else
-			in[0] &= ~(1 << 0);
+		in[0] = in[0] & ~(1 << 0 | fDown << 1) | fDown << 0;
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 2) | 1 << 3;
-		else
-			in[0] &= ~(1 << 3);
+		in[0] = in[0] & ~(1 << 3 | fDown << 2) | fDown << 3;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 0) | 1 << 1;
-		else
-			in[0] &= ~(1 << 1);
+		in[0] = in[0] & ~(1 << 1 | fDown << 0) | fDown << 1;
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			in[0] |= 1 << 4;
-		else
-			in[0] &= ~(1 << 4);
+		in[0] = in[0] & ~(1 << 4) | fDown << 4;
 	}
 
 	void triggerB(bool fDown) {
-		if (!(fTurbo = fDown))
-			in[0] &= ~(1 << 4);
+		!(fTurbo = fDown) && (in[0] &= ~(1 << 4));
 	}
 
 	void convertRGB() {
@@ -476,8 +443,7 @@ struct StarForce {
 					xfer16x16HV(data, x | y << 8, src);
 					break;
 				}
-			}
-			else {
+			} else {
 				const int src = ram[k] << 2 & 0x1fc | ram[k + 1] << 9;
 				switch (ram[k + 1] >> 6) {
 				case 0: // ノーマル
@@ -513,70 +479,70 @@ struct StarForce {
 		const int q = (ram[k] | ram[k + 0x400] << 4 & 0x100) << 6, idx = ram[k + 0x400] << 3 & 0x38;
 		int px;
 
-		if ((px = fg[q | 0x00]) != 0) data[p + 0x000] = idx | px;
-		if ((px = fg[q | 0x01]) != 0) data[p + 0x001] = idx | px;
-		if ((px = fg[q | 0x02]) != 0) data[p + 0x002] = idx | px;
-		if ((px = fg[q | 0x03]) != 0) data[p + 0x003] = idx | px;
-		if ((px = fg[q | 0x04]) != 0) data[p + 0x004] = idx | px;
-		if ((px = fg[q | 0x05]) != 0) data[p + 0x005] = idx | px;
-		if ((px = fg[q | 0x06]) != 0) data[p + 0x006] = idx | px;
-		if ((px = fg[q | 0x07]) != 0) data[p + 0x007] = idx | px;
-		if ((px = fg[q | 0x08]) != 0) data[p + 0x100] = idx | px;
-		if ((px = fg[q | 0x09]) != 0) data[p + 0x101] = idx | px;
-		if ((px = fg[q | 0x0a]) != 0) data[p + 0x102] = idx | px;
-		if ((px = fg[q | 0x0b]) != 0) data[p + 0x103] = idx | px;
-		if ((px = fg[q | 0x0c]) != 0) data[p + 0x104] = idx | px;
-		if ((px = fg[q | 0x0d]) != 0) data[p + 0x105] = idx | px;
-		if ((px = fg[q | 0x0e]) != 0) data[p + 0x106] = idx | px;
-		if ((px = fg[q | 0x0f]) != 0) data[p + 0x107] = idx | px;
-		if ((px = fg[q | 0x10]) != 0) data[p + 0x200] = idx | px;
-		if ((px = fg[q | 0x11]) != 0) data[p + 0x201] = idx | px;
-		if ((px = fg[q | 0x12]) != 0) data[p + 0x202] = idx | px;
-		if ((px = fg[q | 0x13]) != 0) data[p + 0x203] = idx | px;
-		if ((px = fg[q | 0x14]) != 0) data[p + 0x204] = idx | px;
-		if ((px = fg[q | 0x15]) != 0) data[p + 0x205] = idx | px;
-		if ((px = fg[q | 0x16]) != 0) data[p + 0x206] = idx | px;
-		if ((px = fg[q | 0x17]) != 0) data[p + 0x207] = idx | px;
-		if ((px = fg[q | 0x18]) != 0) data[p + 0x300] = idx | px;
-		if ((px = fg[q | 0x19]) != 0) data[p + 0x301] = idx | px;
-		if ((px = fg[q | 0x1a]) != 0) data[p + 0x302] = idx | px;
-		if ((px = fg[q | 0x1b]) != 0) data[p + 0x303] = idx | px;
-		if ((px = fg[q | 0x1c]) != 0) data[p + 0x304] = idx | px;
-		if ((px = fg[q | 0x1d]) != 0) data[p + 0x305] = idx | px;
-		if ((px = fg[q | 0x1e]) != 0) data[p + 0x306] = idx | px;
-		if ((px = fg[q | 0x1f]) != 0) data[p + 0x307] = idx | px;
-		if ((px = fg[q | 0x20]) != 0) data[p + 0x400] = idx | px;
-		if ((px = fg[q | 0x21]) != 0) data[p + 0x401] = idx | px;
-		if ((px = fg[q | 0x22]) != 0) data[p + 0x402] = idx | px;
-		if ((px = fg[q | 0x23]) != 0) data[p + 0x403] = idx | px;
-		if ((px = fg[q | 0x24]) != 0) data[p + 0x404] = idx | px;
-		if ((px = fg[q | 0x25]) != 0) data[p + 0x405] = idx | px;
-		if ((px = fg[q | 0x26]) != 0) data[p + 0x406] = idx | px;
-		if ((px = fg[q | 0x27]) != 0) data[p + 0x407] = idx | px;
-		if ((px = fg[q | 0x28]) != 0) data[p + 0x500] = idx | px;
-		if ((px = fg[q | 0x29]) != 0) data[p + 0x501] = idx | px;
-		if ((px = fg[q | 0x2a]) != 0) data[p + 0x502] = idx | px;
-		if ((px = fg[q | 0x2b]) != 0) data[p + 0x503] = idx | px;
-		if ((px = fg[q | 0x2c]) != 0) data[p + 0x504] = idx | px;
-		if ((px = fg[q | 0x2d]) != 0) data[p + 0x505] = idx | px;
-		if ((px = fg[q | 0x2e]) != 0) data[p + 0x506] = idx | px;
-		if ((px = fg[q | 0x2f]) != 0) data[p + 0x507] = idx | px;
-		if ((px = fg[q | 0x30]) != 0) data[p + 0x600] = idx | px;
-		if ((px = fg[q | 0x31]) != 0) data[p + 0x601] = idx | px;
-		if ((px = fg[q | 0x32]) != 0) data[p + 0x602] = idx | px;
-		if ((px = fg[q | 0x33]) != 0) data[p + 0x603] = idx | px;
-		if ((px = fg[q | 0x34]) != 0) data[p + 0x604] = idx | px;
-		if ((px = fg[q | 0x35]) != 0) data[p + 0x605] = idx | px;
-		if ((px = fg[q | 0x36]) != 0) data[p + 0x606] = idx | px;
-		if ((px = fg[q | 0x37]) != 0) data[p + 0x607] = idx | px;
-		if ((px = fg[q | 0x38]) != 0) data[p + 0x700] = idx | px;
-		if ((px = fg[q | 0x39]) != 0) data[p + 0x701] = idx | px;
-		if ((px = fg[q | 0x3a]) != 0) data[p + 0x702] = idx | px;
-		if ((px = fg[q | 0x3b]) != 0) data[p + 0x703] = idx | px;
-		if ((px = fg[q | 0x3c]) != 0) data[p + 0x704] = idx | px;
-		if ((px = fg[q | 0x3d]) != 0) data[p + 0x705] = idx | px;
-		if ((px = fg[q | 0x3e]) != 0) data[p + 0x706] = idx | px;
-		if ((px = fg[q | 0x3f]) != 0) data[p + 0x707] = idx | px;
+		(px = fg[q | 0x00]) && (data[p + 0x000] = idx | px);
+		(px = fg[q | 0x01]) && (data[p + 0x001] = idx | px);
+		(px = fg[q | 0x02]) && (data[p + 0x002] = idx | px);
+		(px = fg[q | 0x03]) && (data[p + 0x003] = idx | px);
+		(px = fg[q | 0x04]) && (data[p + 0x004] = idx | px);
+		(px = fg[q | 0x05]) && (data[p + 0x005] = idx | px);
+		(px = fg[q | 0x06]) && (data[p + 0x006] = idx | px);
+		(px = fg[q | 0x07]) && (data[p + 0x007] = idx | px);
+		(px = fg[q | 0x08]) && (data[p + 0x100] = idx | px);
+		(px = fg[q | 0x09]) && (data[p + 0x101] = idx | px);
+		(px = fg[q | 0x0a]) && (data[p + 0x102] = idx | px);
+		(px = fg[q | 0x0b]) && (data[p + 0x103] = idx | px);
+		(px = fg[q | 0x0c]) && (data[p + 0x104] = idx | px);
+		(px = fg[q | 0x0d]) && (data[p + 0x105] = idx | px);
+		(px = fg[q | 0x0e]) && (data[p + 0x106] = idx | px);
+		(px = fg[q | 0x0f]) && (data[p + 0x107] = idx | px);
+		(px = fg[q | 0x10]) && (data[p + 0x200] = idx | px);
+		(px = fg[q | 0x11]) && (data[p + 0x201] = idx | px);
+		(px = fg[q | 0x12]) && (data[p + 0x202] = idx | px);
+		(px = fg[q | 0x13]) && (data[p + 0x203] = idx | px);
+		(px = fg[q | 0x14]) && (data[p + 0x204] = idx | px);
+		(px = fg[q | 0x15]) && (data[p + 0x205] = idx | px);
+		(px = fg[q | 0x16]) && (data[p + 0x206] = idx | px);
+		(px = fg[q | 0x17]) && (data[p + 0x207] = idx | px);
+		(px = fg[q | 0x18]) && (data[p + 0x300] = idx | px);
+		(px = fg[q | 0x19]) && (data[p + 0x301] = idx | px);
+		(px = fg[q | 0x1a]) && (data[p + 0x302] = idx | px);
+		(px = fg[q | 0x1b]) && (data[p + 0x303] = idx | px);
+		(px = fg[q | 0x1c]) && (data[p + 0x304] = idx | px);
+		(px = fg[q | 0x1d]) && (data[p + 0x305] = idx | px);
+		(px = fg[q | 0x1e]) && (data[p + 0x306] = idx | px);
+		(px = fg[q | 0x1f]) && (data[p + 0x307] = idx | px);
+		(px = fg[q | 0x20]) && (data[p + 0x400] = idx | px);
+		(px = fg[q | 0x21]) && (data[p + 0x401] = idx | px);
+		(px = fg[q | 0x22]) && (data[p + 0x402] = idx | px);
+		(px = fg[q | 0x23]) && (data[p + 0x403] = idx | px);
+		(px = fg[q | 0x24]) && (data[p + 0x404] = idx | px);
+		(px = fg[q | 0x25]) && (data[p + 0x405] = idx | px);
+		(px = fg[q | 0x26]) && (data[p + 0x406] = idx | px);
+		(px = fg[q | 0x27]) && (data[p + 0x407] = idx | px);
+		(px = fg[q | 0x28]) && (data[p + 0x500] = idx | px);
+		(px = fg[q | 0x29]) && (data[p + 0x501] = idx | px);
+		(px = fg[q | 0x2a]) && (data[p + 0x502] = idx | px);
+		(px = fg[q | 0x2b]) && (data[p + 0x503] = idx | px);
+		(px = fg[q | 0x2c]) && (data[p + 0x504] = idx | px);
+		(px = fg[q | 0x2d]) && (data[p + 0x505] = idx | px);
+		(px = fg[q | 0x2e]) && (data[p + 0x506] = idx | px);
+		(px = fg[q | 0x2f]) && (data[p + 0x507] = idx | px);
+		(px = fg[q | 0x30]) && (data[p + 0x600] = idx | px);
+		(px = fg[q | 0x31]) && (data[p + 0x601] = idx | px);
+		(px = fg[q | 0x32]) && (data[p + 0x602] = idx | px);
+		(px = fg[q | 0x33]) && (data[p + 0x603] = idx | px);
+		(px = fg[q | 0x34]) && (data[p + 0x604] = idx | px);
+		(px = fg[q | 0x35]) && (data[p + 0x605] = idx | px);
+		(px = fg[q | 0x36]) && (data[p + 0x606] = idx | px);
+		(px = fg[q | 0x37]) && (data[p + 0x607] = idx | px);
+		(px = fg[q | 0x38]) && (data[p + 0x700] = idx | px);
+		(px = fg[q | 0x39]) && (data[p + 0x701] = idx | px);
+		(px = fg[q | 0x3a]) && (data[p + 0x702] = idx | px);
+		(px = fg[q | 0x3b]) && (data[p + 0x703] = idx | px);
+		(px = fg[q | 0x3c]) && (data[p + 0x704] = idx | px);
+		(px = fg[q | 0x3d]) && (data[p + 0x705] = idx | px);
+		(px = fg[q | 0x3e]) && (data[p + 0x706] = idx | px);
+		(px = fg[q | 0x3f]) && (data[p + 0x707] = idx | px);
 	}
 
 	void xfer16x16_1(int *data, int dst, int src) {
@@ -586,7 +552,7 @@ struct StarForce {
 		src = src << 8 & 0xff00;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = bg1[src++]) != 0)
+				if ((px = bg1[src++]))
 					data[dst] = idx | px;
 	}
 
@@ -597,7 +563,7 @@ struct StarForce {
 		src = src << 8 & 0xff00;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = bg2[src++]) != 0)
+				if ((px = bg2[src++]))
 					data[dst] = idx | px;
 	}
 
@@ -608,7 +574,7 @@ struct StarForce {
 		src = src << 8 & 0x7f00;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = bg3[src++]) != 0)
+				if ((px = bg3[src++]))
 					data[dst] = idx | px;
 	}
 
@@ -621,7 +587,7 @@ struct StarForce {
 		src = src << 8 & 0x1ff00;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[src++]) != 0)
+				if ((px = obj[src++]))
 					data[dst] = idx | px;
 	}
 
@@ -634,7 +600,7 @@ struct StarForce {
 		src = (src << 8 & 0x1ff00) + 256 - 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src -= 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[src++]) != 0)
+				if ((px = obj[src++]))
 					data[dst] = idx | px;
 	}
 
@@ -647,7 +613,7 @@ struct StarForce {
 		src = (src << 8 & 0x1ff00) + 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src += 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[--src]) != 0)
+				if ((px = obj[--src]))
 					data[dst] = idx | px;
 	}
 
@@ -660,7 +626,7 @@ struct StarForce {
 		src = (src << 8 & 0x1ff00) + 256;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[--src]) != 0)
+				if ((px = obj[--src]))
 					data[dst] = idx | px;
 	}
 

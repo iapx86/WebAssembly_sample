@@ -16,5 +16,5 @@ read('aliensec.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const OBJ = Uint8Array.concat(...['bd1_9.8k', 'bd1_10.8l', 'bd1_11.8m', 'bd1_12.8n'].map(e => zip.decompress(e)));
 	const GREEN = zip.decompress('bd1-1.1n');
 	const RED = zip.decompress('bd1-2.2m');
-	init(bufferSource, {PRG1, PRG2, PRG2I, FG, BG, OBJ, GREEN, RED}).then();
+	return init(bufferSource, {PRG1, PRG2, PRG2I, FG, BG, OBJ, GREEN, RED});
 });

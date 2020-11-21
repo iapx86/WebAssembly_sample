@@ -33,9 +33,8 @@ struct Frogger {
 	int fStart2P = 0;
 	int nLife = 3;
 
-	// CPU周りの初期化
 	bool fInterruptEnable = false;
-	bool fSoundEnable = false;
+//	bool fSoundEnable = false;
 
 	uint8_t ram[0xd00] = {};
 	uint8_t ppi0[4] = {0xff, 0xfc, 0xf1, 0};
@@ -64,16 +63,13 @@ struct Frogger {
 			else if (range(page, 0x80, 0x87)) {
 				cpu.memorymap[page].base = ram + (page & 7) * 0x100;
 				cpu.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0xa8, 0xab, 0x04)) {
+			} else if (range(page, 0xa8, 0xab, 0x04)) {
 				cpu.memorymap[page].base = ram + (8 | page & 3) * 0x100;
 				cpu.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0xb0, 0xb0, 0x07)) {
+			} else if (range(page, 0xb0, 0xb0, 0x07)) {
 				cpu.memorymap[page].base = ram + 0xc00;
 				cpu.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0xb8, 0xb8, 0x07))
+			} else if (range(page, 0xb8, 0xb8, 0x07))
 				cpu.memorymap[page].write = [&](int addr, int data) {
 					if ((addr & 0x1c) == 8)
 						fInterruptEnable = (data & 1) != 0;
@@ -81,19 +77,19 @@ struct Frogger {
 			else if (range(page, 0xc0, 0xff)) {
 				cpu.memorymap[page].read = [&](int addr) {
 					int data = 0xff;
-					if ((addr & 0x1000) != 0)
+					if (addr & 0x1000)
 						data &= ppi1[addr >> 1 & 3];
-					if ((addr & 0x2000) != 0)
+					if (addr & 0x2000)
 						data &= ppi0[addr >> 1 & 3];
 					return data;
 				};
 				cpu.memorymap[page].write = [&](int addr, int data) {
-					if ((addr & 0x1000) != 0)
+					if (addr & 0x1000)
 						switch (addr >> 1 & 3) {
 						case 0:
 							return command.push_back(data);
-						case 1:
-							return void(fSoundEnable = (data & 0x10) == 0);
+//						case 1:
+//							return void(fSoundEnable = (data & 0x10) == 0);
 						}
 				};
 			}
@@ -106,11 +102,11 @@ struct Frogger {
 				cpu2.memorymap[page].write = nullptr;
 			}
 		for (int page = 0; page < 0x100; page++) {
-			cpu2.iomap[page].read = [&](int addr) { return (addr & 0x40) != 0 ? sound0->read(psg.addr) : 0xff; };
+			cpu2.iomap[page].read = [&](int addr) { return addr & 0x40 ? sound0->read(psg.addr) : 0xff; };
 			cpu2.iomap[page].write = [&](int addr, int data) {
-				if ((addr & 0x40) != 0)
+				if (addr & 0x40)
 					sound0->write(psg.addr, data, count);
-				else if ((addr & 0x80) != 0)
+				else if (addr & 0x80)
 					psg.addr = data;
 			};
 		}
@@ -171,7 +167,7 @@ struct Frogger {
 			fReset = false;
 			cpu.reset();
 			fInterruptEnable = false;
-			fSoundEnable = false;
+//			fSoundEnable = false;
 			command.clear();
 			cpu2.reset();
 			timer = 0;
@@ -180,19 +176,9 @@ struct Frogger {
 	}
 
 	Frogger *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			ppi0[0] &= ~(1 << 7), --fCoin;
-		else
-			ppi0[0] |= 1 << 7;
-		if (fStart1P)
-			ppi0[1] &= ~(1 << 7), --fStart1P;
-		else
-			ppi0[1] |= 1 << 7;
-		if (fStart2P)
-			ppi0[1] &= ~(1 << 6), --fStart2P;
-		else
-			ppi0[1] |= 1 << 6;
+		ppi0[0] = ppi0[0] & ~(1 << 7) | !fCoin << 7;
+		ppi0[1] = ppi0[1] & ~0xc0 | !fStart1P << 7 | !fStart2P << 6;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		return this;
 	}
 
@@ -209,45 +195,27 @@ struct Frogger {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			ppi0[2] = ppi0[2] & ~(1 << 4) | 1 << 6;
-		else
-			ppi0[2] |= 1 << 4;
+		ppi0[2] = ppi0[2] & ~(1 << 4) | fDown << 6 | !fDown << 4;
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			ppi0[0] = ppi0[0] & ~(1 << 4) | 1 << 5;
-		else
-			ppi0[0] |= 1 << 4;
+		ppi0[0] = ppi0[0] & ~(1 << 4) | fDown << 5 | !fDown << 4;
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			ppi0[2] = ppi0[2] & ~(1 << 6) | 1 << 4;
-		else
-			ppi0[2] |= 1 << 6;
+		ppi0[2] = ppi0[2] & ~(1 << 6) | fDown << 4 | !fDown << 6;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			ppi0[0] = ppi0[0] & ~(1 << 5) | 1 << 4;
-		else
-			ppi0[0] |= 1 << 5;
+		ppi0[0] = ppi0[0] & ~(1 << 5) | fDown << 4 | !fDown << 5;
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			ppi0[0] &= ~(1 << 3);
-		else
-			ppi0[0] |= 1 << 3;
+		ppi0[0] = ppi0[0] & ~(1 << 3) | !fDown << 3;
 	}
 
 	void triggerB(bool fDown) {
-		if (fDown)
-			ppi0[0] &= ~(1 << 1);
-		else
-			ppi0[0] |= 1 << 1;
+		ppi0[0] = ppi0[0] & ~(1 << 1) | !fDown << 1;
 	}
 
 	void convertRGB() {
@@ -296,8 +264,7 @@ struct Frogger {
 	void makeBitmap(int *data) {
 		// bg描画
 		int p = 256 * 32;
-		int k = 0xbe2;
-		for (int i = 2; i < 32; p += 256 * 8, k += 0x401, i++) {
+		for (int k = 0xbe2, i = 2; i < 32; p += 256 * 8, k += 0x401, i++) {
 			int dwScroll = ram[0xc00 + i * 2] >> 4 | ram[0xc00 + i * 2] << 4 & 0xf0;
 			for (int j = 0; j < 32; k -= 0x20, j++) {
 				xfer8x8(data, p + dwScroll, k, i);
@@ -327,8 +294,7 @@ struct Frogger {
 
 		// bg描画
 		p = 256 * 16;
-		k = 0xbe0;
-		for (int i = 0; i < 2; p += 256 * 8, k += 0x401, i++) {
+		for (int k = 0xbe0, i = 0; i < 2; p += 256 * 8, k += 0x401, i++) {
 			int dwScroll = ram[0xc00 + i * 2] >> 4 | ram[0xc00 + i * 2] << 4 & 0xf0;
 			for (int j = 0; j < 32; k -= 0x20, j++) {
 				xfer8x8(data, p + dwScroll, k, i);
@@ -424,7 +390,7 @@ struct Frogger {
 		src = src << 8 & 0x3f00;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[src++]) != 0)
+				if ((px = obj[src++]))
 					data[dst] = idx | px;
 	}
 
@@ -437,7 +403,7 @@ struct Frogger {
 		src = (src << 8 & 0x3f00) + 256 - 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src -= 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[src++]) != 0)
+				if ((px = obj[src++]))
 					data[dst] = idx | px;
 	}
 
@@ -450,7 +416,7 @@ struct Frogger {
 		src = (src << 8 & 0x3f00) + 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src += 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[--src]) != 0)
+				if ((px = obj[--src]))
 					data[dst] = idx | px;
 	}
 
@@ -463,7 +429,7 @@ struct Frogger {
 		src = (src << 8 & 0x3f00) + 256;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[--src]) != 0)
+				if ((px = obj[--src]))
 					data[dst] = idx | px;
 	}
 

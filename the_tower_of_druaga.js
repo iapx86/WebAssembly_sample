@@ -16,5 +16,5 @@ read('todruaga.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const BGCOLOR = zip.decompress('td1-6.4c');
 	const OBJCOLOR = zip.decompress('td1-7.5k');
 	const SND = zip.decompress('td1-3.3m');
-	init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2}).then();
+	return init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2});
 });

@@ -15,5 +15,5 @@ read('puckman.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(
 	const RGB = zip.decompress('pm1-1.7f');
 	const COLOR = zip.decompress('pm1-4.4a');
 	const SND = zip.decompress('pm1-3.1m');
-	init(bufferSource, {BG, COLOR, OBJ, RGB, PRG, SND}).then();
+	return init(bufferSource, {BG, COLOR, OBJ, RGB, PRG, SND});
 });

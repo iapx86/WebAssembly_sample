@@ -76,21 +76,21 @@ struct DragonBuster {
 			cpu.memorymap[0x68 + i].write = [&](int addr, int data) { sound0->write(addr, data); };
 		}
 		for (int i = 0; i < 0x10; i++)
-			cpu.memorymap[0x70 + i].write = [&](int addr, int data) { fInterruptEnable0 = (addr & 0x800) == 0; };
+			cpu.memorymap[0x70 + i].write = [&](int addr, int data) { fInterruptEnable0 = !(addr & 0x800); };
 		for (int i = 0; i < 0x80; i++)
 			cpu.memorymap[0x80 + i].base = PRG1 + i * 0x100;
 		for (int i = 0; i < 0x10; i++)
-			cpu.memorymap[0x80 + i].write = [&](int addr, int data) { (addr & 0x800) == 0 ? mcu.enable() : mcu.disable(); };
+			cpu.memorymap[0x80 + i].write = [&](int addr, int data) { addr & 0x800 ? mcu.disable() : mcu.enable(); };
 		for (int i = 0; i < 0x10; i++)
 			cpu.memorymap[0x90 + i].write = [&](int addr, int data) {
-				const int bank = ~addr >> 6 & 0x20 | 0x80;
-				if (bank == this->bank)
+				const int _bank = ~addr >> 6 & 0x20 | 0x80;
+				if (_bank == bank)
 					return;
 				for (int i = 0; i < 0x20; i++)
-					cpu.memorymap[i].base = PRG1 + (bank + i) * 0x100;
-				this->bank = bank;
+					cpu.memorymap[i].base = PRG1 + (_bank + i) * 0x100;
+				bank = _bank;
 			};
-		cpu.memorymap[0xa0].write = [&](int addr, int data) { (addr & 0xfe) == 0 && (priority = data, fFlip = (addr & 1) != 0); };
+		cpu.memorymap[0xa0].write = [&](int addr, int data) { !(addr & 0xfe) && (priority = data, fFlip = (addr & 1) != 0); };
 
 		mcu.memorymap[0].read = [&](int addr) -> int { return addr == 2 ? in[select] : ram2[addr]; };
 		mcu.memorymap[0].write = [&](int addr, int data) { addr == 2 && (data & 0xe0) == 0x60 && (select = data & 7), ram2[addr] = data; };
@@ -99,7 +99,7 @@ struct DragonBuster {
 			mcu.memorymap[0x10 + i].write = [&](int addr, int data) { sound0->write(addr, data); };
 		}
 		for (int i = 0; i < 0x40; i++)
-			mcu.memorymap[0x40 + i].write = [&](int addr, int data) { fInterruptEnable1 = (addr & 0x2000) == 0; };
+			mcu.memorymap[0x40 + i].write = [&](int addr, int data) { fInterruptEnable1 = !(addr & 0x2000); };
 		for (int i = 0; i < 0x20; i++)
 			mcu.memorymap[0x80 + i].base = PRG2 + i * 0x100;
 		for (int i = 0; i < 8; i++) {
@@ -123,7 +123,7 @@ struct DragonBuster {
 			mcu.interrupt();
 		for (int i = 0; i < 800; i++)
 			cpu.execute(5), mcu.execute(6);
-		if ((ram2[8] & 8) != 0)
+		if (ram2[8] & 8)
 			mcu.interrupt(MC6801_OCF);
 		for (int i = 0; i < 800; i++)
 			cpu.execute(5), mcu.execute(6);
@@ -169,19 +169,8 @@ struct DragonBuster {
 	}
 
 	DragonBuster *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			in[4] &= ~(1 << 0), --fCoin;
-		else
-			in[4] |= 1 << 0;
-		if (fStart1P)
-			in[4] &= ~(1 << 3), --fStart1P;
-		else
-			in[4] |= 1 << 3;
-		if (fStart2P)
-			in[4] &= ~(1 << 4), --fStart2P;
-		else
-			in[4] |= 1 << 4;
+		in[4] = in[4] & ~0x19 | !fCoin << 0 | !fStart1P << 3 | !fStart2P << 4;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		return this;
 	}
 
@@ -198,45 +187,27 @@ struct DragonBuster {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			in[6] = in[6] & ~(1 << 3) | 1 << 2;
-		else
-			in[6] |= 1 << 3;
+		in[6] = in[6] & ~(1 << 3) | fDown << 2 | !fDown << 3;
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			in[6] = in[6] & ~(1 << 1) | 1 << 0;
-		else
-			in[6] |= 1 << 1;
+		in[6] = in[6] & ~(1 << 1) | fDown << 0 | !fDown << 1;
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			in[6] = in[6] & ~(1 << 2) | 1 << 3;
-		else
-			in[6] |= 1 << 2;
+		in[6] = in[6] & ~(1 << 2) | fDown << 3 | !fDown << 2;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			in[6] = in[6] & ~(1 << 0) | 1 << 1;
-		else
-			in[6] |= 1 << 0;
+		in[6] = in[6] & ~(1 << 0) | fDown << 1 | !fDown << 0;
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			in[6] &= ~(1 << 4);
-		else
-			in[6] |= 1 << 4;
+		in[6] = in[6] & ~(1 << 4) | !fDown << 4;
 	}
 
 	void triggerB(bool fDown) {
-		if (fDown)
-			in[3] &= ~(1 << 3);
-		else
-			in[3] |= 1 << 3;
+		in[3] = in[3] & ~(1 << 3) | !fDown << 3;
 	}
 
 	void convertRGB() {
@@ -354,38 +325,33 @@ struct DragonBuster {
 	void makeBitmap(int *data) {
 		// bg描画
 		int p = 256 * 8 * 2 + 232 + (fFlip ? (7 - hScroll & 7) - (4 - vScroll & 7) * 256 : (1 + hScroll & 7) - (3 + vScroll & 7) * 256);
-		int k = fFlip ? 7 - hScroll << 3 & 0x7c0 | (4 - vScroll >> 3) + 23 & 0x3f : 0x18 + 1 + hScroll << 3 & 0x7c0 | (3 + vScroll >> 3) + 4 & 0x3f;
-		for (int i = 0; i < 29; k = k + 27 & 0x3f | k + 0x40 & 0x7c0, p -= 256 * 8 * 37 + 8, i++)
+		int _k = fFlip ? 7 - hScroll << 3 & 0x7c0 | (4 - vScroll >> 3) + 23 & 0x3f : 0x18 + 1 + hScroll << 3 & 0x7c0 | (3 + vScroll >> 3) + 4 & 0x3f;
+		for (int k = _k, i = 0; i < 29; k = k + 27 & 0x3f | k + 0x40 & 0x7c0, p -= 256 * 8 * 37 + 8, i++)
 			for (int j = 0; j < 37; k = k + 1 & 0x3f | k & 0x7c0, p += 256 * 8, j++)
 				xfer8x8b(data, p, k);
 
 		// fg描画
-		if ((priority & 4) != 0) {
+		if (priority & 4) {
 			p = 256 * 8 * 4 + 232;
-			k = 0x1040;
-			for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
+			for (int k = 0x1040, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 				for (int j = 0; j < 32; k++, p += 256 * 8, j++)
-					if (((ram[k] ^ priority) & 0xf0) == 0)
+					if (!((ram[k] ^ priority) & 0xf0))
 						xfer8x8f(data, p, k);
 			p = 256 * 8 * 36 + 232;
-			k = 0x1002;
-			for (int i = 0; i < 28; p -= 8, k++, i++)
-				if (((ram[k] ^ priority) & 0xf0) == 0)
+			for (int k = 0x1002, i = 0; i < 28; p -= 8, k++, i++)
+				if (!((ram[k] ^ priority) & 0xf0))
 					xfer8x8f(data, p, k);
 			p = 256 * 8 * 37 + 232;
-			k = 0x1022;
-			for (int i = 0; i < 28; p -= 8, k++, i++)
-				if (((ram[k] ^ priority) & 0xf0) == 0)
+			for (int k = 0x1022, i = 0; i < 28; p -= 8, k++, i++)
+				if (!((ram[k] ^ priority) & 0xf0))
 					xfer8x8f(data, p, k);
 			p = 256 * 8 * 2 + 232;
-			k = 0x13c2;
-			for (int i = 0; i < 28; p -= 8, k++, i++)
-				if (((ram[k] ^ priority) & 0xf0) == 0)
+			for (int k = 0x13c2, i = 0; i < 28; p -= 8, k++, i++)
+				if (!((ram[k] ^ priority) & 0xf0))
 					xfer8x8f(data, p, k);
 			p = 256 * 8 * 3 + 232;
-			k = 0x13e2;
-			for (int i = 0; i < 28; p -= 8, k++, i++)
-				if (((ram[k] ^ priority) & 0xf0) == 0)
+			for (int k = 0x13e2, i = 0; i < 28; p -= 8, k++, i++)
+				if (!((ram[k] ^ priority) & 0xf0))
 					xfer8x8f(data, p, k);
 		}
 
@@ -466,8 +432,7 @@ struct DragonBuster {
 					break;
 				}
 			}
-		}
-		else {
+		} else {
 			for (int k = 0x1f80, i = 64; i != 0; k += 2, --i) {
 				const int x = ram[k + 0x800] + 7 & 0xff;
 				const int y = (ram[k + 0x801] | ram[k + 0x1001] << 8) - 55 & 0x1ff;
@@ -547,30 +512,25 @@ struct DragonBuster {
 
 		// fg描画
 		p = 256 * 8 * 4 + 232;
-		k = 0x1040;
-		for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
+		for (int k = 0x1040, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
-				if ((priority & 4) == 0 || ((ram[k] ^ priority) & 0xf0) != 0)
+				if (~priority & 4 || (ram[k] ^ priority) & 0xf0)
 					xfer8x8f(data, p, k);
 		p = 256 * 8 * 36 + 232;
-		k = 0x1002;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
-			if ((priority & 4) == 0 || ((ram[k] ^ priority) & 0xf0) != 0)
+		for (int k = 0x1002, i = 0; i < 28; p -= 8, k++, i++)
+			if (~priority & 4 || (ram[k] ^ priority) & 0xf0)
 				xfer8x8f(data, p, k);
 		p = 256 * 8 * 37 + 232;
-		k = 0x1022;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
-			if ((priority & 4) == 0 || ((ram[k] ^ priority) & 0xf0) != 0)
+		for (int k = 0x1022, i = 0; i < 28; p -= 8, k++, i++)
+			if (~priority & 4 || (ram[k] ^ priority) & 0xf0)
 				xfer8x8f(data, p, k);
 		p = 256 * 8 * 2 + 232;
-		k = 0x13c2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
-			if ((priority & 4) == 0 || ((ram[k] ^ priority) & 0xf0) != 0)
+		for (int k = 0x13c2, i = 0; i < 28; p -= 8, k++, i++)
+			if (~priority & 4 || (ram[k] ^ priority) & 0xf0)
 				xfer8x8f(data, p, k);
 		p = 256 * 8 * 3 + 232;
-		k = 0x13e2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
-			if ((priority & 4) == 0 || ((ram[k] ^ priority) & 0xf0) != 0)
+		for (int k = 0x13e2, i = 0; i < 28; p -= 8, k++, i++)
+			if (~priority & 4 || (ram[k] ^ priority) & 0xf0)
 				xfer8x8f(data, p, k);
 
 		// palette変換
@@ -584,70 +544,70 @@ struct DragonBuster {
 		const int q = ram[k] << 6, idx = ram[k + 0x400] << 2 & 0xfc;
 		int px;
 
-		if ((px = fg[q | 0x00]) != 0) data[p + 0x000] = idx | px;
-		if ((px = fg[q | 0x01]) != 0) data[p + 0x001] = idx | px;
-		if ((px = fg[q | 0x02]) != 0) data[p + 0x002] = idx | px;
-		if ((px = fg[q | 0x03]) != 0) data[p + 0x003] = idx | px;
-		if ((px = fg[q | 0x04]) != 0) data[p + 0x004] = idx | px;
-		if ((px = fg[q | 0x05]) != 0) data[p + 0x005] = idx | px;
-		if ((px = fg[q | 0x06]) != 0) data[p + 0x006] = idx | px;
-		if ((px = fg[q | 0x07]) != 0) data[p + 0x007] = idx | px;
-		if ((px = fg[q | 0x08]) != 0) data[p + 0x100] = idx | px;
-		if ((px = fg[q | 0x09]) != 0) data[p + 0x101] = idx | px;
-		if ((px = fg[q | 0x0a]) != 0) data[p + 0x102] = idx | px;
-		if ((px = fg[q | 0x0b]) != 0) data[p + 0x103] = idx | px;
-		if ((px = fg[q | 0x0c]) != 0) data[p + 0x104] = idx | px;
-		if ((px = fg[q | 0x0d]) != 0) data[p + 0x105] = idx | px;
-		if ((px = fg[q | 0x0e]) != 0) data[p + 0x106] = idx | px;
-		if ((px = fg[q | 0x0f]) != 0) data[p + 0x107] = idx | px;
-		if ((px = fg[q | 0x10]) != 0) data[p + 0x200] = idx | px;
-		if ((px = fg[q | 0x11]) != 0) data[p + 0x201] = idx | px;
-		if ((px = fg[q | 0x12]) != 0) data[p + 0x202] = idx | px;
-		if ((px = fg[q | 0x13]) != 0) data[p + 0x203] = idx | px;
-		if ((px = fg[q | 0x14]) != 0) data[p + 0x204] = idx | px;
-		if ((px = fg[q | 0x15]) != 0) data[p + 0x205] = idx | px;
-		if ((px = fg[q | 0x16]) != 0) data[p + 0x206] = idx | px;
-		if ((px = fg[q | 0x17]) != 0) data[p + 0x207] = idx | px;
-		if ((px = fg[q | 0x18]) != 0) data[p + 0x300] = idx | px;
-		if ((px = fg[q | 0x19]) != 0) data[p + 0x301] = idx | px;
-		if ((px = fg[q | 0x1a]) != 0) data[p + 0x302] = idx | px;
-		if ((px = fg[q | 0x1b]) != 0) data[p + 0x303] = idx | px;
-		if ((px = fg[q | 0x1c]) != 0) data[p + 0x304] = idx | px;
-		if ((px = fg[q | 0x1d]) != 0) data[p + 0x305] = idx | px;
-		if ((px = fg[q | 0x1e]) != 0) data[p + 0x306] = idx | px;
-		if ((px = fg[q | 0x1f]) != 0) data[p + 0x307] = idx | px;
-		if ((px = fg[q | 0x20]) != 0) data[p + 0x400] = idx | px;
-		if ((px = fg[q | 0x21]) != 0) data[p + 0x401] = idx | px;
-		if ((px = fg[q | 0x22]) != 0) data[p + 0x402] = idx | px;
-		if ((px = fg[q | 0x23]) != 0) data[p + 0x403] = idx | px;
-		if ((px = fg[q | 0x24]) != 0) data[p + 0x404] = idx | px;
-		if ((px = fg[q | 0x25]) != 0) data[p + 0x405] = idx | px;
-		if ((px = fg[q | 0x26]) != 0) data[p + 0x406] = idx | px;
-		if ((px = fg[q | 0x27]) != 0) data[p + 0x407] = idx | px;
-		if ((px = fg[q | 0x28]) != 0) data[p + 0x500] = idx | px;
-		if ((px = fg[q | 0x29]) != 0) data[p + 0x501] = idx | px;
-		if ((px = fg[q | 0x2a]) != 0) data[p + 0x502] = idx | px;
-		if ((px = fg[q | 0x2b]) != 0) data[p + 0x503] = idx | px;
-		if ((px = fg[q | 0x2c]) != 0) data[p + 0x504] = idx | px;
-		if ((px = fg[q | 0x2d]) != 0) data[p + 0x505] = idx | px;
-		if ((px = fg[q | 0x2e]) != 0) data[p + 0x506] = idx | px;
-		if ((px = fg[q | 0x2f]) != 0) data[p + 0x507] = idx | px;
-		if ((px = fg[q | 0x30]) != 0) data[p + 0x600] = idx | px;
-		if ((px = fg[q | 0x31]) != 0) data[p + 0x601] = idx | px;
-		if ((px = fg[q | 0x32]) != 0) data[p + 0x602] = idx | px;
-		if ((px = fg[q | 0x33]) != 0) data[p + 0x603] = idx | px;
-		if ((px = fg[q | 0x34]) != 0) data[p + 0x604] = idx | px;
-		if ((px = fg[q | 0x35]) != 0) data[p + 0x605] = idx | px;
-		if ((px = fg[q | 0x36]) != 0) data[p + 0x606] = idx | px;
-		if ((px = fg[q | 0x37]) != 0) data[p + 0x607] = idx | px;
-		if ((px = fg[q | 0x38]) != 0) data[p + 0x700] = idx | px;
-		if ((px = fg[q | 0x39]) != 0) data[p + 0x701] = idx | px;
-		if ((px = fg[q | 0x3a]) != 0) data[p + 0x702] = idx | px;
-		if ((px = fg[q | 0x3b]) != 0) data[p + 0x703] = idx | px;
-		if ((px = fg[q | 0x3c]) != 0) data[p + 0x704] = idx | px;
-		if ((px = fg[q | 0x3d]) != 0) data[p + 0x705] = idx | px;
-		if ((px = fg[q | 0x3e]) != 0) data[p + 0x706] = idx | px;
-		if ((px = fg[q | 0x3f]) != 0) data[p + 0x707] = idx | px;
+		(px = fg[q | 0x00]) && (data[p + 0x000] = idx | px);
+		(px = fg[q | 0x01]) && (data[p + 0x001] = idx | px);
+		(px = fg[q | 0x02]) && (data[p + 0x002] = idx | px);
+		(px = fg[q | 0x03]) && (data[p + 0x003] = idx | px);
+		(px = fg[q | 0x04]) && (data[p + 0x004] = idx | px);
+		(px = fg[q | 0x05]) && (data[p + 0x005] = idx | px);
+		(px = fg[q | 0x06]) && (data[p + 0x006] = idx | px);
+		(px = fg[q | 0x07]) && (data[p + 0x007] = idx | px);
+		(px = fg[q | 0x08]) && (data[p + 0x100] = idx | px);
+		(px = fg[q | 0x09]) && (data[p + 0x101] = idx | px);
+		(px = fg[q | 0x0a]) && (data[p + 0x102] = idx | px);
+		(px = fg[q | 0x0b]) && (data[p + 0x103] = idx | px);
+		(px = fg[q | 0x0c]) && (data[p + 0x104] = idx | px);
+		(px = fg[q | 0x0d]) && (data[p + 0x105] = idx | px);
+		(px = fg[q | 0x0e]) && (data[p + 0x106] = idx | px);
+		(px = fg[q | 0x0f]) && (data[p + 0x107] = idx | px);
+		(px = fg[q | 0x10]) && (data[p + 0x200] = idx | px);
+		(px = fg[q | 0x11]) && (data[p + 0x201] = idx | px);
+		(px = fg[q | 0x12]) && (data[p + 0x202] = idx | px);
+		(px = fg[q | 0x13]) && (data[p + 0x203] = idx | px);
+		(px = fg[q | 0x14]) && (data[p + 0x204] = idx | px);
+		(px = fg[q | 0x15]) && (data[p + 0x205] = idx | px);
+		(px = fg[q | 0x16]) && (data[p + 0x206] = idx | px);
+		(px = fg[q | 0x17]) && (data[p + 0x207] = idx | px);
+		(px = fg[q | 0x18]) && (data[p + 0x300] = idx | px);
+		(px = fg[q | 0x19]) && (data[p + 0x301] = idx | px);
+		(px = fg[q | 0x1a]) && (data[p + 0x302] = idx | px);
+		(px = fg[q | 0x1b]) && (data[p + 0x303] = idx | px);
+		(px = fg[q | 0x1c]) && (data[p + 0x304] = idx | px);
+		(px = fg[q | 0x1d]) && (data[p + 0x305] = idx | px);
+		(px = fg[q | 0x1e]) && (data[p + 0x306] = idx | px);
+		(px = fg[q | 0x1f]) && (data[p + 0x307] = idx | px);
+		(px = fg[q | 0x20]) && (data[p + 0x400] = idx | px);
+		(px = fg[q | 0x21]) && (data[p + 0x401] = idx | px);
+		(px = fg[q | 0x22]) && (data[p + 0x402] = idx | px);
+		(px = fg[q | 0x23]) && (data[p + 0x403] = idx | px);
+		(px = fg[q | 0x24]) && (data[p + 0x404] = idx | px);
+		(px = fg[q | 0x25]) && (data[p + 0x405] = idx | px);
+		(px = fg[q | 0x26]) && (data[p + 0x406] = idx | px);
+		(px = fg[q | 0x27]) && (data[p + 0x407] = idx | px);
+		(px = fg[q | 0x28]) && (data[p + 0x500] = idx | px);
+		(px = fg[q | 0x29]) && (data[p + 0x501] = idx | px);
+		(px = fg[q | 0x2a]) && (data[p + 0x502] = idx | px);
+		(px = fg[q | 0x2b]) && (data[p + 0x503] = idx | px);
+		(px = fg[q | 0x2c]) && (data[p + 0x504] = idx | px);
+		(px = fg[q | 0x2d]) && (data[p + 0x505] = idx | px);
+		(px = fg[q | 0x2e]) && (data[p + 0x506] = idx | px);
+		(px = fg[q | 0x2f]) && (data[p + 0x507] = idx | px);
+		(px = fg[q | 0x30]) && (data[p + 0x600] = idx | px);
+		(px = fg[q | 0x31]) && (data[p + 0x601] = idx | px);
+		(px = fg[q | 0x32]) && (data[p + 0x602] = idx | px);
+		(px = fg[q | 0x33]) && (data[p + 0x603] = idx | px);
+		(px = fg[q | 0x34]) && (data[p + 0x604] = idx | px);
+		(px = fg[q | 0x35]) && (data[p + 0x605] = idx | px);
+		(px = fg[q | 0x36]) && (data[p + 0x606] = idx | px);
+		(px = fg[q | 0x37]) && (data[p + 0x607] = idx | px);
+		(px = fg[q | 0x38]) && (data[p + 0x700] = idx | px);
+		(px = fg[q | 0x39]) && (data[p + 0x701] = idx | px);
+		(px = fg[q | 0x3a]) && (data[p + 0x702] = idx | px);
+		(px = fg[q | 0x3b]) && (data[p + 0x703] = idx | px);
+		(px = fg[q | 0x3c]) && (data[p + 0x704] = idx | px);
+		(px = fg[q | 0x3d]) && (data[p + 0x705] = idx | px);
+		(px = fg[q | 0x3e]) && (data[p + 0x706] = idx | px);
+		(px = fg[q | 0x3f]) && (data[p + 0x707] = idx | px);
 	}
 
 	void xfer8x8b(int *data, int p, int k) {

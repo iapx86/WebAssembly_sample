@@ -16,5 +16,5 @@ read('starforc.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const BG3 = Uint8Array.concat(...['18.10pq', '17.9pq', '16.8pq'].map(e => zip.decompress(e)));
 	const OBJ = Uint8Array.concat(...['6.10lm', '5.9lm', '4.8lm'].map(e => zip.decompress(e)));
 	const SND = zip.decompress('07b.bin');
-	init(bufferSource, {PRG1, PRG2, FG, BG1, BG2, BG3, OBJ, SND}).then();
+	return init(bufferSource, {PRG1, PRG2, FG, BG1, BG2, BG3, OBJ, SND});
 });

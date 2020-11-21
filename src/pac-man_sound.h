@@ -5,6 +5,7 @@
 #ifndef PAC_MAN_SOUND_H
 #define PAC_MAN_SOUND_H
 
+#include <algorithm>
 #include <list>
 #include <mutex>
 #include <utility>
@@ -47,18 +48,13 @@ struct PacManSound {
 	void update() {
 		mutex.lock();
 		if (wheel.size() > resolution) {
-			while (!wheel.empty()) {
-				for (auto& e: wheel.front())
-					reg[e.first] = e.second;
-				wheel.pop_front();
-			}
+			while (!wheel.empty())
+				for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { reg[e.first] = e.second; }), wheel.pop_front();
 			count = sampleRate - 1;
 		}
-		for (auto& e: tmpwheel)
-			wheel.push_back(e);
+		wheel.insert(wheel.end(), tmpwheel.begin(), tmpwheel.end());
 		mutex.unlock();
-		for (auto& e: tmpwheel)
-			e.clear();
+		for_each(tmpwheel.begin(), tmpwheel.end(), [](list<pair<int, int>>& e) { e.clear(); });
 	}
 
 	void makeSound(float *data, uint32_t length) {
@@ -66,9 +62,7 @@ struct PacManSound {
 			for (count += 60 * resolution; count >= sampleRate; count -= sampleRate)
 				if (!wheel.empty()) {
 					mutex.lock();
-					for (auto& e: wheel.front())
-						reg[e.first] = e.second;
-					wheel.pop_front();
+					for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { reg[e.first] = e.second; }), wheel.pop_front();
 					mutex.unlock();
 				}
 			for (int j = 0; j < 3; j++) {

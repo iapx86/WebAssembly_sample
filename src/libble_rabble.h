@@ -83,13 +83,13 @@ struct LibbleRabble {
 		cpu.memorymap[0x68].read = [&](int addr) { return port[addr & 0x3f] | 0xf0; };
 		cpu.memorymap[0x68].write = [&](int addr, int data) { port[addr & 0x3f] = data & 0xf; };
 		for (int i = 0; i < 0x10; i++)
-			cpu.memorymap[0x70 + i].write = [&](int addr, int data) { fInterruptEnable = (addr & 0x800) == 0; };
+			cpu.memorymap[0x70 + i].write = [&](int addr, int data) { fInterruptEnable = !(addr & 0x800); };
 		for (int i = 0; i < 0x80; i++)
 			cpu.memorymap[0x80 + i].base = PRG1 + i * 0x100;
 		for (int i = 0; i < 0x10; i++)
-			cpu.memorymap[0x80 + i].write = [&](int addr, int data) { (addr & 0x800) == 0 ? cpu3.enable() : cpu3.disable(); };
+			cpu.memorymap[0x80 + i].write = [&](int addr, int data) { addr & 0x800 ? cpu3.disable() : cpu3.enable(); };
 		for (int i = 0; i < 0x10; i++)
-			cpu.memorymap[0x90 + i].write = [&](int addr, int data) { (addr & 0x800) == 0 ? cpu2.enable() : cpu2.disable(); };
+			cpu.memorymap[0x90 + i].write = [&](int addr, int data) { addr & 0x800 ? cpu2.disable() : cpu2.enable(); };
 		cpu.memorymap[0xa0].write = [&](int addr, int data) { palette = addr << 7 & 0x80; };
 
 		for (int i = 0; i < 4; i++) {
@@ -111,14 +111,14 @@ struct LibbleRabble {
 		}
 		for (int i = 0; i < 0x80; i++) {
 			cpu3.memorymap[0x1800 + i].read = [&](int addr) -> int { return addr = addr << 1 & 0xfffe, vram[addr] << 4 | vram[addr | 1] & 0xf; };
-			cpu3.memorymap[0x1800 + i].write = [&](int addr, int data) { vram[addr = addr << 1 & 0xfffe] = data >> 4, vram[addr | 1] = data & 0xf; };
+			cpu3.memorymap[0x1800 + i].write = [&](int addr, int data) { addr = addr << 1 & 0xfffe, vram[addr] = data >> 4, vram[addr | 1] = data & 0xf; };
 		}
 		for (int i = 0; i < 0x500; i++) {
 			cpu3.memorymap[0x1900 + i].base = vram + (i & 0xff) * 0x100;
 			cpu3.memorymap[0x1900 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x1000; i++)
-			cpu3.memorymap[0x3000 + i].write16 = [&](int addr, int data) { fInterruptEnable2 = (addr & 0x80000) == 0; };
+			cpu3.memorymap[0x3000 + i].write16 = [&](int addr, int data) { fInterruptEnable2 = !(addr & 0x80000); };
 
 		// Videoの初期化
 		convertRGB();
@@ -239,12 +239,11 @@ struct LibbleRabble {
 
 	LibbleRabble *updateInput() {
 		in[0] = (fCoin != 0) << 3, in[3] = in[3] & 3 | (fStart1P != 0) << 2 | (fStart2P != 0) << 3;
-		fCoin -= (fCoin > 0), fStart1P -= (fStart1P > 0), fStart2P -= (fStart2P > 0);
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		edge &= in[3];
 		if (port[8] == 1)
 			memcpy(port + 4, in, 4);
 		else if (port[8] == 3) {
-			// クレジット/スタートボタン処理
 			int credit = port[2] * 10 + port[3];
 			if (fCoin && credit < 150)
 				port[0] += 1, credit = min(credit + 1, 99);
@@ -280,42 +279,39 @@ struct LibbleRabble {
 	}
 
 	void up(bool fDown) {
-		in[11] = fDown ? in[11] & ~(1 << 2) | 1 << 0 : in[11] & ~(1 << 0);
+		in[11] = in[11] & ~(1 << 0 | fDown << 2) | fDown << 0;
 	}
 
 	void right(bool fDown) {
-		in[11] = fDown ? in[11] & ~(1 << 3) | 1 << 1 : in[11] & ~(1 << 1);
+		in[11] = in[11] & ~(1 << 1 | fDown << 3) | fDown << 1;
 	}
 
 	void down(bool fDown) {
-		in[11] = fDown ? in[11] & ~(1 << 0) | 1 << 2 : in[11] & ~(1 << 2);
+		in[11] = in[11] & ~(1 << 2 | fDown << 0) | fDown << 2;
 	}
 
 	void left(bool fDown) {
-		in[11] = fDown ? in[11] & ~(1 << 1) | 1 << 3 : in[11] & ~(1 << 3);
+		in[11] = in[11] & ~(1 << 3 | fDown << 1) | fDown << 3;
 	}
 
 	void up2(bool fDown) {
-		in[1] = fDown ? in[1] & ~(1 << 2) | 1 << 0 : in[1] & ~(1 << 0);
+		in[1] = in[1] & ~(1 << 0 | fDown << 2) | fDown << 0;
 	}
 
 	void right2(bool fDown) {
-		in[1] = fDown ? in[1] & ~(1 << 3) | 1 << 1 : in[1] & ~(1 << 1);
+		in[1] = in[1] & ~(1 << 1 | fDown << 3) | fDown << 1;
 	}
 
 	void down2(bool fDown) {
-		in[1] = fDown ? in[1] & ~(1 << 0) | 1 << 2 : in[1] & ~(1 << 2);
+		in[1] = in[1] & ~(1 << 2 | fDown << 0) | fDown << 2;
 	}
 
 	void left2(bool fDown) {
-		in[1] = fDown ? in[1] & ~(1 << 1) | 1 << 3 : in[1] & ~(1 << 3);
+		in[1] = in[1] & ~(1 << 3 | fDown << 1) | fDown << 3;
 	}
 
 	void triggerA(bool fDown) {
-		in[3] = fDown ? in[3] | 1 << 0: in[3] & ~(1 << 0);
-	}
-
-	void triggerB(bool fDown) {
+		in[3] = in[3] & ~(1 << 0) | fDown << 0;
 	}
 
 	void convertRGB() {
@@ -369,33 +365,27 @@ struct LibbleRabble {
 	void makeBitmap(int *data) {
 		// graphic描画
 		int p = 256 * 8 * 2 + 239;
-		int k = 0x200;
 		int idx = 0x60 | palette;
-		for (int i = 0; i < 224; p -= 256 * 288 + 1, i++)
+		for (int k = 0x200, i = 0; i < 224; p -= 256 * 288 + 1, i++)
 			for (int j = 0; j < 288; k++, p += 256, j++)
 				data[p] = idx | vram[k];
 
 		// bg描画
 		p = 256 * 8 * 4 + 232;
-		k = 0x40;
-		for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
+		for (int k = 0x40, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
 				xfer8x8(data, p, k);
 		p = 256 * 8 * 36 + 232;
-		k = 2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 		p = 256 * 8 * 37 + 232;
-		k = 0x22;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x22, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 		p = 256 * 8 * 2 + 232;
-		k = 0x3c2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x3c2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 		p = 256 * 8 * 3 + 232;
-		k = 0x3e2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x3e2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 
 		// obj描画
@@ -486,70 +476,70 @@ struct LibbleRabble {
 		const int q = ram[k] << 6, idx = ram[k + 0x400] << 2 & 0xfc, idx2 = 0x70 | palette;
 		int px;
 
-		if ((px = BGCOLOR[idx | bg[q | 0x00]]) != 0xf) data[p + 0x000] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x01]]) != 0xf) data[p + 0x001] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x02]]) != 0xf) data[p + 0x002] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x03]]) != 0xf) data[p + 0x003] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x04]]) != 0xf) data[p + 0x004] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x05]]) != 0xf) data[p + 0x005] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x06]]) != 0xf) data[p + 0x006] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x07]]) != 0xf) data[p + 0x007] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x08]]) != 0xf) data[p + 0x100] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x09]]) != 0xf) data[p + 0x101] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x0a]]) != 0xf) data[p + 0x102] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x0b]]) != 0xf) data[p + 0x103] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x0c]]) != 0xf) data[p + 0x104] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x0d]]) != 0xf) data[p + 0x105] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x0e]]) != 0xf) data[p + 0x106] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x0f]]) != 0xf) data[p + 0x107] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x10]]) != 0xf) data[p + 0x200] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x11]]) != 0xf) data[p + 0x201] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x12]]) != 0xf) data[p + 0x202] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x13]]) != 0xf) data[p + 0x203] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x14]]) != 0xf) data[p + 0x204] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x15]]) != 0xf) data[p + 0x205] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x16]]) != 0xf) data[p + 0x206] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x17]]) != 0xf) data[p + 0x207] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x18]]) != 0xf) data[p + 0x300] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x19]]) != 0xf) data[p + 0x301] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x1a]]) != 0xf) data[p + 0x302] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x1b]]) != 0xf) data[p + 0x303] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x1c]]) != 0xf) data[p + 0x304] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x1d]]) != 0xf) data[p + 0x305] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x1e]]) != 0xf) data[p + 0x306] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x1f]]) != 0xf) data[p + 0x307] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x20]]) != 0xf) data[p + 0x400] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x21]]) != 0xf) data[p + 0x401] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x22]]) != 0xf) data[p + 0x402] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x23]]) != 0xf) data[p + 0x403] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x24]]) != 0xf) data[p + 0x404] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x25]]) != 0xf) data[p + 0x405] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x26]]) != 0xf) data[p + 0x406] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x27]]) != 0xf) data[p + 0x407] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x28]]) != 0xf) data[p + 0x500] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x29]]) != 0xf) data[p + 0x501] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x2a]]) != 0xf) data[p + 0x502] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x2b]]) != 0xf) data[p + 0x503] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x2c]]) != 0xf) data[p + 0x504] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x2d]]) != 0xf) data[p + 0x505] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x2e]]) != 0xf) data[p + 0x506] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x2f]]) != 0xf) data[p + 0x507] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x30]]) != 0xf) data[p + 0x600] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x31]]) != 0xf) data[p + 0x601] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x32]]) != 0xf) data[p + 0x602] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x33]]) != 0xf) data[p + 0x603] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x34]]) != 0xf) data[p + 0x604] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x35]]) != 0xf) data[p + 0x605] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x36]]) != 0xf) data[p + 0x606] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x37]]) != 0xf) data[p + 0x607] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x38]]) != 0xf) data[p + 0x700] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x39]]) != 0xf) data[p + 0x701] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x3a]]) != 0xf) data[p + 0x702] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x3b]]) != 0xf) data[p + 0x703] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x3c]]) != 0xf) data[p + 0x704] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x3d]]) != 0xf) data[p + 0x705] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x3e]]) != 0xf) data[p + 0x706] = idx2 | px;
-		if ((px = BGCOLOR[idx | bg[q | 0x3f]]) != 0xf) data[p + 0x707] = idx2 | px;
+		(px = BGCOLOR[idx | bg[q | 0x00]]) != 0xf && (data[p + 0x000] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x01]]) != 0xf && (data[p + 0x001] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x02]]) != 0xf && (data[p + 0x002] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x03]]) != 0xf && (data[p + 0x003] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x04]]) != 0xf && (data[p + 0x004] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x05]]) != 0xf && (data[p + 0x005] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x06]]) != 0xf && (data[p + 0x006] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x07]]) != 0xf && (data[p + 0x007] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x08]]) != 0xf && (data[p + 0x100] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x09]]) != 0xf && (data[p + 0x101] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x0a]]) != 0xf && (data[p + 0x102] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x0b]]) != 0xf && (data[p + 0x103] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x0c]]) != 0xf && (data[p + 0x104] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x0d]]) != 0xf && (data[p + 0x105] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x0e]]) != 0xf && (data[p + 0x106] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x0f]]) != 0xf && (data[p + 0x107] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x10]]) != 0xf && (data[p + 0x200] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x11]]) != 0xf && (data[p + 0x201] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x12]]) != 0xf && (data[p + 0x202] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x13]]) != 0xf && (data[p + 0x203] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x14]]) != 0xf && (data[p + 0x204] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x15]]) != 0xf && (data[p + 0x205] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x16]]) != 0xf && (data[p + 0x206] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x17]]) != 0xf && (data[p + 0x207] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x18]]) != 0xf && (data[p + 0x300] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x19]]) != 0xf && (data[p + 0x301] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x1a]]) != 0xf && (data[p + 0x302] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x1b]]) != 0xf && (data[p + 0x303] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x1c]]) != 0xf && (data[p + 0x304] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x1d]]) != 0xf && (data[p + 0x305] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x1e]]) != 0xf && (data[p + 0x306] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x1f]]) != 0xf && (data[p + 0x307] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x20]]) != 0xf && (data[p + 0x400] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x21]]) != 0xf && (data[p + 0x401] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x22]]) != 0xf && (data[p + 0x402] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x23]]) != 0xf && (data[p + 0x403] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x24]]) != 0xf && (data[p + 0x404] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x25]]) != 0xf && (data[p + 0x405] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x26]]) != 0xf && (data[p + 0x406] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x27]]) != 0xf && (data[p + 0x407] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x28]]) != 0xf && (data[p + 0x500] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x29]]) != 0xf && (data[p + 0x501] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x2a]]) != 0xf && (data[p + 0x502] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x2b]]) != 0xf && (data[p + 0x503] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x2c]]) != 0xf && (data[p + 0x504] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x2d]]) != 0xf && (data[p + 0x505] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x2e]]) != 0xf && (data[p + 0x506] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x2f]]) != 0xf && (data[p + 0x507] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x30]]) != 0xf && (data[p + 0x600] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x31]]) != 0xf && (data[p + 0x601] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x32]]) != 0xf && (data[p + 0x602] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x33]]) != 0xf && (data[p + 0x603] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x34]]) != 0xf && (data[p + 0x604] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x35]]) != 0xf && (data[p + 0x605] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x36]]) != 0xf && (data[p + 0x606] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x37]]) != 0xf && (data[p + 0x607] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x38]]) != 0xf && (data[p + 0x700] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x39]]) != 0xf && (data[p + 0x701] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x3a]]) != 0xf && (data[p + 0x702] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x3b]]) != 0xf && (data[p + 0x703] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x3c]]) != 0xf && (data[p + 0x704] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x3d]]) != 0xf && (data[p + 0x705] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x3e]]) != 0xf && (data[p + 0x706] = idx2 | px);
+		(px = BGCOLOR[idx | bg[q | 0x3f]]) != 0xf && (data[p + 0x707] = idx2 | px);
 	}
 
 	void xfer16x16(int *data, int dst, int src) {

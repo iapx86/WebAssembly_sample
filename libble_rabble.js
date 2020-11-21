@@ -21,5 +21,5 @@ read('liblrabl.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const BGCOLOR = zip.decompress('lr1-5.5l');
 	const OBJCOLOR = zip.decompress('lr1-6.2p');
 	const SND = zip.decompress('lr1-4.3d');
-	init(bufferSource, {PRG1, PRG2, PRG3, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR, SND}).then();
+	return init(bufferSource, {PRG1, PRG2, PRG3, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR, SND});
 });

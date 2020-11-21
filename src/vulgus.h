@@ -75,7 +75,7 @@ struct Vulgus {
 			case 3:
 				return void(vScroll = vScroll & 0xff00 | data);
 			case 4:
-				return (data & 0x10) != 0 ? cpu2.disable() : cpu2.enable();
+				return data & 0x10 ? cpu2.disable() : cpu2.enable();
 			case 5:
 				return void(palette = data << 6 & 0xc0);
 			}
@@ -101,7 +101,7 @@ struct Vulgus {
 			cpu2.memorymap[0x40 + i].base = ram2 + i * 0x100;
 			cpu2.memorymap[0x40 + i].write = nullptr;
 		}
-		cpu2.memorymap[0x60].read = [&](int addr) { return (addr & 0xff) == 0 ? command : 0xff; };
+		cpu2.memorymap[0x60].read = [&](int addr) { return addr & 0xff ? 0xff : command; };
 		cpu2.memorymap[0x80].write = [&](int addr, int data) {
 			switch (addr & 0xff) {
 			case 0:
@@ -127,12 +127,10 @@ struct Vulgus {
 	}
 
 	Vulgus *execute() {
+		Cpu *cpus[] = {&cpu, &cpu2};
 		for (int i = 0; i < 16; i++) {
-			if (i == 0)
-				cpu.interrupt(0xd7); // RST 10H
-			if ((i & 1) == 0)
-				timer = i >> 1, cpu2.interrupt();
-			Cpu *cpus[] = {&cpu, &cpu2};
+			!i && cpu.interrupt(0xd7); // RST 10H
+			~i & 1 && (timer = i >> 1, cpu2.interrupt());
 			Cpu::multiple_execute(2, cpus, 600);
 		}
 		return this;
@@ -200,23 +198,9 @@ struct Vulgus {
 	}
 
 	Vulgus *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			in[0] &= ~(1 << 4), --fCoin;
-		else
-			in[0] |= 1 << 4;
-		if (fStart1P)
-			in[0] &= ~(1 << 0), --fStart1P;
-		else
-			in[0] |= 1 << 0;
-		if (fStart2P)
-			in[0] &= ~(1 << 1), --fStart2P;
-		else
-			in[0] |= 1 << 1;
-
-		// 連射処理
-		if (fTurbo && (frame & 1) == 0)
-			in[1] ^= 1 << 4;
+		in[0] = in[0] & ~0x13 | !fCoin << 4 | !fStart1P << 0 | !fStart2P << 1;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
+		fTurbo && frame & 1 && (in[1] ^= 1 << 4);
 		return this;
 	}
 
@@ -233,50 +217,31 @@ struct Vulgus {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 3) | 1 << 2;
-		else
-			in[1] |= 1 << 3;
+		in[1] = in[1] & ~(1 << 3) | fDown << 2 | !fDown << 3;
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 0) | 1 << 1;
-		else
-			in[1] |= 1 << 0;
+		in[1] = in[1] & ~(1 << 0) | fDown << 1 | !fDown << 0;
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 2) | 1 << 3;
-		else
-			in[1] |= 1 << 2;
+		in[1] = in[1] & ~(1 << 2) | fDown << 3 | !fDown << 2;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 1) | 1 << 0;
-		else
-			in[1] |= 1 << 1;
+		in[1] = in[1] & ~(1 << 1) | fDown << 0 | !fDown << 1;
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			in[1] &= ~(1 << 4);
-		else
-			in[1] |= 1 << 4;
+		in[1] = in[1] & ~(1 << 4) | !fDown << 4;
 	}
 
 	void triggerB(bool fDown) {
-		if (fDown)
-			in[1] &= ~(1 << 5);
-		else
-			in[1] |= 1 << 5;
+		in[1] = in[1] & ~(1 << 5) | !fDown << 5;
 	}
 
 	void triggerY(bool fDown) {
-		if (!(fTurbo = fDown))
-			in[1] |= 1 << 4;
+		!(fTurbo = fDown) && (in[1] |= 1 << 4);
 	}
 
 	void convertRGB() {
@@ -337,8 +302,7 @@ struct Vulgus {
 
 		// bg描画
 		int p = 256 * 256 + 16 - (16 + hScroll & 0x0f) + (vScroll & 0x0f) * 256;
-		int k = 16 + hScroll >> 4 & 0x1f | vScroll << 1 & 0x3e0;
-		for (int i = 0; i < 17; k = k + 0x11 & 0x1f | k + 0x20 & 0x3e0, p -= 15 * 16 + 256 * 16, i++)
+		for (int k = 16 + hScroll >> 4 & 0x1f | vScroll << 1 & 0x3e0, i = 0; i < 17; k = k + 0x11 & 0x1f | k + 0x20 & 0x3e0, p -= 15 * 16 + 256 * 16, i++)
 			for (int j = 0; j < 15; k = k + 1 & 0x1f | k & 0x3e0, p += 16, j++)
 				xfer16x16x3(data, p, 0x900 + k);
 
@@ -367,8 +331,7 @@ struct Vulgus {
 
 		// fg描画
 		p = 256 * 8 * 33 + 16;
-		k = 0x140;
-		for (int i = 0; i < 28; p += 256 * 8 * 32 + 8, i++)
+		for (int k = 0x140, i = 0; i < 28; p += 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p -= 256 * 8, j++)
 				xfer8x8(data, p, k);
 
@@ -383,70 +346,70 @@ struct Vulgus {
 		const int q = (ram[k] | ram[k + 0x400] << 1 & 0x100) << 6, idx = ram[k + 0x400] << 2 & 0xfc;
 		int px;
 
-		if ((px = fgcolor[idx | fg[q | 0x00]]) != 0x2f) data[p + 0x000] = px;
-		if ((px = fgcolor[idx | fg[q | 0x01]]) != 0x2f) data[p + 0x001] = px;
-		if ((px = fgcolor[idx | fg[q | 0x02]]) != 0x2f) data[p + 0x002] = px;
-		if ((px = fgcolor[idx | fg[q | 0x03]]) != 0x2f) data[p + 0x003] = px;
-		if ((px = fgcolor[idx | fg[q | 0x04]]) != 0x2f) data[p + 0x004] = px;
-		if ((px = fgcolor[idx | fg[q | 0x05]]) != 0x2f) data[p + 0x005] = px;
-		if ((px = fgcolor[idx | fg[q | 0x06]]) != 0x2f) data[p + 0x006] = px;
-		if ((px = fgcolor[idx | fg[q | 0x07]]) != 0x2f) data[p + 0x007] = px;
-		if ((px = fgcolor[idx | fg[q | 0x08]]) != 0x2f) data[p + 0x100] = px;
-		if ((px = fgcolor[idx | fg[q | 0x09]]) != 0x2f) data[p + 0x101] = px;
-		if ((px = fgcolor[idx | fg[q | 0x0a]]) != 0x2f) data[p + 0x102] = px;
-		if ((px = fgcolor[idx | fg[q | 0x0b]]) != 0x2f) data[p + 0x103] = px;
-		if ((px = fgcolor[idx | fg[q | 0x0c]]) != 0x2f) data[p + 0x104] = px;
-		if ((px = fgcolor[idx | fg[q | 0x0d]]) != 0x2f) data[p + 0x105] = px;
-		if ((px = fgcolor[idx | fg[q | 0x0e]]) != 0x2f) data[p + 0x106] = px;
-		if ((px = fgcolor[idx | fg[q | 0x0f]]) != 0x2f) data[p + 0x107] = px;
-		if ((px = fgcolor[idx | fg[q | 0x10]]) != 0x2f) data[p + 0x200] = px;
-		if ((px = fgcolor[idx | fg[q | 0x11]]) != 0x2f) data[p + 0x201] = px;
-		if ((px = fgcolor[idx | fg[q | 0x12]]) != 0x2f) data[p + 0x202] = px;
-		if ((px = fgcolor[idx | fg[q | 0x13]]) != 0x2f) data[p + 0x203] = px;
-		if ((px = fgcolor[idx | fg[q | 0x14]]) != 0x2f) data[p + 0x204] = px;
-		if ((px = fgcolor[idx | fg[q | 0x15]]) != 0x2f) data[p + 0x205] = px;
-		if ((px = fgcolor[idx | fg[q | 0x16]]) != 0x2f) data[p + 0x206] = px;
-		if ((px = fgcolor[idx | fg[q | 0x17]]) != 0x2f) data[p + 0x207] = px;
-		if ((px = fgcolor[idx | fg[q | 0x18]]) != 0x2f) data[p + 0x300] = px;
-		if ((px = fgcolor[idx | fg[q | 0x19]]) != 0x2f) data[p + 0x301] = px;
-		if ((px = fgcolor[idx | fg[q | 0x1a]]) != 0x2f) data[p + 0x302] = px;
-		if ((px = fgcolor[idx | fg[q | 0x1b]]) != 0x2f) data[p + 0x303] = px;
-		if ((px = fgcolor[idx | fg[q | 0x1c]]) != 0x2f) data[p + 0x304] = px;
-		if ((px = fgcolor[idx | fg[q | 0x1d]]) != 0x2f) data[p + 0x305] = px;
-		if ((px = fgcolor[idx | fg[q | 0x1e]]) != 0x2f) data[p + 0x306] = px;
-		if ((px = fgcolor[idx | fg[q | 0x1f]]) != 0x2f) data[p + 0x307] = px;
-		if ((px = fgcolor[idx | fg[q | 0x20]]) != 0x2f) data[p + 0x400] = px;
-		if ((px = fgcolor[idx | fg[q | 0x21]]) != 0x2f) data[p + 0x401] = px;
-		if ((px = fgcolor[idx | fg[q | 0x22]]) != 0x2f) data[p + 0x402] = px;
-		if ((px = fgcolor[idx | fg[q | 0x23]]) != 0x2f) data[p + 0x403] = px;
-		if ((px = fgcolor[idx | fg[q | 0x24]]) != 0x2f) data[p + 0x404] = px;
-		if ((px = fgcolor[idx | fg[q | 0x25]]) != 0x2f) data[p + 0x405] = px;
-		if ((px = fgcolor[idx | fg[q | 0x26]]) != 0x2f) data[p + 0x406] = px;
-		if ((px = fgcolor[idx | fg[q | 0x27]]) != 0x2f) data[p + 0x407] = px;
-		if ((px = fgcolor[idx | fg[q | 0x28]]) != 0x2f) data[p + 0x500] = px;
-		if ((px = fgcolor[idx | fg[q | 0x29]]) != 0x2f) data[p + 0x501] = px;
-		if ((px = fgcolor[idx | fg[q | 0x2a]]) != 0x2f) data[p + 0x502] = px;
-		if ((px = fgcolor[idx | fg[q | 0x2b]]) != 0x2f) data[p + 0x503] = px;
-		if ((px = fgcolor[idx | fg[q | 0x2c]]) != 0x2f) data[p + 0x504] = px;
-		if ((px = fgcolor[idx | fg[q | 0x2d]]) != 0x2f) data[p + 0x505] = px;
-		if ((px = fgcolor[idx | fg[q | 0x2e]]) != 0x2f) data[p + 0x506] = px;
-		if ((px = fgcolor[idx | fg[q | 0x2f]]) != 0x2f) data[p + 0x507] = px;
-		if ((px = fgcolor[idx | fg[q | 0x30]]) != 0x2f) data[p + 0x600] = px;
-		if ((px = fgcolor[idx | fg[q | 0x31]]) != 0x2f) data[p + 0x601] = px;
-		if ((px = fgcolor[idx | fg[q | 0x32]]) != 0x2f) data[p + 0x602] = px;
-		if ((px = fgcolor[idx | fg[q | 0x33]]) != 0x2f) data[p + 0x603] = px;
-		if ((px = fgcolor[idx | fg[q | 0x34]]) != 0x2f) data[p + 0x604] = px;
-		if ((px = fgcolor[idx | fg[q | 0x35]]) != 0x2f) data[p + 0x605] = px;
-		if ((px = fgcolor[idx | fg[q | 0x36]]) != 0x2f) data[p + 0x606] = px;
-		if ((px = fgcolor[idx | fg[q | 0x37]]) != 0x2f) data[p + 0x607] = px;
-		if ((px = fgcolor[idx | fg[q | 0x38]]) != 0x2f) data[p + 0x700] = px;
-		if ((px = fgcolor[idx | fg[q | 0x39]]) != 0x2f) data[p + 0x701] = px;
-		if ((px = fgcolor[idx | fg[q | 0x3a]]) != 0x2f) data[p + 0x702] = px;
-		if ((px = fgcolor[idx | fg[q | 0x3b]]) != 0x2f) data[p + 0x703] = px;
-		if ((px = fgcolor[idx | fg[q | 0x3c]]) != 0x2f) data[p + 0x704] = px;
-		if ((px = fgcolor[idx | fg[q | 0x3d]]) != 0x2f) data[p + 0x705] = px;
-		if ((px = fgcolor[idx | fg[q | 0x3e]]) != 0x2f) data[p + 0x706] = px;
-		if ((px = fgcolor[idx | fg[q | 0x3f]]) != 0x2f) data[p + 0x707] = px;
+		(px = fgcolor[idx | fg[q | 0x00]]) != 0x2f && (data[p + 0x000] = px);
+		(px = fgcolor[idx | fg[q | 0x01]]) != 0x2f && (data[p + 0x001] = px);
+		(px = fgcolor[idx | fg[q | 0x02]]) != 0x2f && (data[p + 0x002] = px);
+		(px = fgcolor[idx | fg[q | 0x03]]) != 0x2f && (data[p + 0x003] = px);
+		(px = fgcolor[idx | fg[q | 0x04]]) != 0x2f && (data[p + 0x004] = px);
+		(px = fgcolor[idx | fg[q | 0x05]]) != 0x2f && (data[p + 0x005] = px);
+		(px = fgcolor[idx | fg[q | 0x06]]) != 0x2f && (data[p + 0x006] = px);
+		(px = fgcolor[idx | fg[q | 0x07]]) != 0x2f && (data[p + 0x007] = px);
+		(px = fgcolor[idx | fg[q | 0x08]]) != 0x2f && (data[p + 0x100] = px);
+		(px = fgcolor[idx | fg[q | 0x09]]) != 0x2f && (data[p + 0x101] = px);
+		(px = fgcolor[idx | fg[q | 0x0a]]) != 0x2f && (data[p + 0x102] = px);
+		(px = fgcolor[idx | fg[q | 0x0b]]) != 0x2f && (data[p + 0x103] = px);
+		(px = fgcolor[idx | fg[q | 0x0c]]) != 0x2f && (data[p + 0x104] = px);
+		(px = fgcolor[idx | fg[q | 0x0d]]) != 0x2f && (data[p + 0x105] = px);
+		(px = fgcolor[idx | fg[q | 0x0e]]) != 0x2f && (data[p + 0x106] = px);
+		(px = fgcolor[idx | fg[q | 0x0f]]) != 0x2f && (data[p + 0x107] = px);
+		(px = fgcolor[idx | fg[q | 0x10]]) != 0x2f && (data[p + 0x200] = px);
+		(px = fgcolor[idx | fg[q | 0x11]]) != 0x2f && (data[p + 0x201] = px);
+		(px = fgcolor[idx | fg[q | 0x12]]) != 0x2f && (data[p + 0x202] = px);
+		(px = fgcolor[idx | fg[q | 0x13]]) != 0x2f && (data[p + 0x203] = px);
+		(px = fgcolor[idx | fg[q | 0x14]]) != 0x2f && (data[p + 0x204] = px);
+		(px = fgcolor[idx | fg[q | 0x15]]) != 0x2f && (data[p + 0x205] = px);
+		(px = fgcolor[idx | fg[q | 0x16]]) != 0x2f && (data[p + 0x206] = px);
+		(px = fgcolor[idx | fg[q | 0x17]]) != 0x2f && (data[p + 0x207] = px);
+		(px = fgcolor[idx | fg[q | 0x18]]) != 0x2f && (data[p + 0x300] = px);
+		(px = fgcolor[idx | fg[q | 0x19]]) != 0x2f && (data[p + 0x301] = px);
+		(px = fgcolor[idx | fg[q | 0x1a]]) != 0x2f && (data[p + 0x302] = px);
+		(px = fgcolor[idx | fg[q | 0x1b]]) != 0x2f && (data[p + 0x303] = px);
+		(px = fgcolor[idx | fg[q | 0x1c]]) != 0x2f && (data[p + 0x304] = px);
+		(px = fgcolor[idx | fg[q | 0x1d]]) != 0x2f && (data[p + 0x305] = px);
+		(px = fgcolor[idx | fg[q | 0x1e]]) != 0x2f && (data[p + 0x306] = px);
+		(px = fgcolor[idx | fg[q | 0x1f]]) != 0x2f && (data[p + 0x307] = px);
+		(px = fgcolor[idx | fg[q | 0x20]]) != 0x2f && (data[p + 0x400] = px);
+		(px = fgcolor[idx | fg[q | 0x21]]) != 0x2f && (data[p + 0x401] = px);
+		(px = fgcolor[idx | fg[q | 0x22]]) != 0x2f && (data[p + 0x402] = px);
+		(px = fgcolor[idx | fg[q | 0x23]]) != 0x2f && (data[p + 0x403] = px);
+		(px = fgcolor[idx | fg[q | 0x24]]) != 0x2f && (data[p + 0x404] = px);
+		(px = fgcolor[idx | fg[q | 0x25]]) != 0x2f && (data[p + 0x405] = px);
+		(px = fgcolor[idx | fg[q | 0x26]]) != 0x2f && (data[p + 0x406] = px);
+		(px = fgcolor[idx | fg[q | 0x27]]) != 0x2f && (data[p + 0x407] = px);
+		(px = fgcolor[idx | fg[q | 0x28]]) != 0x2f && (data[p + 0x500] = px);
+		(px = fgcolor[idx | fg[q | 0x29]]) != 0x2f && (data[p + 0x501] = px);
+		(px = fgcolor[idx | fg[q | 0x2a]]) != 0x2f && (data[p + 0x502] = px);
+		(px = fgcolor[idx | fg[q | 0x2b]]) != 0x2f && (data[p + 0x503] = px);
+		(px = fgcolor[idx | fg[q | 0x2c]]) != 0x2f && (data[p + 0x504] = px);
+		(px = fgcolor[idx | fg[q | 0x2d]]) != 0x2f && (data[p + 0x505] = px);
+		(px = fgcolor[idx | fg[q | 0x2e]]) != 0x2f && (data[p + 0x506] = px);
+		(px = fgcolor[idx | fg[q | 0x2f]]) != 0x2f && (data[p + 0x507] = px);
+		(px = fgcolor[idx | fg[q | 0x30]]) != 0x2f && (data[p + 0x600] = px);
+		(px = fgcolor[idx | fg[q | 0x31]]) != 0x2f && (data[p + 0x601] = px);
+		(px = fgcolor[idx | fg[q | 0x32]]) != 0x2f && (data[p + 0x602] = px);
+		(px = fgcolor[idx | fg[q | 0x33]]) != 0x2f && (data[p + 0x603] = px);
+		(px = fgcolor[idx | fg[q | 0x34]]) != 0x2f && (data[p + 0x604] = px);
+		(px = fgcolor[idx | fg[q | 0x35]]) != 0x2f && (data[p + 0x605] = px);
+		(px = fgcolor[idx | fg[q | 0x36]]) != 0x2f && (data[p + 0x606] = px);
+		(px = fgcolor[idx | fg[q | 0x37]]) != 0x2f && (data[p + 0x607] = px);
+		(px = fgcolor[idx | fg[q | 0x38]]) != 0x2f && (data[p + 0x700] = px);
+		(px = fgcolor[idx | fg[q | 0x39]]) != 0x2f && (data[p + 0x701] = px);
+		(px = fgcolor[idx | fg[q | 0x3a]]) != 0x2f && (data[p + 0x702] = px);
+		(px = fgcolor[idx | fg[q | 0x3b]]) != 0x2f && (data[p + 0x703] = px);
+		(px = fgcolor[idx | fg[q | 0x3c]]) != 0x2f && (data[p + 0x704] = px);
+		(px = fgcolor[idx | fg[q | 0x3d]]) != 0x2f && (data[p + 0x705] = px);
+		(px = fgcolor[idx | fg[q | 0x3e]]) != 0x2f && (data[p + 0x706] = px);
+		(px = fgcolor[idx | fg[q | 0x3f]]) != 0x2f && (data[p + 0x707] = px);
 	}
 
 	void xfer16x16x3(int *data, int p, int k) {

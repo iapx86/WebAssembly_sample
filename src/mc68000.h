@@ -55,7 +55,7 @@ struct MC68000 : Cpu {
 	}
 
 	void exception(int vector) {
-		if ((sr & 0x2000) == 0)
+		if (~sr & 0x2000)
 			usp = a7, a7 = ssp;
 		a7 = a7 - 4, write32(pc, a7), a7 = a7 - 2, write16(sr, a7), pc = read32(vector << 2), sr = sr & ~0x8000 | 0x2000;
 	}
@@ -133,7 +133,7 @@ struct MC68000 : Cpu {
 			case 1: // ORI.W #<data>,Abs.L
 				return rwop16(op, or16, fetch16());
 			case 4: // ORI #<data>,SR
-				if ((sr & 0x2000) == 0)
+				if (~sr & 0x2000)
 					return exception(8);
 				return void(sr |= fetch16());
 			default:
@@ -236,10 +236,10 @@ struct MC68000 : Cpu {
 			case 1: // ANDI.W #<data>,Abs.L
 				return rwop16(op, and16, fetch16());
 			case 4: // ANDI #<data>,SR
-				if ((sr & 0x2000) == 0)
+				if (~sr & 0x2000)
 					return exception(8);
 				sr &= fetch16();
-				if ((sr & 0x2000) == 0)
+				if (~sr & 0x2000)
 					ssp = a7, a7 = usp;
 				return;
 			default:
@@ -624,10 +624,10 @@ struct MC68000 : Cpu {
 			case 1: // EORI.W #<data>,Abs.L
 				return rwop16(op, eor16, fetch16());
 			case 4: // EORI #<data>,SR
-				if ((sr & 0x2000) == 0)
+				if (~sr & 0x2000)
 					return exception(8);
 				sr ^= fetch16();
-				if ((sr & 0x2000) == 0)
+				if (~sr & 0x2000)
 					ssp = a7, a7 = usp;
 				return;
 			default:
@@ -3035,19 +3035,19 @@ struct MC68000 : Cpu {
 		case 0334: // MOVE -(An),SR
 		case 0335: // MOVE d(An),SR
 		case 0336: // MOVE d(An,Xi),SR
-			if ((sr & 0x2000) == 0)
+			if (~sr & 0x2000)
 				return exception(8);
 			sr = rop16(op);
-			if ((sr & 0x2000) == 0)
+			if (~sr & 0x2000)
 				ssp = a7, a7 = usp;
 			return;
 		case 0337: // MOVE Abs...,SR
 			if ((op & 7) >= 5)
 				return exception(4);
-			if ((sr & 0x2000) == 0)
+			if (~sr & 0x2000)
 				return exception(8);
 			sr = rop16(op);
-			if ((sr & 0x2000) == 0)
+			if (~sr & 0x2000)
 				ssp = a7, a7 = usp;
 			return;
 		case 0360: // CHK Dn,D3
@@ -3244,30 +3244,30 @@ struct MC68000 : Cpu {
 		case 0713: // UNLK An
 			return unlk(op);
 		case 0714: // MOVE An,USP
-			if ((sr & 0x2000) == 0)
+			if (~sr & 0x2000)
 				return exception(8);
 			return void(usp = rop32(op & 7 | 010));
 		case 0715: // MOVE USP,An
-			if ((sr & 0x2000) == 0)
+			if (~sr & 0x2000)
 				return exception(8);
 			return rwop32(op & 7 | 010, thru, usp);
 		case 0716:
 			switch(op & 7) {
 			case 0: // RESET
-				if ((sr & 0x2000) == 0)
+				if (~sr & 0x2000)
 					return exception(8);
 				return reset();
 			case 1: // NOP
 				return;
 			case 2: // STOP
-				if ((sr & 0x2000) == 0)
+				if (~sr & 0x2000)
 					return exception(8);
 				return void(fSuspend = true);
 			case 3: // RTE
-				if ((sr & 0x2000) == 0)
+				if (~sr & 0x2000)
 					return exception(8);
 				sr = read16(a7), a7 = a7 + 2, pc = read32(a7), a7 = a7 + 4;
-				if ((sr & 0x2000) == 0)
+				if (~sr & 0x2000)
 					ssp = a7, a7 = usp;
 				return;
 			case 4: // RTD 68010
@@ -3275,7 +3275,7 @@ struct MC68000 : Cpu {
 			case 5: // RTS
 				return pc = read32(a7), void(a7 = a7 + 4);
 			case 6: // TRAPV
-				if ((sr & 2) != 0)
+				if (sr & 2)
 					return exception(7);
 				return;
 			case 7: // RTR
@@ -3471,19 +3471,19 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, add32, 1);
 		case 0130: // SHI Dn
-			return rwop8(op, thru, ((sr >> 2 | sr) & 1) == 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 | sr) & 1 ? 0 : 0xff);
 		case 0131: // DBHI Dn,<label>
-			return dbcc(op, ((sr >> 2 | sr) & 1) == 0);
+			return dbcc(op, !((sr >> 2 | sr) & 1));
 		case 0132: // SHI (An)
 		case 0133: // SHI (An)+
 		case 0134: // SHI -(An)
 		case 0135: // SHI d(An)
 		case 0136: // SHI d(An,Xi)
-			return rwop8(op, thru, ((sr >> 2 | sr) & 1) == 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 | sr) & 1 ? 0 : 0xff);
 		case 0137: // SHI Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, ((sr >> 2 | sr) & 1) == 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 | sr) & 1 ? 0 : 0xff);
 		case 0140: // SUBQ.B #1,Dn
 		case 0142: // SUBQ.B #1,(An)
 		case 0143: // SUBQ.B #1,(An)+
@@ -3524,7 +3524,7 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, sub32, 1);
 		case 0170: // SLS Dn
-			return rwop8(op, thru, ((sr >> 2 | sr) & 1) != 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 | sr) & 1 ? 0xff : 0);
 		case 0171: // DBLS Dn,<label>
 			return dbcc(op, ((sr >> 2 | sr) & 1) != 0);
 		case 0172: // SLS (An)
@@ -3532,11 +3532,11 @@ struct MC68000 : Cpu {
 		case 0174: // SLS -(An)
 		case 0175: // SLS d(An)
 		case 0176: // SLS d(An,Xi)
-			return rwop8(op, thru, ((sr >> 2 | sr) & 1) != 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 | sr) & 1 ? 0xff : 0);
 		case 0177: // SLS Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, ((sr >> 2 | sr) & 1) != 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 | sr) & 1 ? 0xff : 0);
 		case 0200: // ADDQ.B #2,Dn
 		case 0202: // ADDQ.B #2,(An)
 		case 0203: // ADDQ.B #2,(An)+
@@ -3577,19 +3577,19 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, add32, 2);
 		case 0230: // SCC Dn
-			return rwop8(op, thru, (sr & 1) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 1 ? 0 : 0xff);
 		case 0231: // DBCC Dn,<label>
-			return dbcc(op, (sr & 1) == 0);
+			return dbcc(op, !(sr & 1));
 		case 0232: // SCC (An)
 		case 0233: // SCC (An)+
 		case 0234: // SCC -(An)
 		case 0235: // SCC d(An)
 		case 0236: // SCC d(An,Xi)
-			return rwop8(op, thru, (sr & 1) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 1 ? 0 : 0xff);
 		case 0237: // SCC Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, (sr & 1) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 1 ? 0 : 0xff);
 		case 0240: // SUBQ.B #2,Dn
 		case 0242: // SUBQ.B #2,(An)
 		case 0243: // SUBQ.B #2,(An)+
@@ -3630,7 +3630,7 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, sub32, 2);
 		case 0270: // SCS Dn
-			return rwop8(op, thru, (sr & 1) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 1 ? 0xff : 0);
 		case 0271: // DBCS Dn,<label>
 			return dbcc(op, (sr & 1) != 0);
 		case 0272: // SCS (An)
@@ -3638,11 +3638,11 @@ struct MC68000 : Cpu {
 		case 0274: // SCS -(An)
 		case 0275: // SCS d(An)
 		case 0276: // SCS d(An,Xi)
-			return rwop8(op, thru, (sr & 1) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 1 ? 0xff : 0);
 		case 0277: // SCS Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, (sr & 1) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 1 ? 0xff : 0);
 		case 0300: // ADDQ.B #3,Dn
 		case 0302: // ADDQ.B #3,(An)
 		case 0303: // ADDQ.B #3,(An)+
@@ -3683,19 +3683,19 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, add32, 3);
 		case 0330: // SNE Dn
-			return rwop8(op, thru, (sr & 4) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 4 ? 0 : 0xff);
 		case 0331: // DBNE Dn,<label>
-			return dbcc(op, (sr & 4) == 0);
+			return dbcc(op, !(sr & 4));
 		case 0332: // SNE (An)
 		case 0333: // SNE (An)+
 		case 0334: // SNE -(An)
 		case 0335: // SNE d(An)
 		case 0336: // SNE d(An,Xi)
-			return rwop8(op, thru, (sr & 4) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 4 ? 0 : 0xff);
 		case 0337: // SNE Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, (sr & 4) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 4 ? 0 : 0xff);
 		case 0340: // SUBQ.B #3,Dn
 		case 0342: // SUBQ.B #3,(An)
 		case 0343: // SUBQ.B #3,(An)+
@@ -3736,7 +3736,7 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, sub32, 3);
 		case 0370: // SEQ Dn
-			return rwop8(op, thru, (sr & 4) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 4 ? 0xff : 0);
 		case 0371: // DBEQ Dn,<label>
 			return dbcc(op, (sr & 4) != 0);
 		case 0372: // SEQ (An)
@@ -3744,11 +3744,11 @@ struct MC68000 : Cpu {
 		case 0374: // SEQ -(An)
 		case 0375: // SEQ d(An)
 		case 0376: // SEQ d(An,Xi)
-			return rwop8(op, thru, (sr & 4) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 4 ? 0xff : 0);
 		case 0377: // SEQ Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, (sr & 4) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 4 ? 0xff : 0);
 		case 0400: // ADDQ.B #4,Dn
 		case 0402: // ADDQ.B #4,(An)
 		case 0403: // ADDQ.B #4,(An)+
@@ -3789,19 +3789,19 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, add32, 4);
 		case 0430: // SVC Dn
-			return rwop8(op, thru, (sr & 2) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 2 ? 0 : 0xff);
 		case 0431: // DBVC Dn,<label>
-			return dbcc(op, (sr & 2) == 0);
+			return dbcc(op, !(sr & 2));
 		case 0432: // SVC (An)
 		case 0433: // SVC (An)+
 		case 0434: // SVC -(An)
 		case 0435: // SVC d(An)
 		case 0436: // SVC d(An,Xi)
-			return rwop8(op, thru, (sr & 2) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 2 ? 0 : 0xff);
 		case 0437: // SVC Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, (sr & 2) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 2 ? 0 : 0xff);
 		case 0440: // SUBQ.B #4,Dn
 		case 0442: // SUBQ.B #4,(An)
 		case 0443: // SUBQ.B #4,(An)+
@@ -3842,7 +3842,7 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, sub32, 4);
 		case 0470: // SVS Dn
-			return rwop8(op, thru, (sr & 2) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 2 ? 0xff : 0);
 		case 0471: // DBVS Dn,<label>
 			return dbcc(op, (sr & 2) != 0);
 		case 0472: // SVS (An)
@@ -3850,11 +3850,11 @@ struct MC68000 : Cpu {
 		case 0474: // SVS -(An)
 		case 0475: // SVS d(An)
 		case 0476: // SVS d(An,Xi)
-			return rwop8(op, thru, (sr & 2) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 2 ? 0xff : 0);
 		case 0477: // SVS Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, (sr & 2) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 2 ? 0xff : 0);
 		case 0500: // ADDQ.B #5,Dn
 		case 0502: // ADDQ.B #5,(An)
 		case 0503: // ADDQ.B #5,(An)+
@@ -3895,19 +3895,19 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, add32, 5);
 		case 0530: // SPL Dn
-			return rwop8(op, thru, (sr & 8) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 8 ? 0 : 0xff);
 		case 0531: // DBPL Dn,<label>
-			return dbcc(op, (sr & 8) == 0);
+			return dbcc(op, !(sr & 8));
 		case 0532: // SPL (An)
 		case 0533: // SPL (An)+
 		case 0534: // SPL -(An)
 		case 0535: // SPL d(An)
 		case 0536: // SPL d(An,Xi)
-			return rwop8(op, thru, (sr & 8) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 8 ? 0 : 0xff);
 		case 0537: // SPL Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, (sr & 8) == 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 8 ? 0 : 0xff);
 		case 0540: // SUBQ.B #5,Dn
 		case 0542: // SUBQ.B #5,(An)
 		case 0543: // SUBQ.B #5,(An)+
@@ -3948,7 +3948,7 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, sub32, 5);
 		case 0570: // SMI Dn
-			return rwop8(op, thru, (sr & 8) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 8 ? 0xff : 0);
 		case 0571: // DBMI Dn,<label>
 			return dbcc(op, (sr & 8) != 0);
 		case 0572: // SMI (An)
@@ -3956,11 +3956,11 @@ struct MC68000 : Cpu {
 		case 0574: // SMI -(An)
 		case 0575: // SMI d(An)
 		case 0576: // SMI d(An,Xi)
-			return rwop8(op, thru, (sr & 8) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 8 ? 0xff : 0);
 		case 0577: // SMI Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, (sr & 8) != 0 ? 0xff : 0);
+			return rwop8(op, thru, sr & 8 ? 0xff : 0);
 		case 0600: // ADDQ.B #6,Dn
 		case 0602: // ADDQ.B #6,(An)
 		case 0603: // ADDQ.B #6,(An)+
@@ -4001,19 +4001,19 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, add32, 6);
 		case 0630: // SGE Dn
-			return rwop8(op, thru, ((sr >> 2 ^ sr) & 2) == 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr) & 2 ? 0 : 0xff);
 		case 0631: // DBGE Dn,<label>
-			return dbcc(op, ((sr >> 2 ^ sr) & 2) == 0);
+			return dbcc(op, !((sr >> 2 ^ sr) & 2));
 		case 0632: // SGE (An)
 		case 0633: // SGE (An)+
 		case 0634: // SGE -(An)
 		case 0635: // SGE d(An)
 		case 0636: // SGE d(An,Xi)
-			return rwop8(op, thru, ((sr >> 2 ^ sr) & 2) == 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr) & 2 ? 0 : 0xff);
 		case 0637: // SGE Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, ((sr >> 2 ^ sr) & 2) == 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr) & 2 ? 0 : 0xff);
 		case 0640: // SUBQ.B #6,Dn
 		case 0642: // SUBQ.B #6,(An)
 		case 0643: // SUBQ.B #6,(An)+
@@ -4054,7 +4054,7 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, sub32, 6);
 		case 0670: // SLT Dn
-			return rwop8(op, thru, ((sr >> 2 ^ sr) & 2) != 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr) & 2 ? 0xff : 0);
 		case 0671: // DBLT Dn,<label>
 			return dbcc(op, ((sr >> 2 ^ sr) & 2) != 0);
 		case 0672: // SLT (An)
@@ -4062,11 +4062,11 @@ struct MC68000 : Cpu {
 		case 0674: // SLT -(An)
 		case 0675: // SLT d(An)
 		case 0676: // SLT d(An,Xi)
-			return rwop8(op, thru, ((sr >> 2 ^ sr) & 2) != 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr) & 2 ? 0xff : 0);
 		case 0677: // SLT Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, ((sr >> 2 ^ sr) & 2) != 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr) & 2 ? 0xff : 0);
 		case 0700: // ADDQ.B #7,Dn
 		case 0702: // ADDQ.B #7,(An)
 		case 0703: // ADDQ.B #7,(An)+
@@ -4107,19 +4107,19 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, add32, 7);
 		case 0730: // SGT Dn
-			return rwop8(op, thru, ((sr >> 2 ^ sr | sr >> 1) & 2) == 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr | sr >> 1) & 2 ? 0 : 0xff);
 		case 0731: // DBGT Dn,<label>
-			return dbcc(op, ((sr >> 2 ^ sr | sr >> 1) & 2) == 0);
+			return dbcc(op, !((sr >> 2 ^ sr | sr >> 1) & 2));
 		case 0732: // SGT (An)
 		case 0733: // SGT (An)+
 		case 0734: // SGT -(An)
 		case 0735: // SGT d(An)
 		case 0736: // SGT d(An,Xi)
-			return rwop8(op, thru, ((sr >> 2 ^ sr | sr >> 1) & 2) == 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr | sr >> 1) & 2 ? 0 : 0xff);
 		case 0737: // SGT Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, ((sr >> 2 ^ sr | sr >> 1) & 2) == 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr | sr >> 1) & 2 ? 0 : 0xff);
 		case 0740: // SUBQ.B #7,Dn
 		case 0742: // SUBQ.B #7,(An)
 		case 0743: // SUBQ.B #7,(An)+
@@ -4160,7 +4160,7 @@ struct MC68000 : Cpu {
 				return exception(4);
 			return rwop32(op, sub32, 7);
 		case 0770: // SLE Dn
-			return rwop8(op, thru, ((sr >> 2 ^ sr | sr >> 1) & 2) != 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr | sr >> 1) & 2 ? 0xff : 0);
 		case 0771: // DBLE Dn,<label>
 			return dbcc(op, ((sr >> 2 ^ sr | sr >> 1) & 2) != 0);
 		case 0772: // SLE (An)
@@ -4168,51 +4168,51 @@ struct MC68000 : Cpu {
 		case 0774: // SLE -(An)
 		case 0775: // SLE d(An)
 		case 0776: // SLE d(An,Xi)
-			return rwop8(op, thru, ((sr >> 2 ^ sr | sr >> 1) & 2) != 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr | sr >> 1) & 2 ? 0xff : 0);
 		case 0777: // SLE Abs...
 			if ((op & 7) >= 2)
 				return exception(4);
-			return rwop8(op, thru, ((sr >> 2 ^ sr | sr >> 1) & 2) != 0 ? 0xff : 0);
+			return rwop8(op, thru, (sr >> 2 ^ sr | sr >> 1) & 2 ? 0xff : 0);
 		default:
 			return exception(4);
 		}
 	}
 
 	void execute_6(int op) {
-		const int addr = (op & 0xff) == 0 ? disp(pc) : pc + (op << 24 >> 24);
+		const int addr = op & 0xff ? pc + (op << 24 >> 24) : disp(pc);
 		switch (op >> 8 & 0xf) {
 		case 0x0: // BRA <label>
 			return void(pc = addr);
 		case 0x1: // BSR <label>
 			return a7 = a7 - 4, write32(pc, a7), void(pc = addr);
 		case 0x2: // BHI <label>
-			return void(((sr >> 2 | sr) & 1) == 0 && (pc = addr));
+			return void(~(sr >> 2 | sr) & 1 && (pc = addr));
 		case 0x3: // BLS <label>
-			return void(((sr >> 2 | sr) & 1) != 0 && (pc = addr));
+			return void((sr >> 2 | sr) & 1 && (pc = addr));
 		case 0x4: // BCC <label>
-			return void((sr & 1) == 0 && (pc = addr));
+			return void(~sr & 1 && (pc = addr));
 		case 0x5: // BCS <label>
-			return void((sr & 1) != 0 && (pc = addr));
+			return void(sr & 1 && (pc = addr));
 		case 0x6: // BNE <label>
-			return void((sr & 4) == 0 && (pc = addr));
+			return void(~sr & 4 && (pc = addr));
 		case 0x7: // BEQ <label>
-			return void((sr & 4) != 0 && (pc = addr));
+			return void(sr & 4 && (pc = addr));
 		case 0x8: // BVC <label>
-			return void((sr & 2) == 0 && (pc = addr));
+			return void(~sr & 2 && (pc = addr));
 		case 0x9: // BVS <label>
-			return void((sr & 2) != 0 && (pc = addr));
+			return void(sr & 2 && (pc = addr));
 		case 0xa: // BPL <label>
-			return void((sr & 8) == 0 && (pc = addr));
+			return void(~sr & 8 && (pc = addr));
 		case 0xb: // BMI <label>
-			return void((sr & 8) != 0 && (pc = addr));
+			return void(sr & 8 && (pc = addr));
 		case 0xc: // BGE <label>
-			return void(((sr >> 2 ^ sr) & 2) == 0 && (pc = addr));
+			return void(~(sr >> 2 ^ sr) & 2 && (pc = addr));
 		case 0xd: // BLT <label>
-			return void(((sr >> 2 ^ sr) & 2) != 0 && (pc = addr));
+			return void((sr >> 2 ^ sr) & 2 && (pc = addr));
 		case 0xe: // BGT <label>
-			return void(((sr >> 2 ^ sr | sr >> 1) & 2) == 0 && (pc = addr));
+			return void(~(sr >> 2 ^ sr | sr >> 1) & 2 && (pc = addr));
 		case 0xf: // BLE <label>
-			return void(((sr >> 2 ^ sr | sr >> 1) & 2) != 0 && (pc = addr));
+			return void((sr >> 2 ^ sr | sr >> 1) & 2 && (pc = addr));
 		default:
 			return;
 		}
@@ -9967,72 +9967,71 @@ struct MC68000 : Cpu {
 		const int list = fetch16();
 		int ea = lea(op);
 		if ((op & 070) == 040) {
-			if ((list & 1) != 0)
+			if (list & 1)
 				ea = ea - 2, write16(a7, ea);
-			if ((list & 2) != 0)
+			if (list & 2)
 				ea = ea - 2, write16(a6, ea);
-			if ((list & 4) != 0)
+			if (list & 4)
 				ea = ea - 2, write16(a5, ea);
-			if ((list & 8) != 0)
+			if (list & 8)
 				ea = ea - 2, write16(a4, ea);
-			if ((list & 0x10) != 0)
+			if (list & 0x10)
 				ea = ea - 2, write16(a3, ea);
-			if ((list & 0x20) != 0)
+			if (list & 0x20)
 				ea = ea - 2, write16(a2, ea);
-			if ((list & 0x40) != 0)
+			if (list & 0x40)
 				ea = ea - 2, write16(a1, ea);
-			if ((list & 0x80) != 0)
+			if (list & 0x80)
 				ea = ea - 2, write16(a0, ea);
-			if ((list & 0x100) != 0)
+			if (list & 0x100)
 				ea = ea - 2, write16(d7, ea);
-			if ((list & 0x200) != 0)
+			if (list & 0x200)
 				ea = ea - 2, write16(d6, ea);
-			if ((list & 0x400) != 0)
+			if (list & 0x400)
 				ea = ea - 2, write16(d5, ea);
-			if ((list & 0x800) != 0)
+			if (list & 0x800)
 				ea = ea - 2, write16(d4, ea);
-			if ((list & 0x1000) != 0)
+			if (list & 0x1000)
 				ea = ea - 2, write16(d3, ea);
-			if ((list & 0x2000) != 0)
+			if (list & 0x2000)
 				ea = ea - 2, write16(d2, ea);
-			if ((list & 0x4000) != 0)
+			if (list & 0x4000)
 				ea = ea - 2, write16(d1, ea);
-			if ((list & 0x8000) != 0)
+			if (list & 0x8000)
 				ea = ea - 2, write16(d0, ea);
 			rwop32(op & 7 | 010, thru, ea);
-		}
-		else {
-			if ((list & 1) != 0)
+		} else {
+			if (list & 1)
 				write16(d0, ea), ea = ea + 2;
-			if ((list & 2) != 0)
+			if (list & 2)
 				write16(d1, ea), ea = ea + 2;
-			if ((list & 4) != 0)
+			if (list & 4)
 				write16(d2, ea), ea = ea + 2;
-			if ((list & 8) != 0)
+			if (list & 8)
 				write16(d3, ea), ea = ea + 2;
-			if ((list & 0x10) != 0)
+			if (list & 0x10)
 				write16(d4, ea), ea = ea + 2;
-			if ((list & 0x20) != 0)
+			if (list & 0x20)
 				write16(d5, ea), ea = ea + 2;
-			if ((list & 0x40) != 0)
+			if (list & 0x40)
 				write16(d6, ea), ea = ea + 2;
-			if ((list & 0x80) != 0)
+			if (list & 0x80)
 				write16(d7, ea), ea = ea + 2;
-			if ((list & 0x100) != 0)
+			if (list & 0x100)
 				write16(a0, ea), ea = ea + 2;
-			if ((list & 0x200) != 0)
+			if (list & 0x200)
 				write16(a1, ea), ea = ea + 2;
-			if ((list & 0x400) != 0)
+			if (list & 0x400)
 				write16(a2, ea), ea = ea + 2;
-			if ((list & 0x800) != 0)
+			if (list & 0x800)
 				write16(a3, ea), ea = ea + 2;
-			if ((list & 0x1000) != 0)
+			if (list & 0x1000)
 				write16(a4, ea), ea = ea + 2;
-			if ((list & 0x2000) != 0)
+			if (list & 0x2000)
 				write16(a5, ea), ea = ea + 2;
-			if ((list & 0x4000) != 0)
+			if (list & 0x4000)
 				write16(a6, ea), ea = ea + 2;
-			if ((list & 0x8000) != 0)
+			if (list & 0x8000)
 				write16(a7, ea);
 		}
 	}
@@ -10041,72 +10040,71 @@ struct MC68000 : Cpu {
 		const int list = fetch16();
 		int ea = lea(op);
 		if ((op & 070) == 040) {
-			if ((list & 1) != 0)
+			if (list & 1)
 				ea = ea - 4, write32(a7, ea);
-			if ((list & 2) != 0)
+			if (list & 2)
 				ea = ea - 4, write32(a6, ea);
-			if ((list & 4) != 0)
+			if (list & 4)
 				ea = ea - 4, write32(a5, ea);
-			if ((list & 8) != 0)
+			if (list & 8)
 				ea = ea - 4, write32(a4, ea);
-			if ((list & 0x10) != 0)
+			if (list & 0x10)
 				ea = ea - 4, write32(a3, ea);
-			if ((list & 0x20) != 0)
+			if (list & 0x20)
 				ea = ea - 4, write32(a2, ea);
-			if ((list & 0x40) != 0)
+			if (list & 0x40)
 				ea = ea - 4, write32(a1, ea);
-			if ((list & 0x80) != 0)
+			if (list & 0x80)
 				ea = ea - 4, write32(a0, ea);
-			if ((list & 0x100) != 0)
+			if (list & 0x100)
 				ea = ea - 4, write32(d7, ea);
-			if ((list & 0x200) != 0)
+			if (list & 0x200)
 				ea = ea - 4, write32(d6, ea);
-			if ((list & 0x400) != 0)
+			if (list & 0x400)
 				ea = ea - 4, write32(d5, ea);
-			if ((list & 0x800) != 0)
+			if (list & 0x800)
 				ea = ea - 4, write32(d4, ea);
-			if ((list & 0x1000) != 0)
+			if (list & 0x1000)
 				ea = ea - 4, write32(d3, ea);
-			if ((list & 0x2000) != 0)
+			if (list & 0x2000)
 				ea = ea - 4, write32(d2, ea);
-			if ((list & 0x4000) != 0)
+			if (list & 0x4000)
 				ea = ea - 4, write32(d1, ea);
-			if ((list & 0x8000) != 0)
+			if (list & 0x8000)
 				ea = ea - 4, write32(d0, ea);
 			rwop32(op & 7 | 010, thru, ea);
-		}
-		else {
-			if ((list & 1) != 0)
+		} else {
+			if (list & 1)
 				write32(d0, ea), ea = ea + 4;
-			if ((list & 2) != 0)
+			if (list & 2)
 				write32(d1, ea), ea = ea + 4;
-			if ((list & 4) != 0)
+			if (list & 4)
 				write32(d2, ea), ea = ea + 4;
-			if ((list & 8) != 0)
+			if (list & 8)
 				write32(d3, ea), ea = ea + 4;
-			if ((list & 0x10) != 0)
+			if (list & 0x10)
 				write32(d4, ea), ea = ea + 4;
-			if ((list & 0x20) != 0)
+			if (list & 0x20)
 				write32(d5, ea), ea = ea + 4;
-			if ((list & 0x40) != 0)
+			if (list & 0x40)
 				write32(d6, ea), ea = ea + 4;
-			if ((list & 0x80) != 0)
+			if (list & 0x80)
 				write32(d7, ea), ea = ea + 4;
-			if ((list & 0x100) != 0)
+			if (list & 0x100)
 				write32(a0, ea), ea = ea + 4;
-			if ((list & 0x200) != 0)
+			if (list & 0x200)
 				write32(a1, ea), ea = ea + 4;
-			if ((list & 0x400) != 0)
+			if (list & 0x400)
 				write32(a2, ea), ea = ea + 4;
-			if ((list & 0x800) != 0)
+			if (list & 0x800)
 				write32(a3, ea), ea = ea + 4;
-			if ((list & 0x1000) != 0)
+			if (list & 0x1000)
 				write32(a4, ea), ea = ea + 4;
-			if ((list & 0x2000) != 0)
+			if (list & 0x2000)
 				write32(a5, ea), ea = ea + 4;
-			if ((list & 0x4000) != 0)
+			if (list & 0x4000)
 				write32(a6, ea), ea = ea + 4;
-			if ((list & 0x8000) != 0)
+			if (list & 0x8000)
 				write32(a7, ea);
 		}
 	}
@@ -10114,37 +10112,37 @@ struct MC68000 : Cpu {
 	void movem16mr(int op) {
 		const int list = fetch16();
 		int ea = lea(op);
-		if ((list & 1) != 0)
+		if (list & 1)
 			d0 = read16s(ea), ea = ea + 2;
-		if ((list & 2) != 0)
+		if (list & 2)
 			d1 = read16s(ea), ea = ea + 2;
-		if ((list & 4) != 0)
+		if (list & 4)
 			d2 = read16s(ea), ea = ea + 2;
-		if ((list & 8) != 0)
+		if (list & 8)
 			d3 = read16s(ea), ea = ea + 2;
-		if ((list & 0x10) != 0)
+		if (list & 0x10)
 			d4 = read16s(ea), ea = ea + 2;
-		if ((list & 0x20) != 0)
+		if (list & 0x20)
 			d5 = read16s(ea), ea = ea + 2;
-		if ((list & 0x40) != 0)
+		if (list & 0x40)
 			d6 = read16s(ea), ea = ea + 2;
-		if ((list & 0x80) != 0)
+		if (list & 0x80)
 			d7 = read16s(ea), ea = ea + 2;
-		if ((list & 0x100) != 0)
+		if (list & 0x100)
 			a0 = read16s(ea), ea = ea + 2;
-		if ((list & 0x200) != 0)
+		if (list & 0x200)
 			a1 = read16s(ea), ea = ea + 2;
-		if ((list & 0x400) != 0)
+		if (list & 0x400)
 			a2 = read16s(ea), ea = ea + 2;
-		if ((list & 0x800) != 0)
+		if (list & 0x800)
 			a3 = read16s(ea), ea = ea + 2;
-		if ((list & 0x1000) != 0)
+		if (list & 0x1000)
 			a4 = read16s(ea), ea = ea + 2;
-		if ((list & 0x2000) != 0)
+		if (list & 0x2000)
 			a5 = read16s(ea), ea = ea + 2;
-		if ((list & 0x4000) != 0)
+		if (list & 0x4000)
 			a6 = read16s(ea), ea = ea + 2;
-		if ((list & 0x8000) != 0)
+		if (list & 0x8000)
 			a7 = read16s(ea), ea = ea + 2;
 		if ((op & 070) == 030)
 			rwop32(op & 7 | 010, thru, ea);
@@ -10153,37 +10151,37 @@ struct MC68000 : Cpu {
 	void movem32mr(int op) {
 		const int list = fetch16();
 		int ea = lea(op);
-		if ((list & 1) != 0)
+		if (list & 1)
 			d0 = read32(ea), ea = ea + 4;
-		if ((list & 2) != 0)
+		if (list & 2)
 			d1 = read32(ea), ea = ea + 4;
-		if ((list & 4) != 0)
+		if (list & 4)
 			d2 = read32(ea), ea = ea + 4;
-		if ((list & 8) != 0)
+		if (list & 8)
 			d3 = read32(ea), ea = ea + 4;
-		if ((list & 0x10) != 0)
+		if (list & 0x10)
 			d4 = read32(ea), ea = ea + 4;
-		if ((list & 0x20) != 0)
+		if (list & 0x20)
 			d5 = read32(ea), ea = ea + 4;
-		if ((list & 0x40) != 0)
+		if (list & 0x40)
 			d6 = read32(ea), ea = ea + 4;
-		if ((list & 0x80) != 0)
+		if (list & 0x80)
 			d7 = read32(ea), ea = ea + 4;
-		if ((list & 0x100) != 0)
+		if (list & 0x100)
 			a0 = read32(ea), ea = ea + 4;
-		if ((list & 0x200) != 0)
+		if (list & 0x200)
 			a1 = read32(ea), ea = ea + 4;
-		if ((list & 0x400) != 0)
+		if (list & 0x400)
 			a2 = read32(ea), ea = ea + 4;
-		if ((list & 0x800) != 0)
+		if (list & 0x800)
 			a3 = read32(ea), ea = ea + 4;
-		if ((list & 0x1000) != 0)
+		if (list & 0x1000)
 			a4 = read32(ea), ea = ea + 4;
-		if ((list & 0x2000) != 0)
+		if (list & 0x2000)
 			a5 = read32(ea), ea = ea + 4;
-		if ((list & 0x4000) != 0)
+		if (list & 0x4000)
 			a6 = read32(ea), ea = ea + 4;
-		if ((list & 0x8000) != 0)
+		if (list & 0x8000)
 			a7 = read32(ea), ea = ea + 4;
 		if ((op & 070) == 030)
 			rwop32(op & 7 | 010, thru, ea);
@@ -10480,9 +10478,9 @@ struct MC68000 : Cpu {
 
 	static int sbcd(int src, int dst, int& sr) {
 		int r = dst - src - (sr >> 4 & 1) & 0xff, c = ~dst & src | src & r | r & ~dst;
-		if ((c & 8) != 0 && (r & 0x0f) > 5 || (r & 0x0f) > 9)
+		if (c & 8 && (r & 0x0f) > 5 || (r & 0x0f) > 9)
 			r -= 6;
-		if ((c & 0x80) != 0 && (r & 0xf0) > 0x50 || (r & 0xf0) > 0x90)
+		if (c & 0x80 && (r & 0xf0) > 0x50 || (r & 0xf0) > 0x90)
 			r -= 0x60, c |= 0x80;
 		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | sr & !r << 2 | c >> 7 & 1, r;
 	}
@@ -10528,10 +10526,10 @@ struct MC68000 : Cpu {
 
 	static int abcd(int src, int dst, int& sr) {
 		int r = dst + src + (sr >> 4 & 1) & 0xff, c = dst & src | src & ~r | ~r & dst;
-		if ((c & 8) != 0 && (r & 0x0f) < 4 || (r & 0x0f) > 9)
+		if (c & 8 && (r & 0x0f) < 4 || (r & 0x0f) > 9)
 			if ((r += 6) >= 0x100)
 				c |= 0x80;
-		if ((c & 0x80) != 0 && (r & 0xf0) < 0x40 || (r & 0xf0) > 0x90)
+		if (c & 0x80 && (r & 0xf0) < 0x40 || (r & 0xf0) > 0x90)
 			r += 0x60, c |= 0x80;
 		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | sr & !r << 2 | c >> 7 & 1, r;
 	}
@@ -10758,9 +10756,9 @@ struct MC68000 : Cpu {
 
 	static int nbcd(int src, int dst, int& sr) {
 		int r = -dst - (sr >> 4 & 1) & 0xff, c = dst | r;
-		if ((c & 8) != 0 && (r & 0x0f) > 5 || (r & 0x0f) > 9)
+		if (c & 8 && (r & 0x0f) > 5 || (r & 0x0f) > 9)
 			r -= 6;
-		if ((c & 0x80) != 0 && (r & 0xf0) > 0x50 || (r & 0xf0) > 0x90)
+		if (c & 0x80 && (r & 0xf0) > 0x50 || (r & 0xf0) > 0x90)
 			r -= 0x60, c |= 0x80;
 		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | sr & !r << 2 | c >> 7 & 1, r;
 	}

@@ -24,6 +24,8 @@ export function init(bufferSource, roms) {
 		const game = {cxScreen: g[0], cyScreen: g[1], width: g[2], height: g[3], xOffset: g[4], yOffset: g[5], rotate: g[6] !== 0};
 		canvas.style.imageRendering = 'pixelated';
 		document.addEventListener('keydown', e => {
+			if (e.repeat)
+				return;
 			switch (e.code) {
 			case 'ArrowLeft':
 				return void('left' in instance.exports && instance.exports.left(true));

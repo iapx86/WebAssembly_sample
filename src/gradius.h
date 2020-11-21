@@ -69,10 +69,10 @@ struct Gradius {
 	int timer = 0;
 	list<int> command;
 
-	uint8_t chr[0x20000];
-	int rgb[0x800];
+	uint8_t chr[0x20000] = {};
+	int rgb[0x800] = {};
 	int flip = 0;
-	uint8_t intensity[32];
+	uint8_t intensity[32] = {};
 
 	MC68000 cpu;
 	Z80 cpu2;
@@ -86,8 +86,8 @@ struct Gradius {
 			cpu.memorymap[0x100 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x80; i++) {
-			cpu.memorymap[0x200 + i].read = [&](int addr) { return (addr & 1) != 0 ? ram2[addr >> 1 & 0x3fff] : 0; };
-			cpu.memorymap[0x200 + i].write = [&](int addr, int data) { if ((addr & 1) != 0) ram2[addr >> 1 & 0x3fff] = data; };
+			cpu.memorymap[0x200 + i].read = [&](int addr) { return addr & 1 ? ram2[addr >> 1 & 0x3fff] : 0; };
+			cpu.memorymap[0x200 + i].write = [&](int addr, int data) { addr & 1 && (ram2[addr >> 1 & 0x3fff] = data); };
 		}
 		for (int i = 0; i < 0x100; i++) {
 			cpu.memorymap[0x300 + i].base = ram + 0x10000 + i * 0x100;
@@ -193,23 +193,23 @@ struct Gradius {
 			e = 0xff000000;
 
 		// 輝度の計算
-		double intensity[32];
+		double _intensity[32];
 		const double r[5] = {4700, 2400, 1200, 620, 300};
 		for (int i = 0; i < 32; i++) {
 			double rt = 0, v = 0;
 			for (int j = 0; j < 5; j++)
-				if ((i >> j & 1) == 0)
+				if (~i >> j & 1)
 					rt += 1 / r[j], v += 0.05 / r[j];
-			intensity[i] = ((v + 0.005) / (rt + 0.001) - 0.7) * 255 / 5.0 + 0.4;
+			_intensity[i] = ((v + 0.005) / (rt + 0.001) - 0.7) * 255 / 5.0 + 0.4;
 		}
-		const double black = intensity[0], white = 255 / (intensity[31] - black);
+		const double black = _intensity[0], white = 255 / (_intensity[31] - black);
 		for (int i = 0; i < 32; i++)
-			this->intensity[i] = (intensity[i] - black) * white + 0.5;
+			intensity[i] = (_intensity[i] - black) * white + 0.5;
 	}
 
 	Gradius *execute() {
 		for (int vpos = 0; vpos < 256; vpos++) {
-			if (vpos == 0 && fInterrupt2Enable)
+			if (!vpos && fInterrupt2Enable)
 				cpu.interrupt(2);
 			if (vpos == 120 && fInterrupt4Enable)
 				cpu.interrupt(4);
@@ -298,23 +298,9 @@ struct Gradius {
 	}
 
 	Gradius *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			in[3] &= ~(1 << 2), --fCoin;
-		else
-			in[3] |= 1 << 2;
-		if (fStart1P)
-			in[3] &= ~(1 << 3), --fStart1P;
-		else
-			in[3] |= 1 << 3;
-		if (fStart2P)
-			in[3] &= ~(1 << 4), --fStart2P;
-		else
-			in[3] |= 1 << 4;
-
-		// 連射処理
-		if (fTurbo)
-			in[4] ^= 1 << 6;
+		in[3] = in[3] & ~0x1c | !fCoin << 2 | !fStart1P << 3 | !fStart2P << 4;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
+		fTurbo && (in[4] ^= 1 << 6);
 		return this;
 	}
 
@@ -331,57 +317,35 @@ struct Gradius {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			in[4] = in[4] & ~(1 << 2) | 1 << 3;
-		else
-			in[4] |= 1 << 2;
+		in[4] = in[4] & ~(1 << 2) | fDown << 3 | !fDown << 2;
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			in[4] = in[4] & ~(1 << 1) | 1 << 0;
-		else
-			in[4] |= 1 << 1;
+		in[4] = in[4] & ~(1 << 1) | fDown << 0 | !fDown << 1;
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			in[4] = in[4] & ~(1 << 3) | 1 << 2;
-		else
-			in[4] |= 1 << 3;
+		in[4] = in[4] & ~(1 << 3) | fDown << 2 | !fDown << 3;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			in[4] = in[4] & ~(1 << 0) | 1 << 1;
-		else
-			in[4] |= 1 << 0;
+		in[4] = in[4] & ~(1 << 0) | fDown << 1 | !fDown << 0;
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			in[4] &= ~(1 << 6);
-		else
-			in[4] |= 1 << 6;
+		in[4] = in[4] & ~(1 << 6) | !fDown << 6;
 	}
 
 	void triggerB(bool fDown) {
-		if (fDown)
-			in[4] &= ~(1 << 5);
-		else
-			in[4] |= 1 << 5;
+		in[4] = in[4] & ~(1 << 5) | !fDown << 5;
 	}
 
 	void triggerX(bool fDown) {
-		if (fDown)
-			in[4] &= ~(1 << 4);
-		else
-			in[4] |= 1 << 4;
+		in[4] = in[4] & ~(1 << 4) | !fDown << 4;
 	}
 
 	void triggerY(bool fDown) {
-		if (!(fTurbo = fDown))
-			in[4] |= 1 << 6;
+		!(fTurbo = fDown) && (in[4] |= 1 << 6);
 	}
 
 	void makeBitmap(int *data) {
@@ -392,16 +356,16 @@ struct Gradius {
 
 		// bg描画
 		for (int k = 0x23000; k < 0x24000; k += 2)
-			if ((ram[k] & 0x50) == 0 && (ram[k] & 0xf8) != 0)
+			if (!(ram[k] & 0x50) && ram[k] & 0xf8)
 				xfer8x8(data, k);
 		for (int k = 0x22000; k < 0x23000; k += 2)
-			if ((ram[k] & 0x50) == 0 && (ram[k] & 0xf8) != 0)
+			if (!(ram[k] & 0x50) && ram[k] & 0xf8)
 				xfer8x8(data, k);
 		for (int k = 0x23000; k < 0x24000; k += 2)
-			if ((ram[k] & 0x50) == 0x40 && (ram[k] & 0xf8) != 0)
+			if ((ram[k] & 0x50) == 0x40 && ram[k] & 0xf8)
 				xfer8x8(data, k);
 		for (int k = 0x22000; k < 0x23000; k += 2)
-			if ((ram[k] & 0x50) == 0x40 && (ram[k] & 0xf8) != 0)
+			if ((ram[k] & 0x50) == 0x40 && ram[k] & 0xf8)
 				xfer8x8(data, k);
 
 		// obj描画
@@ -412,9 +376,9 @@ struct Gradius {
 					continue;
 				int zoom = ram[k + 5];
 				int src = ram[k + 9] << 9 & 0x18000 | ram[k + 7] << 7;
-				if (ram[k + 4] == 0 && ram[k + 6] != 0xff)
+				if (!ram[k + 4] && ram[k + 6] != 0xff)
 					src = src + (ram[k + 6] << 15) & 0x1ff80;
-				if (zoom == 0xff && src == 0 || (zoom |= ram[k + 3] << 2 & 0x300) == 0)
+				if (zoom == 0xff && !src || !(zoom |= ram[k + 3] << 2 & 0x300))
 					continue;
 				const int color = ram[k + 9] << 3 & 0xf0;
 				const int y = (ram[k + 9] << 8 | ram[k + 11]) + 16 & 0x1ff;
@@ -439,10 +403,10 @@ struct Gradius {
 
 		// bg描画
 		for (int k = 0x23000; k < 0x24000; k += 2)
-			if ((ram[k] & 0x10) == 0x10 && (ram[k] & 0xf8) != 0)
+			if (ram[k] & 0x10 && ram[k] & 0xf8)
 				xfer8x8(data, k);
 		for (int k = 0x22000; k < 0x23000; k += 2)
-			if ((ram[k] & 0x10) == 0x10 && (ram[k] & 0xf8) != 0)
+			if (ram[k] & 0x10 && ram[k] & 0xf8)
 				xfer8x8(data, k);
 
 		// palette変換
@@ -453,76 +417,76 @@ struct Gradius {
 	}
 
 	void xfer8x8(int *data, int k) {
-		const int x0 = (((flip & 2) == 0 ? ~k : k) >> 4 & 0xf8 | 7) + ram[0x20f01 | ~k >> 5 & 0x80 | k & 0x7e] & 0xff;
+		const int x0 = ((flip & 2 ? k : ~k) >> 4 & 0xf8 | 7) + ram[0x20f01 | ~k >> 5 & 0x80 | k & 0x7e] & 0xff;
 		const int color = ram[k + 0x2001] << 4 & 0x7f0;
 		int src = (ram[k] << 8 & 0x700 | ram[k + 1]) << 6, px;
 
-		if (x0 < 16 && x0 >= 247)
+		if (x0 < 16 || x0 >= 247)
 			return;
-		if ((ram[k] & 0x20) == 0 || (ram[k] & 0xc0) == 0x40)
+		if (~ram[k] & 0x20 || (ram[k] & 0xc0) == 0x40)
 			switch ((ram[k] >> 2 & 2 | ram[k + 0x2001] >> 7) ^ flip) {
 			case 0: // ノーマル
 				for (int x = x0, i = 0; i < 8; src += 8, --x, i++) {
 					const int offset = k >> 2 & 0x400 | ~x << 1 & 0x1fe, scroll = ram[0x20001 | offset] | ram[0x20201 | offset] << 8;
 					const int y = (k << 2) - scroll + 16 & 0x1ff;
-					if (y > 8 && y < 272) {
-						data[y << 8 | x] = color | chr[src | 0];
-						data[y + 1 << 8 | x] = color | chr[src | 1];
-						data[y + 2 << 8 | x] = color | chr[src | 2];
-						data[y + 3 << 8 | x] = color | chr[src | 3];
-						data[y + 4 << 8 | x] = color | chr[src | 4];
-						data[y + 5 << 8 | x] = color | chr[src | 5];
-						data[y + 6 << 8 | x] = color | chr[src | 6];
-						data[y + 7 << 8 | x] = color | chr[src | 7];
-					}
+					if (y < 9 || y > 271)
+						continue;
+					data[y << 8 | x] = color | chr[src | 0];
+					data[y + 1 << 8 | x] = color | chr[src | 1];
+					data[y + 2 << 8 | x] = color | chr[src | 2];
+					data[y + 3 << 8 | x] = color | chr[src | 3];
+					data[y + 4 << 8 | x] = color | chr[src | 4];
+					data[y + 5 << 8 | x] = color | chr[src | 5];
+					data[y + 6 << 8 | x] = color | chr[src | 6];
+					data[y + 7 << 8 | x] = color | chr[src | 7];
 				}
 				return;
 			case 1: // V反転
 				for (int x = x0, i = 0; i < 8; src += 8, --x, i++){
 					const int offset = k >> 2 & 0x400 | ~x << 1 & 0x1fe, scroll = ram[0x20001 | offset] | ram[0x20201 | offset] << 8;
 					const int y = (k << 2) - scroll + 16 & 0x1ff;
-					if (y > 8 && y < 272) {
-						data[y + 7 << 8 | x] = color | chr[src | 0];
-						data[y + 6 << 8 | x] = color | chr[src | 1];
-						data[y + 5 << 8 | x] = color | chr[src | 2];
-						data[y + 4 << 8 | x] = color | chr[src | 3];
-						data[y + 3 << 8 | x] = color | chr[src | 4];
-						data[y + 2 << 8 | x] = color | chr[src | 5];
-						data[y + 1 << 8 | x] = color | chr[src | 6];
-						data[y << 8 | x] = color | chr[src | 7];
-					}
+					if (y < 9 || y > 271)
+						continue;
+					data[y + 7 << 8 | x] = color | chr[src | 0];
+					data[y + 6 << 8 | x] = color | chr[src | 1];
+					data[y + 5 << 8 | x] = color | chr[src | 2];
+					data[y + 4 << 8 | x] = color | chr[src | 3];
+					data[y + 3 << 8 | x] = color | chr[src | 4];
+					data[y + 2 << 8 | x] = color | chr[src | 5];
+					data[y + 1 << 8 | x] = color | chr[src | 6];
+					data[y << 8 | x] = color | chr[src | 7];
 				}
 				return;
 			case 2: // H反転
 				for (int x = x0 - 7, i = 0; i < 8; src += 8, x++, i++) {
 					const int offset = k >> 2 & 0x400 | ~x << 1 & 0x1fe, scroll = ram[0x20001 | offset] | ram[0x20201 | offset] << 8;
 					const int y = (k << 2) - scroll + 16 & 0x1ff;
-					if (y > 8 && y < 272) {
-						data[y << 8 | x] = color | chr[src | 0];
-						data[y + 1 << 8 | x] = color | chr[src | 1];
-						data[y + 2 << 8 | x] = color | chr[src | 2];
-						data[y + 3 << 8 | x] = color | chr[src | 3];
-						data[y + 4 << 8 | x] = color | chr[src | 4];
-						data[y + 5 << 8 | x] = color | chr[src | 5];
-						data[y + 6 << 8 | x] = color | chr[src | 6];
-						data[y + 7 << 8 | x] = color | chr[src | 7];
-					}
+					if (y < 9 || y > 271)
+						continue;
+					data[y << 8 | x] = color | chr[src | 0];
+					data[y + 1 << 8 | x] = color | chr[src | 1];
+					data[y + 2 << 8 | x] = color | chr[src | 2];
+					data[y + 3 << 8 | x] = color | chr[src | 3];
+					data[y + 4 << 8 | x] = color | chr[src | 4];
+					data[y + 5 << 8 | x] = color | chr[src | 5];
+					data[y + 6 << 8 | x] = color | chr[src | 6];
+					data[y + 7 << 8 | x] = color | chr[src | 7];
 				}
 				return;
 			case 3: // HV反転
 				for (int x = x0 - 7, i = 0; i < 8; src += 8, x++, i++) {
 					const int offset = k >> 2 & 0x400 | ~x << 1 & 0x1fe, scroll = ram[0x20001 | offset] | ram[0x20201 | offset] << 8;
 					const int y = (k << 2) - scroll + 16 & 0x1ff;
-					if (y > 8 && y < 272) {
-						data[y + 7 << 8 | x] = color | chr[src | 0];
-						data[y + 6 << 8 | x] = color | chr[src | 1];
-						data[y + 5 << 8 | x] = color | chr[src | 2];
-						data[y + 4 << 8 | x] = color | chr[src | 3];
-						data[y + 3 << 8 | x] = color | chr[src | 4];
-						data[y + 2 << 8 | x] = color | chr[src | 5];
-						data[y + 1 << 8 | x] = color | chr[src | 6];
-						data[y << 8 | x] = color | chr[src | 7];
-					}
+					if (y < 9 || y > 271)
+						continue;
+					data[y + 7 << 8 | x] = color | chr[src | 0];
+					data[y + 6 << 8 | x] = color | chr[src | 1];
+					data[y + 5 << 8 | x] = color | chr[src | 2];
+					data[y + 4 << 8 | x] = color | chr[src | 3];
+					data[y + 3 << 8 | x] = color | chr[src | 4];
+					data[y + 2 << 8 | x] = color | chr[src | 5];
+					data[y + 1 << 8 | x] = color | chr[src | 6];
+					data[y << 8 | x] = color | chr[src | 7];
 				}
 				return;
 			}
@@ -531,64 +495,64 @@ struct Gradius {
 			for (int x = x0, i = 0; i < 8; src += 8, --x, i++) {
 				const int offset = k >> 2 & 0x400 | ~x << 1 & 0x1fe, scroll = ram[0x20001 | offset] | ram[0x20201 | offset] << 8;
 				const int y = (k << 2) - scroll + 16 & 0x1ff;
-				if (y > 8 && y < 272) {
-					if ((px = chr[src | 0]) != 0) data[y << 8 | x] = color | px;
-					if ((px = chr[src | 1]) != 0) data[y + 1 << 8 | x] = color | px;
-					if ((px = chr[src | 2]) != 0) data[y + 2 << 8 | x] = color | px;
-					if ((px = chr[src | 3]) != 0) data[y + 3 << 8 | x] = color | px;
-					if ((px = chr[src | 4]) != 0) data[y + 4 << 8 | x] = color | px;
-					if ((px = chr[src | 5]) != 0) data[y + 5 << 8 | x] = color | px;
-					if ((px = chr[src | 6]) != 0) data[y + 6 << 8 | x] = color | px;
-					if ((px = chr[src | 7]) != 0) data[y + 7 << 8 | x] = color | px;
-				}
+				if (y < 9 || y > 271)
+					continue;
+				(px = chr[src | 0]) && (data[y << 8 | x] = color | px);
+				(px = chr[src | 1]) && (data[y + 1 << 8 | x] = color | px);
+				(px = chr[src | 2]) && (data[y + 2 << 8 | x] = color | px);
+				(px = chr[src | 3]) && (data[y + 3 << 8 | x] = color | px);
+				(px = chr[src | 4]) && (data[y + 4 << 8 | x] = color | px);
+				(px = chr[src | 5]) && (data[y + 5 << 8 | x] = color | px);
+				(px = chr[src | 6]) && (data[y + 6 << 8 | x] = color | px);
+				(px = chr[src | 7]) && (data[y + 7 << 8 | x] = color | px);
 			}
 			break;
 		case 1: // V反転
 			for (int x = x0, i = 0; i < 8; src += 8, --x, i++){
 				const int offset = k >> 2 & 0x400 | ~x << 1 & 0x1fe, scroll = ram[0x20001 | offset] | ram[0x20201 | offset] << 8;
 				const int y = (k << 2) - scroll + 16 & 0x1ff;
-				if (y > 8 && y < 272) {
-					if ((px = chr[src | 0]) != 0) data[y + 7 << 8 | x] = color | px;
-					if ((px = chr[src | 1]) != 0) data[y + 6 << 8 | x] = color | px;
-					if ((px = chr[src | 2]) != 0) data[y + 5 << 8 | x] = color | px;
-					if ((px = chr[src | 3]) != 0) data[y + 4 << 8 | x] = color | px;
-					if ((px = chr[src | 4]) != 0) data[y + 3 << 8 | x] = color | px;
-					if ((px = chr[src | 5]) != 0) data[y + 2 << 8 | x] = color | px;
-					if ((px = chr[src | 6]) != 0) data[y + 1 << 8 | x] = color | px;
-					if ((px = chr[src | 7]) != 0) data[y << 8 | x] = color | px;
-				}
+				if (y < 9 || y > 271)
+					continue;
+				(px = chr[src | 0]) && (data[y + 7 << 8 | x] = color | px);
+				(px = chr[src | 1]) && (data[y + 6 << 8 | x] = color | px);
+				(px = chr[src | 2]) && (data[y + 5 << 8 | x] = color | px);
+				(px = chr[src | 3]) && (data[y + 4 << 8 | x] = color | px);
+				(px = chr[src | 4]) && (data[y + 3 << 8 | x] = color | px);
+				(px = chr[src | 5]) && (data[y + 2 << 8 | x] = color | px);
+				(px = chr[src | 6]) && (data[y + 1 << 8 | x] = color | px);
+				(px = chr[src | 7]) && (data[y << 8 | x] = color | px);
 			}
 			break;
 		case 2: // H反転
 			for (int x = x0 - 7, i = 0; i < 8; src += 8, x++, i++) {
 				const int offset = k >> 2 & 0x400 | ~x << 1 & 0x1fe, scroll = ram[0x20001 | offset] | ram[0x20201 | offset] << 8;
 				const int y = (k << 2) - scroll + 16 & 0x1ff;
-				if (y > 8 && y < 272) {
-					if ((px = chr[src | 0]) != 0) data[y << 8 | x] = color | px;
-					if ((px = chr[src | 1]) != 0) data[y + 1 << 8 | x] = color | px;
-					if ((px = chr[src | 2]) != 0) data[y + 2 << 8 | x] = color | px;
-					if ((px = chr[src | 3]) != 0) data[y + 3 << 8 | x] = color | px;
-					if ((px = chr[src | 4]) != 0) data[y + 4 << 8 | x] = color | px;
-					if ((px = chr[src | 5]) != 0) data[y + 5 << 8 | x] = color | px;
-					if ((px = chr[src | 6]) != 0) data[y + 6 << 8 | x] = color | px;
-					if ((px = chr[src | 7]) != 0) data[y + 7 << 8 | x] = color | px;
-				}
+				if (y < 9 || y > 271)
+					continue;
+				(px = chr[src | 0]) && (data[y << 8 | x] = color | px);
+				(px = chr[src | 1]) && (data[y + 1 << 8 | x] = color | px);
+				(px = chr[src | 2]) && (data[y + 2 << 8 | x] = color | px);
+				(px = chr[src | 3]) && (data[y + 3 << 8 | x] = color | px);
+				(px = chr[src | 4]) && (data[y + 4 << 8 | x] = color | px);
+				(px = chr[src | 5]) && (data[y + 5 << 8 | x] = color | px);
+				(px = chr[src | 6]) && (data[y + 6 << 8 | x] = color | px);
+				(px = chr[src | 7]) && (data[y + 7 << 8 | x] = color | px);
 			}
 			break;
 		case 3: // HV反転
 			for (int x = x0 - 7, i = 0; i < 8; src += 8, x++, i++) {
 				const int offset = k >> 2 & 0x400 | ~x << 1 & 0x1fe, scroll = ram[0x20001 | offset] | ram[0x20201 | offset] << 8;
 				const int y = (k << 2) - scroll + 16 & 0x1ff;
-				if (y > 8 && y < 272) {
-					if ((px = chr[src | 0]) != 0) data[y + 7 << 8 | x] = color | px;
-					if ((px = chr[src | 1]) != 0) data[y + 6 << 8 | x] = color | px;
-					if ((px = chr[src | 2]) != 0) data[y + 5 << 8 | x] = color | px;
-					if ((px = chr[src | 3]) != 0) data[y + 4 << 8 | x] = color | px;
-					if ((px = chr[src | 4]) != 0) data[y + 3 << 8 | x] = color | px;
-					if ((px = chr[src | 5]) != 0) data[y + 2 << 8 | x] = color | px;
-					if ((px = chr[src | 6]) != 0) data[y + 1 << 8 | x] = color | px;
-					if ((px = chr[src | 7]) != 0) data[y << 8 | x] = color | px;
-				}
+				if (y < 9 || y > 271)
+					continue;
+				(px = chr[src | 0]) && (data[y + 7 << 8 | x] = color | px);
+				(px = chr[src | 1]) && (data[y + 6 << 8 | x] = color | px);
+				(px = chr[src | 2]) && (data[y + 5 << 8 | x] = color | px);
+				(px = chr[src | 3]) && (data[y + 4 << 8 | x] = color | px);
+				(px = chr[src | 4]) && (data[y + 3 << 8 | x] = color | px);
+				(px = chr[src | 5]) && (data[y + 2 << 8 | x] = color | px);
+				(px = chr[src | 6]) && (data[y + 1 << 8 | x] = color | px);
+				(px = chr[src | 7]) && (data[y << 8 | x] = color | px);
 			}
 			break;
 		}
@@ -602,7 +566,7 @@ struct Gradius {
 			return;
 		for (int x = x0, i = 0; i >> 7 < w; x = x - 1 & 0xff, i += zoom)
 			for (int y = y0, j = 0; j >> 7 < h; y = y + 1 & 0x1ff, j += zoom)
-				if ((px = chr[src | (i >> 7) * h | j >> 7]) != 0)
+				if ((px = chr[src | (i >> 7) * h | j >> 7]))
 					data[y << 8 | x] = color | px;
 	}
 
@@ -614,7 +578,7 @@ struct Gradius {
 			return;
 		for (int x = x0, i = 0; i >> 7 < w; x = x - 1 & 0xff, i += zoom)
 			for (int y = y1, j = 0; j >> 7 < h; y = y - 1 & 0x1ff, j += zoom)
-				if ((px = chr[src | (i >> 7) * h | j >> 7]) != 0)
+				if ((px = chr[src | (i >> 7) * h | j >> 7]))
 					data[y << 8 | x] = color | px;
 	}
 
@@ -626,7 +590,7 @@ struct Gradius {
 			return;
 		for (int x = x1, i = 0; i >> 7 < w; x = x + 1 & 0xff, i += zoom)
 			for (int y = y0, j = 0; j >> 7 < h; y = y + 1 & 0x1ff, j += zoom)
-				if ((px = chr[src | (i >> 7) * h | j >> 7]) != 0)
+				if ((px = chr[src | (i >> 7) * h | j >> 7]))
 					data[y << 8 | x] = color | px;
 	}
 
@@ -638,7 +602,7 @@ struct Gradius {
 			return;
 		for (int x = x1, i = 0; i >> 7 < w; x = x + 1 & 0xff, i += zoom)
 			for (int y = y1, j = 0; j >> 7 < h; y = y - 1 & 0x1ff, j += zoom)
-				if ((px = chr[src | (i >> 7) * h | j >> 7]) != 0)
+				if ((px = chr[src | (i >> 7) * h | j >> 7]))
 					data[y << 8 | x] = color | px;
 	}
 

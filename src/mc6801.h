@@ -29,13 +29,13 @@ struct MC6801 : Cpu {
 	}
 
 	bool interrupt() {
-		if (!Cpu::interrupt() || (ccr & 0x10) != 0)
+		if (!Cpu::interrupt() || ccr & 0x10)
 			return false;
 		return psh16(pc), psh16(x), psh(a), psh(b), psh(ccr), ccr |= 0x10, pc = read16(0xfff8), true;
 	}
 
 	bool interrupt(int cause) {
-		if (!Cpu::interrupt() || (ccr & 0x10) != 0)
+		if (!Cpu::interrupt() || ccr & 0x10)
 			return false;
 		psh16(pc), psh16(x), psh(a), psh(b), psh(ccr), ccr |= 0x10;
 		switch (cause) {
@@ -112,31 +112,31 @@ struct MC6801 : Cpu {
 		case 0x21: // BRN
 			return bcc(false);
 		case 0x22: // BHI
-			return bcc(((ccr >> 2 | ccr) & 1) == 0);
+			return bcc(!((ccr >> 2 | ccr) & 1));
 		case 0x23: // BLS
 			return bcc(((ccr >> 2 | ccr) & 1) != 0);
 		case 0x24: // BHS(BCC)
-			return bcc((ccr & 1) == 0);
+			return bcc(!(ccr & 1));
 		case 0x25: // BLO(BCS)
 			return bcc((ccr & 1) != 0);
 		case 0x26: // BNE
-			return bcc((ccr & 4) == 0);
+			return bcc(!(ccr & 4));
 		case 0x27: // BEQ
 			return bcc((ccr & 4) != 0);
 		case 0x28: // BVC
-			return bcc((ccr & 2) == 0);
+			return bcc(!(ccr & 2));
 		case 0x29: // BVS
 			return bcc((ccr & 2) != 0);
 		case 0x2a: // BPL
-			return bcc((ccr & 8) == 0);
+			return bcc(!(ccr & 8));
 		case 0x2b: // BMI
 			return bcc((ccr & 8) != 0);
 		case 0x2c: // BGE
-			return bcc(((ccr >> 2 ^ ccr) & 2) == 0);
+			return bcc(!((ccr >> 2 ^ ccr) & 2));
 		case 0x2d: // BLT
 			return bcc(((ccr >> 2 ^ ccr) & 2) != 0);
 		case 0x2e: // BGT
-			return bcc(((ccr >> 2 ^ ccr | ccr >> 1) & 2) == 0);
+			return bcc(!((ccr >> 2 ^ ccr | ccr >> 1) & 2));
 		case 0x2f: // BLE
 			return bcc(((ccr >> 2 ^ ccr | ccr >> 1) & 2) != 0);
 		case 0x30: // TSX
@@ -656,9 +656,9 @@ struct MC6801 : Cpu {
 
 	void daa() {
 		int cf = 0;
-		if ((ccr & 0x20) != 0 && (a & 0xf) < 4 || (a & 0xf) > 9)
+		if (ccr & 0x20 && (a & 0xf) < 4 || (a & 0xf) > 9)
 			cf += 6;
-		if ((ccr & 1) != 0 && (a & 0xf0) < 0x40 || (a & 0xf0) > 0x90 || (a & 0xf0) > 0x80 && (a & 0xf) > 9)
+		if (ccr & 1 && (a & 0xf0) < 0x40 || (a & 0xf0) > 0x90 || (a & 0xf0) > 0x80 && (a & 0xf) > 9)
 			cf += 0x60, ccr |= 1;
 		a = a + cf & 0xff, ccr = ccr & ~0x0c | a >> 4 & 8 | !a << 2;
 	}
@@ -700,7 +700,7 @@ struct MC6801 : Cpu {
 
 	void write8(int data, int addr) {
 		Page& page = memorymap[addr >> 8];
-		!page.write ? void(page.base[addr & 0xff] = (unsigned char)data) : page.write(addr, data);
+		!page.write ? void(page.base[addr & 0xff] = data) : page.write(addr, data);
 	}
 
 	void write16(int data, int addr) {

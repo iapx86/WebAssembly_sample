@@ -14,5 +14,5 @@ read('crush.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zi
 	const RGB = zip.decompress('82s123.7f');
 	const COLOR = zip.decompress('2s140.4a');
 	const SND = zip.decompress('82s126.1m');
-	init(bufferSource, {BG, COLOR, OBJ, RGB, PRG, SND}).then();
+	return init(bufferSource, {BG, COLOR, OBJ, RGB, PRG, SND});
 });

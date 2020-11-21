@@ -16,5 +16,5 @@ read('timeplt.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(
 	const RGB_L = zip.decompress('timeplt.b5');
 	const OBJCOLOR = zip.decompress('timeplt.e9');
 	const BGCOLOR = zip.decompress('timeplt.e12');
-	init(bufferSource, {PRG1, PRG2, BG, OBJ, RGB_H, RGB_L, OBJCOLOR, BGCOLOR}).then();
+	return init(bufferSource, {PRG1, PRG2, BG, OBJ, RGB_H, RGB_L, OBJCOLOR, BGCOLOR});
 });

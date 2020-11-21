@@ -15,5 +15,5 @@ read('elevator.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	let GFX = Uint8Array.concat(...['ea_20.2732.ic1', 'ea_21.2732.ic2', 'ea_22.2732.ic3', 'ea_23.2732.ic4'].map(e => zip.decompress(e)));
 	GFX = Uint8Array.concat(GFX, ...['ea_24.2732.ic5', 'ea_25.2732.ic6', 'ea_26.2732.ic7', 'ea_27.2732.ic8'].map(e => zip.decompress(e)));
 	const PRI = zip.decompress('eb16.ic22');
-	init(bufferSource, {PRG1, PRG2, PRG3, GFX, PRI}).then();
+	return init(bufferSource, {PRG1, PRG2, PRG3, GFX, PRI});
 });

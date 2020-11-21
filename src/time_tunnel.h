@@ -149,13 +149,12 @@ struct TimeTunnel {
 			case 0xc:
 				return cpu2_flag2 = data & 1, void(cpu2_nmi2 = (data & 1) != 0);
 			case 0xe:
-				const int bank = (data >> 2 & 0x20) + 0x60;
-				if (bank == this->bank)
+				const int _bank = (data >> 2 & 0x20) + 0x60;
+				if (_bank == bank)
 					return;
 				for (int i = 0; i < 0x20; i++)
-					cpu.memorymap[0x60 + i].base = PRG1 + (bank + i) * 0x100;
-				this->bank = bank;
-				return;
+					cpu.memorymap[0x60 + i].base = PRG1 + (_bank + i) * 0x100;
+				return void(bank = _bank);
 			}
 		};
 		cpu.memorymap[0xd6].write = [&](int addr, int data) { mode = data; };
@@ -197,7 +196,7 @@ struct TimeTunnel {
 				case 5:
 				case 7:
 					if ((psg[3].addr & 0xf) == 0xf)
-						fNmiEnable = (data & 1) == 0;
+						fNmiEnable = !(data & 1);
 					return sound3->write(psg[3].addr, data, count);
 				}
 			};
@@ -247,14 +246,12 @@ struct TimeTunnel {
 	}
 
 	TimeTunnel *execute() {
+		Cpu *cpus[] = {&cpu, &cpu2};
 		cpu.interrupt();
 		for (count = 0; count < 3; count++) {
-			if (timer == 0)
-				cpu2_irq = true;
-			Cpu *cpus[] = {&cpu, &cpu2};
+			!timer && (cpu2_irq = true);
 			Cpu::multiple_execute(2, cpus, 0x800);
-			if (++timer >= 5)
-				timer = 0;
+			++timer >= 5 && (timer = 0);
 		}
 		return this;
 	}
@@ -304,19 +301,8 @@ struct TimeTunnel {
 	}
 
 	TimeTunnel *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			in[3] &= ~(1 << 5), --fCoin;
-		else
-			in[3] |= 1 << 5;
-		if (fStart1P)
-			in[3] &= ~(1 << 6), --fStart1P;
-		else
-			in[3] |= 1 << 6;
-		if (fStart2P)
-			in[3] &= ~(1 << 7), --fStart2P;
-		else
-			in[3] |= 1 << 7;
+		in[3] = in[3] & ~0xe0 | !fCoin << 5 | !fStart1P << 6 | !fStart2P << 7;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		return this;
 	}
 
@@ -333,45 +319,27 @@ struct TimeTunnel {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 3) | 1 << 2;
-		else
-			in[0] |= 1 << 3;
+		in[0] = in[0] & ~(1 << 3) | fDown << 2 | !fDown << 3;
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 1) | 1 << 0;
-		else
-			in[0] |= 1 << 1;
+		in[0] = in[0] & ~(1 << 1) | fDown << 0 | !fDown << 1;
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 2) | 1 << 3;
-		else
-			in[0] |= 1 << 2;
+		in[0] = in[0] & ~(1 << 2) | fDown << 3 | !fDown << 2;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 0) | 1 << 1;
-		else
-			in[0] |= 1 << 0;
+		in[0] = in[0] & ~(1 << 0) | fDown << 1 | !fDown << 0;
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			in[0] &= ~(1 << 4);
-		else
-			in[0] |= 1 << 4;
+		in[0] = in[0] & ~(1 << 4) | !fDown << 4;
 	}
 
 	void triggerB(bool fDown) {
-		if (fDown)
-			in[0] &= ~(1 << 5);
-		else
-			in[0] |= 1 << 5;
+		in[0] = in[0] & ~(1 << 5) | !fDown << 5;
 	}
 
 	void convertPRI() {
@@ -461,7 +429,7 @@ struct TimeTunnel {
 			int e = 0, m = 0, vol = 0, cnt = 0;
 			auto advance = [&](int cycle) {
 				for (timer += cycle * rate; timer >= clock; timer -= clock)
-					buf.at(cnt++) = (short)e;
+					buf.at(cnt++) = e;
 			};
 			timer = 0;
 			for (int i = 0; i < r1; i++) {
@@ -500,100 +468,100 @@ struct TimeTunnel {
 		convertOBJ();
 
 		// 画面クリア
-		int p = 256 * 16 + 16, px = colorbank[1] << 3 & 0x38;
-		for (int i = 0; i < 256; p += 256 - 224, i++)
+		int p = 256 * 16 + 16;
+		for (int px = colorbank[1] << 3 & 0x38, i = 0; i < 256; p += 256 - 224, i++)
 			for (int j = 0; j < 224; p++, j++)
 				data[p] = px;
 
 		// bg描画
-		if ((mode & 0x10) != 0) {
+		if (mode & 0x10) {
 			const int color = colorbank[0];
-			const int scroll = -(this->scroll[0] & 0xf8) + (this->scroll[0] + 3 & 7) + 8;
+			const int _scroll = -(scroll[0] & 0xf8) + (scroll[0] + 3 & 7) + 8;
 			for (int k = 0x3c00; k < 0x4000; k++) {
-				const int x = (~k >> 2 & 0xf8) + this->scroll[1] + ram[0x4800 | k & 0x1f] & 0xff;
-				const int y = ((k << 3 & 0xf8) + scroll & 0xff) + 16;
+				const int x = (~k >> 2 & 0xf8) + scroll[1] + ram[0x4800 | k & 0x1f] & 0xff;
+				const int y = ((k << 3 & 0xf8) + _scroll & 0xff) + 16;
 				if (x > 8 && x < 240)
 					xfer8x8(layer[1], color, x | y << 8, k);
 			}
 		}
-		if ((mode & 0x20) != 0) {
+		if (mode & 0x20) {
 			const int color = colorbank[0] >> 4;
-			const int scroll = -(this->scroll[2] & 0xf8) + (this->scroll[2] + 1 & 7) + 10;
+			const int _scroll = -(scroll[2] & 0xf8) + (scroll[2] + 1 & 7) + 10;
 			for (int k = 0x4000; k < 0x4400; k++) {
-				const int x = (~k >> 2 & 0xf8) + this->scroll[3] + ram[0x4820 | k & 0x1f] & 0xff;
-				const int y = ((k << 3 & 0xf8) + scroll & 0xff) + 16;
+				const int x = (~k >> 2 & 0xf8) + scroll[3] + ram[0x4820 | k & 0x1f] & 0xff;
+				const int y = ((k << 3 & 0xf8) + _scroll & 0xff) + 16;
 				if (x > 8 && x < 240)
 					xfer8x8(layer[2], color, x | y << 8, k);
 			}
 		}
-		if ((mode & 0x40) != 0) {
+		if (mode & 0x40) {
 			const int color = colorbank[1];
-			const int scroll = -(this->scroll[4] & 0xf8) + (this->scroll[4] - 1 & 7) + 12;
+			const int _scroll = -(scroll[4] & 0xf8) + (scroll[4] - 1 & 7) + 12;
 			for (int k = 0x4400; k < 0x4800; k++) {
-				const int x = (~k >> 2 & 0xf8) + this->scroll[5] + ram[0x4840 | k & 0x1f] & 0xff;
-				const int y = ((k << 3 & 0xf8) + scroll & 0xff) + 16;
+				const int x = (~k >> 2 & 0xf8) + scroll[5] + ram[0x4840 | k & 0x1f] & 0xff;
+				const int y = ((k << 3 & 0xf8) + _scroll & 0xff) + 16;
 				if (x > 8 && x < 240)
 					xfer8x8(layer[3], color, x | y << 8, k);
 			}
 		}
 
 		// obj描画
-		if ((mode & 0x80) != 0) {
+		if (mode & 0x80) {
 			memset(layer[0], 0, sizeof(layer[0]));
 			drawObj(0x497c | mode << 5 & 0x80);
 			for (int k = 0x4900 | mode << 5 & 0x80, i = 0; i < 31; k += 4, i++) {
 				if (i >= 16 && i < 24)
 					continue;
-				const int collision = drawObj(k);
-				if ((collision & 8) != 0)
-					this->collision[i >= 16 ? 2 : i >> 3] |= 1 << (i & 7);
-				this->collision[3] |= collision & 7;
+				const int _collision = drawObj(k);
+				if (_collision & 8)
+					collision[i >= 16 ? 2 : i >> 3] |= 1 << (i & 7);
+				collision[3] |= _collision & 7;
 			}
 		}
 
 		// layer合成
 		for (int i = 0; i < 4; i++) {
 			const int index = pri[priority & 0x1f][i];
-			auto *layer = this->layer[index];
+			auto *_layer = layer[index];
 			const int table[] = {0x80, 0x10, 0x20, 0x40};
-			if ((mode & table[index]) == 0)
+			if (~mode & table[index])
 				continue;
 			p = 256 * 16 + 16;
 			for (int j = 0; j < 256; p += 256 - 224, j++)
 				for (int k = 0; k < 7; p += 32, k++) {
 					int px;
-					if (((px = layer[p]) & 7) != 0) data[p] = px;
-					if (((px = layer[p + 0x01]) & 7) != 0) data[p + 0x01] = px;
-					if (((px = layer[p + 0x02]) & 7) != 0) data[p + 0x02] = px;
-					if (((px = layer[p + 0x03]) & 7) != 0) data[p + 0x03] = px;
-					if (((px = layer[p + 0x04]) & 7) != 0) data[p + 0x04] = px;
-					if (((px = layer[p + 0x05]) & 7) != 0) data[p + 0x05] = px;
-					if (((px = layer[p + 0x06]) & 7) != 0) data[p + 0x06] = px;
-					if (((px = layer[p + 0x07]) & 7) != 0) data[p + 0x07] = px;
-					if (((px = layer[p + 0x08]) & 7) != 0) data[p + 0x08] = px;
-					if (((px = layer[p + 0x09]) & 7) != 0) data[p + 0x09] = px;
-					if (((px = layer[p + 0x0a]) & 7) != 0) data[p + 0x0a] = px;
-					if (((px = layer[p + 0x0b]) & 7) != 0) data[p + 0x0b] = px;
-					if (((px = layer[p + 0x0c]) & 7) != 0) data[p + 0x0c] = px;
-					if (((px = layer[p + 0x0d]) & 7) != 0) data[p + 0x0d] = px;
-					if (((px = layer[p + 0x0e]) & 7) != 0) data[p + 0x0e] = px;
-					if (((px = layer[p + 0x0f]) & 7) != 0) data[p + 0x0f] = px;
-					if (((px = layer[p + 0x10]) & 7) != 0) data[p + 0x10] = px;
-					if (((px = layer[p + 0x11]) & 7) != 0) data[p + 0x11] = px;
-					if (((px = layer[p + 0x12]) & 7) != 0) data[p + 0x12] = px;
-					if (((px = layer[p + 0x13]) & 7) != 0) data[p + 0x13] = px;
-					if (((px = layer[p + 0x14]) & 7) != 0) data[p + 0x14] = px;
-					if (((px = layer[p + 0x15]) & 7) != 0) data[p + 0x15] = px;
-					if (((px = layer[p + 0x16]) & 7) != 0) data[p + 0x16] = px;
-					if (((px = layer[p + 0x17]) & 7) != 0) data[p + 0x17] = px;
-					if (((px = layer[p + 0x18]) & 7) != 0) data[p + 0x18] = px;
-					if (((px = layer[p + 0x19]) & 7) != 0) data[p + 0x19] = px;
-					if (((px = layer[p + 0x1a]) & 7) != 0) data[p + 0x1a] = px;
-					if (((px = layer[p + 0x1b]) & 7) != 0) data[p + 0x1b] = px;
-					if (((px = layer[p + 0x1c]) & 7) != 0) data[p + 0x1c] = px;
-					if (((px = layer[p + 0x1d]) & 7) != 0) data[p + 0x1d] = px;
-					if (((px = layer[p + 0x1e]) & 7) != 0) data[p + 0x1e] = px;
-					if (((px = layer[p + 0x1f]) & 7) != 0) data[p + 0x1f] = px;
+					(px = _layer[p]) & 7 && (data[p] = px);
+					(px = _layer[p + 0x01]) & 7 && (data[p + 0x01] = px);
+					(px = _layer[p + 0x02]) & 7 && (data[p + 0x02] = px);
+					(px = _layer[p + 0x03]) & 7 && (data[p + 0x03] = px);
+					(px = _layer[p + 0x04]) & 7 && (data[p + 0x04] = px);
+					(px = _layer[p + 0x05]) & 7 && (data[p + 0x05] = px);
+					(px = _layer[p + 0x06]) & 7 && (data[p + 0x06] = px);
+					(px = _layer[p + 0x07]) & 7 && (data[p + 0x07] = px);
+					(px = _layer[p + 0x08]) & 7 && (data[p + 0x08] = px);
+					(px = _layer[p + 0x09]) & 7 && (data[p + 0x09] = px);
+					(px = _layer[p + 0x0a]) & 7 && (data[p + 0x0a] = px);
+					(px = _layer[p + 0x0b]) & 7 && (data[p + 0x0b] = px);
+					(px = _layer[p + 0x0c]) & 7 && (data[p + 0x0c] = px);
+					(px = _layer[p + 0x0d]) & 7 && (data[p + 0x0d] = px);
+					(px = _layer[p + 0x0e]) & 7 && (data[p + 0x0e] = px);
+					(px = _layer[p + 0x0f]) & 7 && (data[p + 0x0f] = px);
+					(px = _layer[p + 0x10]) & 7 && (data[p + 0x10] = px);
+					(px = _layer[p + 0x11]) & 7 && (data[p + 0x11] = px);
+					(px = _layer[p + 0x12]) & 7 && (data[p + 0x12] = px);
+					(px = _layer[p + 0x13]) & 7 && (data[p + 0x13] = px);
+					(px = _layer[p + 0x14]) & 7 && (data[p + 0x14] = px);
+					(px = _layer[p + 0x15]) & 7 && (data[p + 0x15] = px);
+					(px = _layer[p + 0x16]) & 7 && (data[p + 0x16] = px);
+					(px = _layer[p + 0x17]) & 7 && (data[p + 0x17] = px);
+					(px = _layer[p + 0x18]) & 7 && (data[p + 0x18] = px);
+					(px = _layer[p + 0x19]) & 7 && (data[p + 0x19] = px);
+					(px = _layer[p + 0x1a]) & 7 && (data[p + 0x1a] = px);
+					(px = _layer[p + 0x1b]) & 7 && (data[p + 0x1b] = px);
+					(px = _layer[p + 0x1c]) & 7 && (data[p + 0x1c] = px);
+					(px = _layer[p + 0x1d]) & 7 && (data[p + 0x1d] = px);
+					(px = _layer[p + 0x1e]) & 7 && (data[p + 0x1e] = px);
+					(px = _layer[p + 0x1f]) & 7 && (data[p + 0x1f] = px);
 				}
 		}
 
@@ -707,102 +675,78 @@ struct TimeTunnel {
 
 	int xfer16x16(int dst, int src) {
 		const int idx = src >> 4 & 0x38;
-		int px, collision = 0;
+		int px, _collision = 0;
 
 		if ((dst & 0xff) == 0 || (dst & 0xff) >= 240)
-			return collision;
+			return _collision;
 		src = src << 8 & 0x7f00;
 		for (int i = 16; i != 0; dst += 256 - 16, dst -= (dst >= 0x11000) * 0x10000, --i)
 			for (int j = 16; j != 0; dst++, --j) {
-				if ((px = obj[src++]) == 0 || (dst & 0xff) < 16 || (dst & 0xff) >= 240)
+				if (!(px = obj[src++]) || (dst & 0xff) < 16 || (dst & 0xff) >= 240)
 					continue;
-				if (layer[0][dst] == 0)
-					layer[0][dst] = idx | px;
-				else
-					collision |= 8;
-				if ((mode & 0x10) != 0 && (layer[1][dst] & 7) != 0)
-					collision |= 1;
-				if ((mode & 0x20) != 0 && (layer[2][dst] & 7) != 0)
-					collision |= 2;
-				if ((mode & 0x40) != 0 && (layer[3][dst] & 7) != 0)
-					collision |= 4;
+				layer[0][dst] ? (_collision |= 8) : (layer[0][dst] = idx | px);
+				mode & 0x10 && layer[1][dst] & 7 && (_collision |= 1);
+				mode & 0x20 && layer[2][dst] & 7 && (_collision |= 2);
+				mode & 0x40 && layer[3][dst] & 7 && (_collision |= 4);
 			}
-		return collision;
+		return _collision;
 	}
 
 	int xfer16x16V(int dst, int src) {
 		const int idx = src >> 4 & 0x38;
-		int px, collision = 0;
+		int px, _collision = 0;
 
 		if ((dst & 0xff) == 0 || (dst & 0xff) >= 240)
-			return collision;
+			return _collision;
 		src = (src << 8 & 0x7f00) + 256 - 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src -= 32, dst -= (dst >= 0x11000) * 0x10000, --i)
 			for (int j = 16; j != 0; dst++, --j) {
-				if ((px = obj[src++]) == 0 || (dst & 0xff) < 16 || (dst & 0xff) >= 240)
+				if (!(px = obj[src++]) || (dst & 0xff) < 16 || (dst & 0xff) >= 240)
 					continue;
-				if (layer[0][dst] == 0)
-					layer[0][dst] = idx | px;
-				else
-					collision |= 8;
-				if ((mode & 0x10) != 0 && (layer[1][dst] & 7) != 0)
-					collision |= 1;
-				if ((mode & 0x20) != 0 && (layer[2][dst] & 7) != 0)
-					collision |= 2;
-				if ((mode & 0x40) != 0 && (layer[3][dst] & 7) != 0)
-					collision |= 4;
+				layer[0][dst] ? (_collision |= 8) : (layer[0][dst] = idx | px);
+				mode & 0x10 && layer[1][dst] & 7 && (_collision |= 1);
+				mode & 0x20 && layer[2][dst] & 7 && (_collision |= 2);
+				mode & 0x40 && layer[3][dst] & 7 && (_collision |= 4);
 			}
-		return collision;
+		return _collision;
 	}
 
 	int xfer16x16H(int dst, int src) {
 		const int idx = src >> 4 & 0x38;
-		int px, collision = 0;
+		int px, _collision = 0;
 
 		if ((dst & 0xff) == 0 || (dst & 0xff) >= 240)
-			return collision;
+			return _collision;
 		src = (src << 8 & 0x7f00) + 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src += 32, dst -= (dst >= 0x11000) * 0x10000, --i)
 			for (int j = 16; j != 0; dst++, --j) {
-				if ((px = obj[--src]) == 0 || (dst & 0xff) < 16 || (dst & 0xff) >= 240)
+				if (!(px = obj[--src]) || (dst & 0xff) < 16 || (dst & 0xff) >= 240)
 					continue;
-				if (layer[0][dst] == 0)
-					layer[0][dst] = idx | px;
-				else
-					collision |= 8;
-				if ((mode & 0x10) != 0 && (layer[1][dst] & 7) != 0)
-					collision |= 1;
-				if ((mode & 0x20) != 0 && (layer[2][dst] & 7) != 0)
-					collision |= 2;
-				if ((mode & 0x40) != 0 && (layer[3][dst] & 7) != 0)
-					collision |= 4;
+				layer[0][dst] ? (_collision |= 8) : (layer[0][dst] = idx | px);
+				mode & 0x10 && layer[1][dst] & 7 && (_collision |= 1);
+				mode & 0x20 && layer[2][dst] & 7 && (_collision |= 2);
+				mode & 0x40 && layer[3][dst] & 7 && (_collision |= 4);
 			}
-  		return collision;
+		return _collision;
 	}
 
 	int xfer16x16HV(int dst, int src) {
 		const int idx = src >> 4 & 0x38;
-		int px, collision = 0;
+		int px, _collision = 0;
 
 		if ((dst & 0xff) == 0 || (dst & 0xff) >= 240)
-			return collision;
+			return _collision;
 		src = (src << 8 & 0x7f00) + 256;
 		for (int i = 16; i != 0; dst += 256 - 16, dst -= (dst >= 0x11000) * 0x10000, --i)
 			for (int j = 16; j != 0; dst++, --j) {
-				if ((px = obj[--src]) == 0 || (dst & 0xff) < 16 || (dst & 0xff) >= 240)
+				if (!(px = obj[--src]) || (dst & 0xff) < 16 || (dst & 0xff) >= 240)
 					continue;
-				if (layer[0][dst] == 0)
-					layer[0][dst] = idx | px;
-				else
-					collision |= 8;
-				if ((mode & 0x10) != 0 && (layer[1][dst] & 7) != 0)
-					collision |= 1;
-				if ((mode & 0x20) != 0 && (layer[2][dst] & 7) != 0)
-					collision |= 2;
-				if ((mode & 0x40) != 0 && (layer[3][dst] & 7) != 0)
-					collision |= 4;
+				layer[0][dst] ? (_collision |= 8) : (layer[0][dst] = idx | px);
+				mode & 0x10 && layer[1][dst] & 7 && (_collision |= 1);
+				mode & 0x20 && layer[2][dst] & 7 && (_collision |= 2);
+				mode & 0x40 && layer[3][dst] & 7 && (_collision |= 4);
 			}
-		return collision;
+		return _collision;
 	}
 
 	void init(int rate) {

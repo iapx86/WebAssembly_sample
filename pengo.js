@@ -15,5 +15,5 @@ read('pengo.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zi
 	const RGB = zip.decompress('pr1633.78');
 	const COLOR = zip.decompress('pr1634.88');
 	const SND = zip.decompress('pr1635.51');
-	init(bufferSource, {BG, COLOR, OBJ, RGB, PRG, SND}).then();
+	return init(bufferSource, {BG, COLOR, OBJ, RGB, PRG, SND});
 });

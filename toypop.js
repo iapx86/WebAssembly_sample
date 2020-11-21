@@ -21,5 +21,5 @@ read('toypop.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(z
 	const BGCOLOR = zip.decompress('tp1-4.5l');
 	const OBJCOLOR = zip.decompress('tp1-5.2p');
 	const SND = zip.decompress('tp1-6.3d');
-	init(bufferSource, {PRG1, PRG2, PRG3, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR, SND}).then();
+	return init(bufferSource, {PRG1, PRG2, PRG3, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR, SND});
 });

@@ -16,5 +16,5 @@ read('grobda.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(z
 	const BGCOLOR = zip.decompress('gr1-5.4e');
 	const OBJCOLOR = zip.decompress('gr1-4.3l');
 	const SND = zip.decompress('gr1-3.3m');
-	init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2}).then();
+	return init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2});
 });

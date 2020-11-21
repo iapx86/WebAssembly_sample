@@ -5,6 +5,7 @@
 #ifndef AY_3_8910_H
 #define AY_3_8910_H
 
+#include <algorithm>
 #include <list>
 #include <mutex>
 #include <utility>
@@ -48,26 +49,20 @@ struct AY_3_8910 {
 
 	void write(int addr, int data, int timer = 0) {
 		ram[addr &= 0xf] = data;
-		if (addr >= 0xe)
-			return;
-		tmpwheel[timer].push_back({addr, data});
+		if (addr < 0xe)
+			tmpwheel[timer].push_back({addr, data});
 	}
 
 	void update() {
 		mutex.lock();
 		if (wheel.size() > resolution) {
-			while (!wheel.empty()) {
-				for (auto& e: wheel.front())
-					regwrite(e);
-				wheel.pop_front();
-			}
+			while (!wheel.empty())
+				for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { regwrite(e); }), wheel.pop_front();
 			count = sampleRate - 1;
 		}
-		for (auto& e: tmpwheel)
-			wheel.push_back(e);
+		wheel.insert(wheel.end(), tmpwheel.begin(), tmpwheel.end());
 		mutex.unlock();
-		for (auto& e: tmpwheel)
-			e.clear();
+		for_each(tmpwheel.begin(), tmpwheel.end(), [](list<pair<int, int>>& e) { e.clear(); });
 	}
 
 	void makeSound(float *data, uint32_t length) {
@@ -75,9 +70,7 @@ struct AY_3_8910 {
 			for (count += 60 * resolution; count >= sampleRate; count -= sampleRate)
 				if (!wheel.empty()) {
 					mutex.lock();
-					for (auto& e: wheel.front())
-						regwrite(e);
-					wheel.pop_front();
+					for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { regwrite(e); }), wheel.pop_front();
 					mutex.unlock();
 				}
 			const int nfreq = reg[6] & 0x1f, efreq = reg[11] | reg[12] << 8, etype = reg[13];
@@ -85,33 +78,21 @@ struct AY_3_8910 {
 			for (int j = 0; j < 3; j++) {
 				auto& ch = channel[j];
 				ch.freq = reg[j * 2] | reg[1 + j * 2] << 8 & 0xf00;
-				const int vol = (reg[8 + j] >> 4 & 1) != 0 ? evol : reg[8 + j] & 0xf;
-				data[i] += ((((ch.freq == 0) | reg[7] >> j | ch.output) & (reg[7] >> j + 3 | rng) & 1) * 2 - 1) * (vol ? pow(10, (vol - 15) / 10.0) : 0.0) * gain;
+				const int vol = reg[8 + j] >> 4 & 1 ? evol : reg[8 + j] & 0xf;
+				data[i] += (((!ch.freq | reg[7] >> j | ch.output) & (reg[7] >> j + 3 | rng) & 1) * 2 - 1) * (vol ? pow(10, (vol - 15) / 10.0) : 0.0) * gain;
 			}
 			for (cycles += rate; cycles >= sampleRate; cycles -= sampleRate) {
-				for (auto& ch: channel) {
-					if (++ch.count >= ch.freq) {
-						ch.count = 0;
-						ch.output = ~ch.output;
-					}
-				}
-				if (++ncount >= nfreq << 1) {
-					ncount = 0;
-					rng = (rng >> 16 ^ rng >> 13 ^ 1) & 1 | rng << 1;
-				}
-				if (++ecount >= efreq) {
-					ecount = 0;
-					step += ((step < 16) | etype >> 3 & ~etype & 1) - (step >= 47) * 32;
-				}
+				for (auto& ch: channel)
+					++ch.count >= ch.freq && (ch.output = ~ch.output, ch.count = 0);
+				++ncount >= nfreq << 1 && (rng = (rng >> 16 ^ rng >> 13 ^ 1) & 1 | rng << 1, ncount = 0);
+				++ecount >= efreq && (step += ((step < 16) | etype >> 3 & ~etype & 1) - (step >= 47) * 32, ecount = 0);
 			}
 		}
 	}
 
 	void regwrite(pair<int, int>& e) {
 		int addr = e.first, data = e.second;
-		reg[addr] = data;
-		if (addr == 13)
-			step = 0;
+		reg[addr] = data, addr == 13 && (step = 0);
 	}
 };
 

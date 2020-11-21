@@ -24,7 +24,6 @@ struct CrushRoller {
 	static PacManSound *sound0;
 
 	bool fReset = false;
-	bool fTest = false;
 	bool fDIPSwitchChanged = true;
 	int fCoin = 0;
 	int fStart1P = 0;
@@ -57,14 +56,12 @@ struct CrushRoller {
 			else if (range(page, 0x40, 0x47, 0xa0)) {
 				cpu.memorymap[page].base = ram + (page & 7) * 0x100;
 				cpu.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0x48, 0x48, 0xa3))
+			} else if (range(page, 0x48, 0x48, 0xa3))
 				cpu.memorymap[page].read = [&](int addr) { return 0xbf; };
 			else if (range(page, 0x4c, 0x4f, 0xa0)) {
 				cpu.memorymap[page].base = ram + (8 | page & 3) * 0x100;
 				cpu.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0x50, 0x50, 0xaf)) {
+			} else if (range(page, 0x50, 0x50, 0xaf)) {
 				cpu.memorymap[page].read = [&](int addr) -> int {
 					const uint8_t table1[] = {0x00, 0xc0, 0x00, 0x40, 0xc0, 0x40, 0x00, 0xc0, 0x00, 0x40, 0x00, 0xc0, 0x00, 0x40,
 							   0xc0, 0x40, 0x00, 0xc0, 0x00, 0x40, 0x00, 0xc0, 0x00, 0x40, 0xc0, 0x40, 0x00, 0xc0, 0x00, 0x40};
@@ -77,7 +74,7 @@ struct CrushRoller {
 						return in[1];
 					case 2:
 						if (fProtectEnable)
-							return  in[2] & ~0xc0 | table1[protect_index];
+							return in[2] & ~0xc0 | table1[protect_index];
 						switch (addr & 0x3f) {
 						case 0x01:
 						case 0x04:
@@ -133,7 +130,7 @@ struct CrushRoller {
 				};
 			}
 		for (int page = 0; page < 0x100; page++)
-			cpu.iomap[page].write = [&](int addr, int data) { (addr & 0xff) == 0 && (vector = data); };
+			cpu.iomap[page].write = [&](int addr, int data) { !(addr & 0xff) && (vector = data); };
 
 		// Videoの初期化
 		convertRGB();
@@ -183,19 +180,9 @@ struct CrushRoller {
 	}
 
 	CrushRoller *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			in[0] &= ~(1 << 5), --fCoin;
-		else
-			in[0] |= 1 << 5;
-		if (fStart1P)
-			in[1] &= ~(1 << 5), --fStart1P;
-		else
-			in[1] |= 1 << 5;
-		if (fStart2P)
-			in[1] &= ~(1 << 6), --fStart2P;
-		else
-			in[1] |= 1 << 6;
+		in[0] = in[0] & ~(1 << 5) | !fCoin << 5;
+		in[1] = in[1] & ~0x60 | !fStart1P << 5 | !fStart2P << 6;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		return this;
 	}
 
@@ -212,37 +199,23 @@ struct CrushRoller {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 0) | 1 << 3, in[1] = in[1] & ~(1 << 0) | 1 << 3;
-		else
-			in[0] |= 1 << 0, in[1] |= 1 << 0;
+		in[0] = in[0] & ~(1 << 0) | fDown << 3 | !fDown << 0;
+		in[1] = in[1] & ~(1 << 0) | fDown << 3 | !fDown << 0;
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 2) | 1 << 1, in[1] = in[1] & ~(1 << 2) | 1 << 1;
-		else
-			in[0] |= 1 << 2, in[1] |= 1 << 2;
+		in[0] = in[0] & ~(1 << 2) | fDown << 1 | !fDown << 2;
+		in[1] = in[1] & ~(1 << 2) | fDown << 1 | !fDown << 2;
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 3) | 1 << 0, in[1] = in[1] & ~(1 << 3) | 1 << 0;
-		else
-			in[0] |= 1 << 3, in[1] |= 1 << 3;
+		in[0] = in[0] & ~(1 << 3) | fDown << 0 | !fDown << 3;
+		in[1] = in[1] & ~(1 << 3) | fDown << 0 | !fDown << 3;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			in[0] = in[0] & ~(1 << 1) | 1 << 2, in[1] = in[1] & ~(1 << 1) | 1 << 2;
-		else
-			in[0] |= 1 << 1, in[1] |= 1 << 1;
-	}
-
-	void triggerA(bool fDown) {
-	}
-
-	void triggerB(bool fDown) {
+		in[0] = in[0] & ~(1 << 1) | fDown << 2 | !fDown << 1;
+		in[1] = in[1] & ~(1 << 1) | fDown << 2 | !fDown << 1;
 	}
 
 	void convertRGB() {
@@ -298,25 +271,20 @@ struct CrushRoller {
 	void makeBitmap(int *data) {
 		// bg描画
 		int p = 256 * 8 * 4 + 232;
-		int k = 0x40;
-		for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
+		for (int k = 0x40, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
 				xfer8x8(data, p, k);
 		p = 256 * 8 * 36 + 232;
-		k = 2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 		p = 256 * 8 * 37 + 232;
-		k = 0x22;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x22, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 		p = 256 * 8 * 2 + 232;
-		k = 0x3c2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x3c2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 		p = 256 * 8 * 3 + 232;
-		k = 0x3e2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x3e2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 
 		// obj描画
@@ -426,19 +394,18 @@ struct CrushRoller {
 			src = src << 6 & 0x3f00;
 			for (int i = 16; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
-		}
-		else {
+		} else {
 			src = src << 6 & 0x3f00;
 			for (int i = h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
 		}
 	}
@@ -453,19 +420,18 @@ struct CrushRoller {
 			src = (src << 6 & 0x3f00) + 256 - 16;
 			for (int i = 16; i != 0; dst += 256 - 16, src -= 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
-		}
-		else {
+		} else {
 			src = (src << 6 & 0x3f00) + 256 - 16;
 			for (int i = h; i != 0; dst += 256 - 16, src -= 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, src -= 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
 		}
 	}
@@ -480,19 +446,18 @@ struct CrushRoller {
 			src = (src << 6 & 0x3f00) + 16;
 			for (int i = 16; i != 0; dst += 256 - 16, src += 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
-		}
-		else {
+		} else {
 			src = (src << 6 & 0x3f00) + 16;
 			for (int i = h; i != 0; dst += 256 - 16, src += 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, src += 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
 		}
 	}
@@ -507,19 +472,18 @@ struct CrushRoller {
 			src = (src << 6 & 0x3f00) + 256;
 			for (int i = 16; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
-		}
-		else {
+		} else {
 			src = (src << 6 & 0x3f00) + 256;
 			for (int i = h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
 		}
 	}

@@ -28,7 +28,6 @@ struct Pengo {
 	static PacManSound *sound0;
 
 	bool fReset = false;
-	bool fTest = false;
 	bool fDIPSwitchChanged = true;
 	int fCoin = 0;
 	int fStart1P = 0;
@@ -147,19 +146,9 @@ struct Pengo {
 	}
 
 	Pengo *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			in[3] &= ~(1 << 4), --fCoin;
-		else
-			in[3] |= 1 << 4;
-		if (fStart1P)
-			in[2] &= ~(1 << 5), --fStart1P;
-		else
-			in[2] |= 1 << 5;
-		if (fStart2P)
-			in[2] &= ~(1 << 6), --fStart2P;
-		else
-			in[2] |= 1 << 6;
+		in[3] = in[3] & ~(1 << 4) | !fCoin << 4;
+		in[2] = in[2] & ~0x60 | !fStart1P << 5 | !fStart2P << 6;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		return this;
 	}
 
@@ -176,41 +165,28 @@ struct Pengo {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			in[3] = in[3] & ~(1 << 0) | 1 << 3, in[2] = in[2] & ~(1 << 0) | 1 << 3;
-		else
-			in[3] |= 1 << 0, in[2] |= 1 << 0;
+		in[3] = in[3] & ~(1 << 0) | fDown << 1 | !fDown << 0;
+		in[2] = in[2] & ~(1 << 0) | fDown << 1 | !fDown << 0;
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			in[3] = in[3] & ~(1 << 3) | 1 << 2, in[2] = in[2] & ~(1 << 3) | 1 << 2;
-		else
-			in[3] |= 1 << 3, in[2] |= 1 << 3;
+		in[3] = in[3] & ~(1 << 3) | fDown << 2 | !fDown << 3;
+		in[2] = in[2] & ~(1 << 3) | fDown << 2 | !fDown << 3;
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			in[3] = in[3] & ~(1 << 1) | 1 << 0, in[2] = in[2] & ~(1 << 1) | 1 << 0;
-		else
-			in[3] |= 1 << 1, in[2] |= 1 << 1;
+		in[3] = in[3] & ~(1 << 1) | fDown << 0 | !fDown << 1;
+		in[2] = in[2] & ~(1 << 1) | fDown << 0 | !fDown << 1;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			in[3] = in[3] & ~(1 << 2) | 1 << 3, in[2] = in[2] & ~(1 << 2) | 1 << 3;
-		else
-			in[3] |= 1 << 2, in[2] |= 1 << 2;
+		in[3] = in[3] & ~(1 << 2) | fDown << 3 | !fDown << 2;
+		in[2] = in[2] & ~(1 << 2) | fDown << 3 | !fDown << 2;
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			in[3] &= ~(1 << 7), in[2] &= ~(1 << 7);
-		else
-			in[3] |= 1 << 7, in[2] |= 1 << 7;
-	}
-
-	void triggerB(bool fDown) {
+		in[3] = in[3] & ~(1 << 7) | !fDown << 7;
+		in[2] = in[2] & ~(1 << 7) | !fDown << 7;
 	}
 
 	void convertRGB() {
@@ -266,25 +242,20 @@ struct Pengo {
 	void makeBitmap(int *data) {
 		// bg描画
 		int p = 256 * 8 * 4 + 232;
-		int k = 0x40;
-		for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
+		for (int k = 0x40, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
 				xfer8x8(data, p, k);
 		p = 256 * 8 * 36 + 232;
-		k = 2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 		p = 256 * 8 * 37 + 232;
-		k = 0x22;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x22, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 		p = 256 * 8 * 2 + 232;
-		k = 0x3c2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x3c2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 		p = 256 * 8 * 3 + 232;
-		k = 0x3e2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x3e2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k);
 
 		// obj描画
@@ -394,19 +365,18 @@ struct Pengo {
 			src = src << 6 & 0x3f00 | ram[0x1047] << 14;
 			for (int i = 16; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
-		}
-		else {
+		} else {
 			src = src << 6 & 0x3f00 | ram[0x1047] << 14;
 			for (int i = h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
 		}
 	}
@@ -421,19 +391,18 @@ struct Pengo {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 256 - 16;
 			for (int i = 16; i != 0; dst += 256 - 16, src -= 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
-		}
-		else {
+		} else {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 256 - 16;
 			for (int i = h; i != 0; dst += 256 - 16, src -= 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, src -= 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]) != 0)
+					if ((px = color[idx | obj[src++]]))
 						data[dst] = px;
 		}
 	}
@@ -448,19 +417,18 @@ struct Pengo {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 16;
 			for (int i = 16; i != 0; dst += 256 - 16, src += 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
-		}
-		else {
+		} else {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 16;
 			for (int i = h; i != 0; dst += 256 - 16, src += 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, src += 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
 		}
 	}
@@ -475,19 +443,18 @@ struct Pengo {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 256;
 			for (int i = 16; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
-		}
-		else {
+		} else {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 256;
 			for (int i = h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]) != 0)
+					if ((px = color[idx | obj[--src]]))
 						data[dst] = px;
 		}
 	}

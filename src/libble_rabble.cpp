@@ -88,11 +88,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE void right(int fDown) {
 	game->right(fDown != 0);
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE void down(bool fDown) {
+extern "C" EMSCRIPTEN_KEEPALIVE void down(int fDown) {
 	game->down(fDown != 0);
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE void left(bool fDown) {
+extern "C" EMSCRIPTEN_KEEPALIVE void left(int fDown) {
 	game->left(fDown != 0);
 }
 
@@ -104,19 +104,15 @@ extern "C" EMSCRIPTEN_KEEPALIVE void right2(int fDown) {
 	game->right2(fDown != 0);
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE void down2(bool fDown) {
+extern "C" EMSCRIPTEN_KEEPALIVE void down2(int fDown) {
 	game->down2(fDown != 0);
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE void left2(bool fDown) {
+extern "C" EMSCRIPTEN_KEEPALIVE void left2(int fDown) {
 	game->left2(fDown != 0);
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(bool fDown) {
+extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 	game->triggerA(fDown != 0);
-}
-
-extern "C" EMSCRIPTEN_KEEPALIVE void triggerB(bool fDown) {
-	game->triggerB(fDown != 0);
 }
 

@@ -122,8 +122,7 @@ export function init(bufferSource, roms) {
 		gl.enableVertexAttribArray(aTextureCoordHandle);
 		source = audioCtx.createBufferSource(), scriptNode = audioCtx.createScriptProcessor(512, 1, 1);
 		scriptNode.onaudioprocess = ({outputBuffer}) => outputBuffer.getChannelData(0).set(new Float32Array(memory, instance.exports.sound(), 512));
-		source.connect(scriptNode);
-		scriptNode.connect(audioCtx.destination);
+		source.connect(scriptNode).connect(audioCtx.destination);
 		source.start();
 		button = new Image();
 		(button.update = () => {

@@ -171,7 +171,7 @@ struct Z80 : Cpu {
 		case 0x1f: // RRA
 			return v = f, f = f & ~0x13 | a & 1, void(a = a >> 1 | v << 7 & 0x80);
 		case 0x20: // JR NZ,e
-			return jr((f & 0x40) == 0);
+			return jr(!(f & 0x40));
 		case 0x21: // LD HL,nn
 			return split(l, h, fetch16());
 		case 0x22: // LD (nn),HL
@@ -203,7 +203,7 @@ struct Z80 : Cpu {
 		case 0x2f: // CPL
 			return f |= 0x12, void(a = ~a & 0xff);
 		case 0x30: // JR NC,e
-			return jr((f & 1) == 0);
+			return jr(!(f & 1));
 		case 0x31: // LD SP,nn
 			return void(sp = fetch16());
 		case 0x32: // LD (nn),A
@@ -491,15 +491,15 @@ struct Z80 : Cpu {
 		case 0xbf: // CP A
 			return void(sub8(a, a));
 		case 0xc0: // RET NZ
-			return ret((f & 0x40) == 0);
+			return ret(!(f & 0x40));
 		case 0xc1: // POP BC
 			return split(c, b, pop16());
 		case 0xc2: // JP NZ,nn
-			return jp((f & 0x40) == 0);
+			return jp(!(f & 0x40));
 		case 0xc3: // JP nn
 			return jp(true);
 		case 0xc4: // CALL NZ,nn
-			return call((f & 0x40) == 0);
+			return call(!(f & 0x40));
 		case 0xc5: // PUSH BC
 			return push16(c | b << 8);
 		case 0xc6: // ADD A,n
@@ -523,15 +523,15 @@ struct Z80 : Cpu {
 		case 0xcf: // RST 08h
 			return rst(0x08);
 		case 0xd0: // RET NC
-			return ret((f & 1) == 0);
+			return ret(!(f & 1));
 		case 0xd1: // POP DE
 			return split(e, d, pop16());
 		case 0xd2: // JP NC,nn
-			return jp((f & 1) == 0);
+			return jp(!(f & 1));
 		case 0xd3: // OUT n,A
 			return iowrite(a, fetch(), a);
 		case 0xd4: // CALL NC,nn
-			return call((f & 1) == 0);
+			return call(!(f & 1));
 		case 0xd5: // PUSH DE
 			return push16(e | d << 8);
 		case 0xd6: // SUB n
@@ -555,15 +555,15 @@ struct Z80 : Cpu {
 		case 0xdf: // RST 18h
 			return rst(0x18);
 		case 0xe0: // RET PO
-			return ret((f & 4) == 0);
+			return ret(!(f & 4));
 		case 0xe1: // POP HL
 			return split(l, h, pop16());
 		case 0xe2: // JP PO,nn
-			return jp((f & 4) == 0);
+			return jp(!(f & 4));
 		case 0xe3: // EX (SP),HL
 			return v = l | h << 8, split(l, h, pop16()), push16(v);
 		case 0xe4: // CALL PO,nn
-			return call((f & 4) == 0);
+			return call(!(f & 4));
 		case 0xe5: // PUSH HL
 			return push16(l | h << 8);
 		case 0xe6: // AND n
@@ -587,15 +587,15 @@ struct Z80 : Cpu {
 		case 0xef: // RST 28h
 			return rst(0x28);
 		case 0xf0: // RET P
-			return ret((f & 0x80) == 0);
+			return ret(!(f & 0x80));
 		case 0xf1: // POP AF
 			return split(f, a, pop16());
 		case 0xf2: // JP P,nn
-			return jp((f & 0x80) == 0);
+			return jp(!(f & 0x80));
 		case 0xf3: // DI
 			return void(iff = 0);
 		case 0xf4: // CALL P,nn
-			return call((f & 0x80) == 0);
+			return call(!(f & 0x80));
 		case 0xf5: // PUSH AF
 			return push16(f | a << 8);
 		case 0xf6: // OR n
@@ -1389,7 +1389,7 @@ struct Z80 : Cpu {
 		case 0x44: // NEG
 			return void(a = neg8(a));
 		case 0x45: // RETN
-			return iff = (iff & 2) != 0 ? 3 : 0, ret(true);
+			return iff = iff & 2 ? 3 : 0, ret(true);
 		case 0x46: // IM 0
 			return void(im = 0);
 		case 0x47: // LD I,A
@@ -1475,21 +1475,21 @@ struct Z80 : Cpu {
 		case 0xab: // OUTD
 			return outd();
 		case 0xb0: // LDIR
-			return ldi(), void((f & 4) != 0 && (pc = pc - 2 & 0xffff));
+			return ldi(), void(f & 4 && (pc = pc - 2 & 0xffff));
 		case 0xb1: // CPIR
 			return cpi(), void((f & 0x44) == 4 && (pc = pc - 2 & 0xffff));
 		case 0xb2: // INIR
-			return ini(), void((f & 0x40) == 0 && (pc = pc - 2 & 0xffff));
+			return ini(), void(~f & 0x40 && (pc = pc - 2 & 0xffff));
 		case 0xb3: // OTIR
-			return outi(), void((f & 0x40) == 0 && (pc = pc - 2 & 0xffff));
+			return outi(), void(~f & 0x40 && (pc = pc - 2 & 0xffff));
 		case 0xb8: // LDDR
-			return ldd(), void((f & 4) != 0 && (pc = pc - 2 & 0xffff));
+			return ldd(), void(f & 4 && (pc = pc - 2 & 0xffff));
 		case 0xb9: // CPDR
 			return cpd(), void((f & 0x44) == 4 && (pc = pc - 2 & 0xffff));
 		case 0xba: // INDR
-			return ind(), void((f & 0x40) == 0 && (pc = pc - 2 & 0xffff));
+			return ind(), void(~f & 0x40 && (pc = pc - 2 & 0xffff));
 		case 0xbb: // OTDR
-			return outd(), void((f & 0x40) == 0 && (pc = pc - 2 & 0xffff));
+			return outd(), void(~f & 0x40 && (pc = pc - 2 & 0xffff));
 		default:
 			undefsize = 2;
 			if (undef)
@@ -1842,19 +1842,18 @@ struct Z80 : Cpu {
 
 	void daa() {
 		int r = a;
-		if ((f & 2) != 0) {
-			if ((f & 0x10) != 0 && (r & 0x0f) > 5 || (r & 0x0f) > 9)
+		if (f & 2) {
+			if (f & 0x10 && (r & 0x0f) > 5 || (r & 0x0f) > 9)
 				r -= 6, f |= 0x10;
-			if ((f & 1) != 0 && (r & 0xf0) > 0x50 || (r & 0xf0) > 0x90)
+			if (f & 1 && (r & 0xf0) > 0x50 || (r & 0xf0) > 0x90)
 				r -= 0x60, f |= 1;
-		}
-		else {
-			if ((f & 0x10) != 0 && (r & 0x0f) < 4 || (r & 0x0f) > 9) {
+		} else {
+			if (f & 0x10 && (r & 0x0f) < 4 || (r & 0x0f) > 9) {
 				if ((r += 6) >= 0x100)
 					f |= 1;
 				f |= 0x10;
 			}
-			if ((f & 1) != 0 && (r & 0xf0) < 0x40 || (r & 0xf0) > 0x90)
+			if (f & 1 && (r & 0xf0) < 0x40 || (r & 0xf0) > 0x90)
 				r += 0x60, f |= 1;
 		}
 		a = r &= 0xff, f = f & ~0xc4 | fLogic[r];

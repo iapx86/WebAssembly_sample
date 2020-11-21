@@ -19,5 +19,5 @@ read('drgnbstr.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const BLUE = zip.decompress('db1-3.2r');
 	const BGCOLOR = zip.decompress('db1-4.5n');
 	const OBJCOLOR = zip.decompress('db1-5.6n');
-	init(bufferSource, {PRG1, PRG2, PRG2I, FG, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR}).then();
+	return init(bufferSource, {PRG1, PRG2, PRG2I, FG, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR});
 });

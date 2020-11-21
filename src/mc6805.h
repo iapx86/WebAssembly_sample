@@ -33,13 +33,13 @@ struct MC6805 : Cpu {
 	}
 
 	bool interrupt() {
-		if (!Cpu::interrupt() || (ccr & 8) != 0)
+		if (!Cpu::interrupt() || ccr & 8)
 			return false;
 		return psh16(pc), psh(x), psh(a), psh(ccr), ccr |= 8, pc = read16(0x7fa) & 0x7ff, true;
 	}
 
 	bool interrupt(int vector) {
-		if (!Cpu::interrupt() || (ccr & 8) != 0)
+		if (!Cpu::interrupt() || ccr & 8)
 			return false;
 		psh16(pc), psh(x), psh(a), psh(ccr), ccr |= 8;
 		switch (vector) {
@@ -58,35 +58,35 @@ struct MC6805 : Cpu {
 		case 0x00: // BRSET0
 			return bcc(((ccr = ccr & ~1 | read(fetch()) & 1) & 1) != 0);
 		case 0x01: // BRCLR0
-			return bcc(((ccr = ccr & ~1 | read(fetch()) & 1) & 1) == 0);
+			return bcc(!((ccr = ccr & ~1 | read(fetch()) & 1) & 1));
 		case 0x02: // BRSET1
 			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 1 & 1) & 1) != 0);
 		case 0x03: // BRCLR1
-			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 1 & 1) & 1) == 0);
+			return bcc(!((ccr = ccr & ~1 | read(fetch()) >> 1 & 1) & 1));
 		case 0x04: // BRSET2
 			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 2 & 1) & 1) != 0);
 		case 0x05: // BRCLR2
-			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 2 & 1) & 1) == 0);
+			return bcc(!((ccr = ccr & ~1 | read(fetch()) >> 2 & 1) & 1));
 		case 0x06: // BRSET3
 			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 3 & 1) & 1) != 0);
 		case 0x07: // BRCLR3
-			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 3 & 1) & 1) == 0);
+			return bcc(!((ccr = ccr & ~1 | read(fetch()) >> 3 & 1) & 1));
 		case 0x08: // BRSET4
 			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 4 & 1) & 1) != 0);
 		case 0x09: // BRCLR4
-			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 4 & 1) & 1) == 0);
+			return bcc(!((ccr = ccr & ~1 | read(fetch()) >> 4 & 1) & 1));
 		case 0x0a: // BRSET5
 			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 5 & 1) & 1) != 0);
 		case 0x0b: // BRCLR5
-			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 5 & 1) & 1) == 0);
+			return bcc(!((ccr = ccr & ~1 | read(fetch()) >> 5 & 1) & 1));
 		case 0x0c: // BRSET6
 			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 6 & 1) & 1) != 0);
 		case 0x0d: // BRCLR6
-			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 6 & 1) & 1) == 0);
+			return bcc(!((ccr = ccr & ~1 | read(fetch()) >> 6 & 1) & 1));
 		case 0x0e: // BRSET7
 			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 7 & 1) & 1) != 0);
 		case 0x0f: // BRCLR7
-			return bcc(((ccr = ccr & ~1 | read(fetch()) >> 7 & 1) & 1) == 0);
+			return bcc(!((ccr = ccr & ~1 | read(fetch()) >> 7 & 1) & 1));
 		case 0x10: // BSET0
 			return ea = fetch(), write8(read(ea) | 1, ea);
 		case 0x11: // BCLR0
@@ -124,27 +124,27 @@ struct MC6805 : Cpu {
 		case 0x21: // BRN
 			return bcc(false);
 		case 0x22: // BHI
-			return bcc(((ccr >> 1 | ccr) & 1) == 0);
+			return bcc(!((ccr >> 1 | ccr) & 1));
 		case 0x23: // BLS
 			return bcc(((ccr >> 1 | ccr) & 1) != 0);
 		case 0x24: // BCC
-			return bcc((ccr & 1) == 0);
+			return bcc(!(ccr & 1));
 		case 0x25: // BLO(BCS)
 			return bcc((ccr & 1) != 0);
 		case 0x26: // BNE
-			return bcc((ccr & 2) == 0);
+			return bcc(!(ccr & 2));
 		case 0x27: // BEQ
 			return bcc((ccr & 2) != 0);
 		case 0x28: // BHCC
-			return bcc((ccr & 0x10) == 0);
+			return bcc(!(ccr & 0x10));
 		case 0x29: // BHCS
 			return bcc((ccr & 0x10) != 0);
 		case 0x2a: // BPL
-			return bcc((ccr & 4) == 0);
+			return bcc(!(ccr & 4));
 		case 0x2b: // BMI
 			return bcc((ccr & 4) != 0);
 		case 0x2c: // BMC
-			return bcc((ccr & 8) == 0);
+			return bcc(!(ccr & 8));
 		case 0x2d: // BMS
 			return bcc((ccr & 8) != 0);
 		case 0x2e: // BIL

@@ -13,5 +13,5 @@ read('sfposeid.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const PRG3 = zip.decompress('a14-12');
 	const GFX = Uint8Array.concat(...['a14-06.4', 'a14-07.5', 'a14-08.9', 'a14-09.10'].map(e => zip.decompress(e)));
 	const PRI = zip.decompress('eb16.22');
-	init(bufferSource, {PRG1, PRG2, PRG3, GFX, PRI}).then();
+	return init(bufferSource, {PRG1, PRG2, PRG3, GFX, PRI});
 });

@@ -97,7 +97,7 @@ struct ChacknPop {
 			case 0x07:
 				return sound1->write(psg[1].addr, data);
 			case 0x0c:
-				if (((data ^ mode) & 4) != 0) {
+				if ((data ^ mode) & 4) {
 					const int bank = data << 4 & 0x40;
 					for (int i = 0; i < 0x40; i++)
 						cpu.memorymap[0xc0 + i].base = vram + (bank + i) * 0x100;
@@ -133,9 +133,9 @@ struct ChacknPop {
 		mcu.memorymap[0].write = [&](int addr, int data) {
 			if (addr >= 0x80)
 				return;
-			if (addr == 1 && (~ram2[1] & data & 2) != 0)
+			if (addr == 1 && ~ram2[1] & data & 2)
 				mcu_flag &= ~1, mcu.irq = false;
-			if (addr == 1 && (ram2[1] & ~data & 4) != 0)
+			if (addr == 1 && ram2[1] & ~data & 4)
 				mcu_result = ram2[0], mcu_flag |= 2;
 			ram2[addr] = data;
 		};
@@ -212,19 +212,8 @@ struct ChacknPop {
 	}
 
 	ChacknPop *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			in[2] &= ~(1 << 2), --fCoin;
-		else
-			in[2] |= 1 << 2;
-		if (fStart1P)
-			in[2] &= ~(1 << 4), --fStart1P;
-		else
-			in[2] |= 1 << 4;
-		if (fStart2P)
-			in[2] &= ~(1 << 5), --fStart2P;
-		else
-			in[2] |= 1 << 5;
+		in[2] = in[2] & ~0x34 | !fCoin << 2 | !fStart1P << 4 | !fStart2P << 5;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		return this;
 	}
 
@@ -241,45 +230,27 @@ struct ChacknPop {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 3) | 1 << 2;
-		else
-			in[1] |= 1 << 3;
+		in[1] = in[1] & ~(1 << 3) | fDown << 2 | !fDown << 3;
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 1) | 1 << 0;
-		else
-			in[1] |= 1 << 1;
+		in[1] = in[1] & ~(1 << 1) | fDown << 0 | !fDown << 1;
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 2) | 1 << 3;
-		else
-			in[1] |= 1 << 2;
+		in[1] = in[1] & ~(1 << 2) | fDown << 3 | !fDown << 2;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 0) | 1 << 1;
-		else
-			in[1] |= 1 << 0;
+		in[1] = in[1] & ~(1 << 0) | fDown << 1 | !fDown << 0;
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			in[1] &= ~(1 << 4);
-		else
-			in[1] |= 1 << 4;
+		in[1] = in[1] & ~(1 << 4) | !fDown << 4;
 	}
 
 	void triggerB(bool fDown) {
-		if (fDown)
-			in[1] &= ~(1 << 5);
-		else
-			in[1] |= 1 << 5;
+		in[1] = in[1] & ~(1 << 5) | !fDown << 5;
 	}
 
 	void convertRGB() {
@@ -317,8 +288,7 @@ struct ChacknPop {
 	void makeBitmap(int *data) {
 		// bg描画
 		int p = 256 * 8 * 2 + 232;
-		int k = 0x840;
-		for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
+		for (int k = 0x840, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
 				xfer8x8(data, p, k);
 
@@ -343,7 +313,8 @@ struct ChacknPop {
 		}
 
 		// bitmap描画
-		for (int p = 256 * 8 * 33 + 16, k = 0x0200, i = 256 >> 3; i != 0; --i) {
+		p = 256 * 8 * 33 + 16;
+		for (int k = 0x0200, i = 256 >> 3; i != 0; --i) {
 			for (int j = 224 >> 2; j != 0; k += 0x80, p += 4, --j) {
 				int p0 = vram[k], p1 = vram[0x2000 + k], p2 = vram[0x4000 + k], p3 = vram[0x6000 + k];
 				data[p + 7 * 256] = rgb[p0 << 9 & 0x200 | p2 << 8 & 0x100 | p1 << 7 & 0x80 | p3 << 6 & 0x40 | data[p + 7 * 256]];
@@ -388,7 +359,7 @@ struct ChacknPop {
 	}
 
 	void xfer8x8(int *data, int p, int k) {
-		const int q = (ram[k] ^ ((mode & 0x20) != 0 && ram[k] >= 0xc0 ? 0x140 : 0) | mode << 2 & 0x200) << 6;
+		const int q = (ram[k] ^ (mode & 0x20 && ram[k] >= 0xc0 ? 0x140 : 0) | mode << 2 & 0x200) << 6;
 		const int idx = (ram[k] == 0x74 ? ram[0xc0b] : ram[0xc01]) << 2 & 0x1c | 0x20;
 
 		data[p + 0x000] = idx | bg[q | 0x00];
@@ -466,7 +437,7 @@ struct ChacknPop {
 		src = src << 8 & 0x3f00 | src << 5 & 0xc000;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[src++]) != 0)
+				if ((px = obj[src++]))
 					data[dst] = idx | px;
 	}
 
@@ -479,7 +450,7 @@ struct ChacknPop {
 		src = (src << 8 & 0x3f00 | src << 5 & 0xc000) + 256 - 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src -= 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[src++]) != 0)
+				if ((px = obj[src++]))
 					data[dst] = idx | px;
 	}
 
@@ -492,7 +463,7 @@ struct ChacknPop {
 		src = (src << 8 & 0x3f00 | src << 5 & 0xc000) + 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src += 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[--src]) != 0)
+				if ((px = obj[--src]))
 					data[dst] = idx | px;
 	}
 
@@ -505,7 +476,7 @@ struct ChacknPop {
 		src = (src << 8 & 0x3f00 | src << 5 & 0xc000) + 256;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = obj[--src]) != 0)
+				if ((px = obj[--src]))
 					data[dst] = idx | px;
 	}
 

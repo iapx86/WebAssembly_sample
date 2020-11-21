@@ -96,7 +96,7 @@ struct Cpu {
 			for (int j = 0; j < n; j++) {
 				if (!cpu[j]->fActive || cpu[j]->check_interrupt && cpu[j]->check_interrupt() || cpu[j]->fSuspend)
 					continue;
-				if (cpu[j]->breakpoint && (cpu[j]->breakpointmap[cpu[j]->pc >> 5] & 1 << (cpu[j]->pc & 0x1f)) != 0)
+				if (cpu[j]->breakpoint && cpu[j]->breakpointmap[cpu[j]->pc >> 5] >> (cpu[j]->pc & 0x1f) & 1)
 					cpu[j]->breakpoint(cpu[j]->pc);
 				cpu[j]->_execute();
 			}
@@ -108,7 +108,7 @@ struct Cpu {
 				break;
 			if (check_interrupt && check_interrupt() || fSuspend)
 				continue;
-			if (breakpoint && (breakpointmap[pc >> 5] & 1 << (pc & 0x1f)) != 0)
+			if (breakpoint && breakpointmap[pc >> 5] >> (pc & 0x1f) & 1)
 				breakpoint(pc);
 			_execute();
 		}

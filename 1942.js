@@ -20,5 +20,5 @@ read('1942.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip
 	const FGCOLOR = zip.decompress('sb-0.f1');
 	const BGCOLOR = zip.decompress('sb-4.d6');
 	const OBJCOLOR = zip.decompress('sb-8.k3');
-	init(bufferSource, {PRG1, PRG2, FG, BG, OBJ, RED, GREEN, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR}).then();
+	return init(bufferSource, {PRG1, PRG2, FG, BG, OBJ, RED, GREEN, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR});
 });

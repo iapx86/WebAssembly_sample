@@ -15,7 +15,7 @@ struct VLM5030 {
 	static int16_t table_k0[], table_k1[], table_k2_3[], table_k4_9[];
 
 	uint8_t *base;
-	int length;
+	int size;
 	int rate;
 	int sampleRate;
 	float gain;
@@ -42,9 +42,9 @@ struct VLM5030 {
 	int x[10] = {};
 	float output = 0;
 
-	VLM5030(uint8_t *VLM, int length, int clock, int sampleRate = 48000, float gain = 0.1) {
+	VLM5030(uint8_t *VLM, int size, int clock, int sampleRate = 48000, float gain = 0.1) {
 		base = VLM;
-		this->length = length;
+		this->size = size;
 		rate = clock / 440;
 		this->sampleRate = sampleRate;
 		this->gain = gain;
@@ -52,8 +52,7 @@ struct VLM5030 {
 		rst(0);
 	}
 
-	void update() {
-	}
+	void update() {}
 
 	void rst(int data) {
 		mutex.lock();
@@ -79,7 +78,7 @@ struct VLM5030 {
 	void st(int data) {
 		mutex.lock();
 		offset = data & 0xfe | data << 8 & 0x100;
-		offset = (base[offset] << 8 | base[offset + 1]) & (length - 1);
+		offset = (base[offset] << 8 | base[offset + 1]) & size - 1;
 		const int stable[] = {40, 30, 20, 20, 40, 60, 50, 50};
 		scount = stable[param >> 3 & 7];
 		icount = 4;
@@ -92,19 +91,19 @@ struct VLM5030 {
 		for (int i = 0; i < length; i++) {
 			data[i] += output * gain;
 			for (cycles += rate; cycles >= sampleRate; cycles -= sampleRate) {
-				if (BSY == 0)
+				if (!BSY)
 					continue;
-				if (scount == 0) {
+				if (!scount) {
 					const int stable[] = {40, 30, 20, 20, 40, 60, 50, 50};
 					scount = stable[param >> 3 & 7];
-					if (icount == 0) {
+					if (!icount) {
 						pitch0 = npitch;
 						energy0 = nenergy;
 						memcpy(k0, nk, sizeof(k0));
 						npitch = nenergy = 0;
 						memset(nk, 0, sizeof(nk));
 						const uint8_t *frame = base + offset;
-						if ((frame[0] & 1) == 0) {
+						if (~frame[0] & 1) {
 							const int ptable[] = {0, 8, -8, -8};
 							npitch = table_p[frame[0] >> 1 & 0x1f] + ptable[param >> 6 & 3] & 0xff;
 							nenergy = table_e[frame[0] >> 6 | frame[1] << 2 & 0x1c];
@@ -120,18 +119,16 @@ struct VLM5030 {
 							nk[0] = table_k0[frame[5] >> 2];
 							offset += 6;
 							icount = 4;
-						}
-						else if ((frame[0] & 2) == 0) {
+						} else if (~frame[0] & 2) {
 							offset++;
 							icount = (frame[0] & 0xc) + 4 << 1;
-						}
-						else if (energy0 != 0)
+						} else if (energy0)
 							icount = 4;
 						else {
 							BSY = 0;
 							continue;
 						}
-						if (energy0 != 0)
+						if (energy0)
 							pitch1 = npitch, energy1 = nenergy, memcpy(k1, nk, sizeof(k1));
 						else
 							pitch1 = pitch0, energy1 = energy0, memcpy(k1, k0, sizeof(k1));
@@ -144,7 +141,7 @@ struct VLM5030 {
 						k[j] = k0[j] + ((k1[j] - k0[j]) * ieffect >> 2);
 				}
 				int u[11];
-				u[10] = pitch0 > 1 ? energy * (pcount == 0) : rand() & 1 ? energy : -energy;
+				u[10] = pitch0 > 1 ? energy * !pcount : rand() & 1 ? energy : -energy;
 				for (int j = 9; j >= 0; --j)
 					u[j] = u[j + 1] + (k[j] * x[j] >> 9);
 				for (int j = 9; j >= 1; --j)

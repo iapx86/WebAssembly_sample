@@ -40,7 +40,7 @@ struct TimePilot {
 	int nDifficulty = 4;
 
 	bool fInterruptEnable = false;
-	bool fSoundEnable = false;
+//	bool fSoundEnable = false;
 
 	uint8_t ram[0x1400] = {};
 	uint8_t in[5] = {0xff, 0xff, 0xff, 0xff, 0x4b};
@@ -71,20 +71,16 @@ struct TimePilot {
 			else if (range(page, 0xa0, 0xaf)) {
 				cpu.memorymap[page].base = ram + (page & 0xf) * 0x100;
 				cpu.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0xb0, 0xb0, 0x0b)) {
+			} else if (range(page, 0xb0, 0xb0, 0x0b)) {
 				cpu.memorymap[page].base = ram + 0x1000;
 				cpu.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0xb4, 0xb4, 0x0b)) {
+			} else if (range(page, 0xb4, 0xb4, 0x0b)) {
 				cpu.memorymap[page].base = ram + 0x1100;
 				cpu.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0xc0, 0xc0, 0x0c)) {
+			} else if (range(page, 0xc0, 0xc0, 0x0c)) {
 				cpu.memorymap[page].read = [&](int addr) { return vpos; };
 				cpu.memorymap[page].write = [&](int addr, int data) { command.push_back(data); };
-			}
-			else if (range(page, 0xc2, 0xc2, 0x0c))
+			} else if (range(page, 0xc2, 0xc2, 0x0c))
 				cpu.memorymap[page].read = [&](int addr) -> int { return in[4]; };
 			else if (range(page, 0xc3, 0xc3, 0x0c)) {
 				cpu.memorymap[page].read = [&](int addr) -> int { return in[addr >> 5 & 3]; };
@@ -92,8 +88,8 @@ struct TimePilot {
 					switch (addr >> 1 & 0x7f) {
 					case 0:
 						return void(fInterruptEnable = (data & 1) != 0);
-					case 3:
-						return void(fSoundEnable = (data & 1) == 0);
+//					case 3:
+//						return void(fSoundEnable = (data & 1) == 0);
 					}
 				};
 			}
@@ -104,18 +100,15 @@ struct TimePilot {
 			else if (range(page, 0x30, 0x33, 0x0c)) {
 				cpu2.memorymap[page].base = ram2 + (page & 3) * 0x100;
 				cpu2.memorymap[page].write = nullptr;
-			}
-			else if (range(page, 0x40, 0x40, 0x0f)) {
+			} else if (range(page, 0x40, 0x40, 0x0f)) {
 				cpu2.memorymap[page].read = [&](int addr) { return sound0->read(psg[0].addr); };
 				cpu2.memorymap[page].write = [&](int addr, int data) { sound0->write(psg[0].addr, data, count); };
-			}
-			else if (range(page, 0x50, 0x50, 0x0f))
+			} else if (range(page, 0x50, 0x50, 0x0f))
 				cpu2.memorymap[page].write = [&](int addr, int data) { psg[0].addr = data; };
 			else if (range(page, 0x60, 0x60, 0x0f)) {
 				cpu2.memorymap[page].read = [&](int addr) { return sound1->read(psg[1].addr); };
 				cpu2.memorymap[page].write = [&](int addr, int data) { sound1->write(psg[1].addr, data, count); };
-			}
-			else if (range(page, 0x70, 0x70, 0x0f))
+			} else if (range(page, 0x70, 0x70, 0x0f))
 				cpu2.memorymap[page].write = [&](int addr, int data) { psg[1].addr = data; };
 
 		// Videoの初期化
@@ -129,7 +122,7 @@ struct TimePilot {
 //		sound1->mute(!fSoundEnable);
 		for (int i = 0; i < 256; i++) {
 			vpos = i + 144 & 0xff;
-			if (vpos == 0)
+			if (!vpos)
 				memcpy(ram + 0x1200, ram + 0x1000, 0x200);
 			if (vpos == 240 && fInterruptEnable)
 				cpu.non_maskable_interrupt();
@@ -220,19 +213,8 @@ struct TimePilot {
 	}
 
 	TimePilot *updateInput() {
-		// クレジット/スタートボタン処理
-		if (fCoin)
-			in[0] &= ~(1 << 0), --fCoin;
-		else
-			in[0] |= 1 << 0;
-		if (fStart1P)
-			in[0] &= ~(1 << 3), --fStart1P;
-		else
-			in[0] |= 1 << 3;
-		if (fStart2P)
-			in[0] &= ~(1 << 4), --fStart2P;
-		else
-			in[0] |= 1 << 4;
+		in[0] = in[0] & ~0x19 | !fCoin << 0 | !fStart1P << 3 | !fStart2P << 4;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		return this;
 	}
 
@@ -249,41 +231,23 @@ struct TimePilot {
 	}
 
 	void up(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 2) | 1 << 3;
-		else
-			in[1] |= 1 << 2;
+		in[1] = in[1] & ~(1 << 2) | fDown << 3 | !fDown << 2;
 	}
 
 	void right(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 1) | 1 << 0;
-		else
-			in[1] |= 1 << 1;
+		in[1] = in[1] & ~(1 << 1) | fDown << 0 | !fDown << 1;
 	}
 
 	void down(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 3) | 1 << 2;
-		else
-			in[1] |= 1 << 3;
+		in[1] = in[1] & ~(1 << 3) | fDown << 2 | !fDown << 3;
 	}
 
 	void left(bool fDown) {
-		if (fDown)
-			in[1] = in[1] & ~(1 << 0) | 1 << 1;
-		else
-			in[1] |= 1 << 0;
+		in[1] = in[1] & ~(1 << 0) | fDown << 1 | !fDown << 0;
 	}
 
 	void triggerA(bool fDown) {
-		if (fDown)
-			in[1] &= ~(1 << 4);
-		else
-			in[1] |= 1 << 4;
-	}
-
-	void triggerB(bool fDown) {
+		in[1] = in[1] & ~(1 << 4) | !fDown << 4;
 	}
 
 	void convertRGB() {
@@ -341,53 +305,51 @@ struct TimePilot {
 	void makeBitmap(int *data) {
 		// bg描画
 		int p = 256 * 8 * 2 + 232;
-		int k = 0x40;
-		for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
+		for (int k = 0x40, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
 				xfer8x8(data, p, k, 0);
 
 		// obj描画
 		for (int k = 0x103e; k >= 0x1010; k -= 2) {
-			const int src0 = ram[k + 0x301] - 1 & 0xff | ram[k + 0x200] + 16 << 8;
-			const int dst0 = ram[k + 0x201] | ram[k + 0x300] << 8;
-			switch (dst0 >> 14) {
+			const int dst0 = ram[k + 0x301] - 1 & 0xff | ram[k + 0x200] + 16 << 8;
+			const int src0 = ram[k + 0x201] | ram[k + 0x300] << 8;
+			switch (src0 >> 14) {
 			case 0: // ノーマル
-				xfer16x16(data, src0, dst0);
+				xfer16x16(data, dst0, src0);
 				break;
 			case 1: // V反転
-				xfer16x16V(data, src0, dst0);
+				xfer16x16V(data, dst0, src0);
 				break;
 			case 2: // H反転
-				xfer16x16H(data, src0, dst0);
+				xfer16x16H(data, dst0, src0);
 				break;
 			case 3: // HV反転
-				xfer16x16HV(data, src0, dst0);
+				xfer16x16HV(data, dst0, src0);
 				break;
 			}
-			const int src1 = ram[k + 0x101] - 1 & 0xff | ram[k] + 16 << 8;
-			const int dst1 = ram[k + 1] | ram[k + 0x100] << 8;
-			if (src1 == src0 && dst1 == dst0)
+			const int dst1 = ram[k + 0x101] - 1 & 0xff | ram[k] + 16 << 8;
+			const int src1 = ram[k + 1] | ram[k + 0x100] << 8;
+			if (dst1 == dst0 && src1 == src0)
 				continue;
-			switch (dst1 >> 14) {
+			switch (src1 >> 14) {
 			case 0: // ノーマル
-				xfer16x16(data, src1, dst1);
+				xfer16x16(data, dst1, src1);
 				break;
 			case 1: // V反転
-				xfer16x16V(data, src1, dst1);
+				xfer16x16V(data, dst1, src1);
 				break;
 			case 2: // H反転
-				xfer16x16H(data, src1, dst1);
+				xfer16x16H(data, dst1, src1);
 				break;
 			case 3: // HV反転
-				xfer16x16HV(data, src1, dst1);
+				xfer16x16HV(data, dst1, src1);
 				break;
 			}
 		}
 
 		// bg描画
 		p = 256 * 8 * 2 + 232;
-		k = 0x40;
-		for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
+		for (int k = 0x40, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
 				xfer8x8(data, p, k, 1);
 
@@ -680,7 +642,7 @@ struct TimePilot {
 		src = src << 8 & 0xff00;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[src++]]) != 0)
+				if ((px = objcolor[idx | obj[src++]]))
 					data[dst] = px;
 	}
 
@@ -693,7 +655,7 @@ struct TimePilot {
 		src = (src << 8 & 0xff00) + 256 - 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src -= 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[src++]]) != 0)
+				if ((px = objcolor[idx | obj[src++]]))
 					data[dst] = px;
 	}
 
@@ -706,7 +668,7 @@ struct TimePilot {
 		src = (src << 8 & 0xff00) + 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src += 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[--src]]) != 0)
+				if ((px = objcolor[idx | obj[--src]]))
 					data[dst] = px;
 	}
 
@@ -719,7 +681,7 @@ struct TimePilot {
 		src = (src << 8 & 0xff00) + 256;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[--src]]) != 0)
+				if ((px = objcolor[idx | obj[--src]]))
 					data[dst] = px;
 	}
 

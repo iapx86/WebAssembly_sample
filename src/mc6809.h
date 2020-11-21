@@ -29,13 +29,13 @@ struct MC6809 : Cpu {
 	}
 
 	bool fast_interrupt() {
-		if (!Cpu::interrupt() || (ccr & 0x40) != 0)
+		if (!Cpu::interrupt() || ccr & 0x40)
 			return false;
 		return pshs16(pc), pshs(ccr &= ~0x80), ccr |= 0x50, pc = read16(0xfff6), true;
 	}
 
 	bool interrupt() {
-		if (!Cpu::interrupt() || (ccr & 0x10) != 0)
+		if (!Cpu::interrupt() || ccr & 0x10)
 			return false;
 		return pshs16(pc), pshs16(u), pshs16(y), pshs16(x), pshs(dp), pshs(b), pshs(a), pshs(ccr |= 0x80), ccr |= 0x10, pc = read16(0xfff8), true;
 	}
@@ -79,31 +79,31 @@ struct MC6809 : Cpu {
 			case 0x21: // LBRN
 				return lbcc(false);
 			case 0x22: // LBHI
-				return lbcc(((ccr >> 2 | ccr) & 1) == 0);
+				return lbcc(!((ccr >> 2 | ccr) & 1));
 			case 0x23: // LBLS
 				return lbcc(((ccr >> 2 | ccr) & 1) != 0);
 			case 0x24: // LBHS(LBCC)
-				return lbcc((ccr & 1) == 0);
+				return lbcc(!(ccr & 1));
 			case 0x25: // LBLO(LBCS)
 				return lbcc((ccr & 1) != 0);
 			case 0x26: // LBNE
-				return lbcc((ccr & 4) == 0);
+				return lbcc(!(ccr & 4));
 			case 0x27: // LBEQ
 				return lbcc((ccr & 4) != 0);
 			case 0x28: // LBVC
-				return lbcc((ccr & 2) == 0);
+				return lbcc(!(ccr & 2));
 			case 0x29: // LBVS
 				return lbcc((ccr & 2) != 0);
 			case 0x2a: // LBPL
-				return lbcc((ccr & 8) == 0);
+				return lbcc(!(ccr & 8));
 			case 0x2b: // LBMI
 				return lbcc((ccr & 8) != 0);
 			case 0x2c: // LBGE
-				return lbcc(((ccr >> 2 ^ ccr) & 2) == 0);
+				return lbcc(!((ccr >> 2 ^ ccr) & 2));
 			case 0x2d: // LBLT
 				return lbcc(((ccr >> 2 ^ ccr) & 2) != 0);
 			case 0x2e: // LBGT
-				return lbcc(((ccr >> 2 ^ ccr | ccr >> 1) & 2) == 0);
+				return lbcc(!((ccr >> 2 ^ ccr | ccr >> 1) & 2));
 			case 0x2f: // LBLE
 				return lbcc(((ccr >> 2 ^ ccr | ccr >> 1) & 2) != 0);
 			case 0x3f: // SWI2
@@ -199,7 +199,7 @@ struct MC6809 : Cpu {
 		case 0x1c: // ANDCC
 			return void(ccr &= fetch());
 		case 0x1d: // SEX
-			return void((b & 0x80) != 0 ? (a = 0xff, ccr = ccr & ~4 | 8) : (a = 0, ccr = ccr & ~0xc | !b << 2));
+			return void(b & 0x80 ? (a = 0xff, ccr = ccr & ~4 | 8) : (a = 0, ccr = ccr & ~0xc | !b << 2));
 		case 0x1e: // EXG
 			switch (fetch()) {
 			case 0x00: // EXG D,D
@@ -390,31 +390,31 @@ struct MC6809 : Cpu {
 		case 0x21: // BRN
 			return bcc(false);
 		case 0x22: // BHI
-			return bcc(((ccr >> 2 | ccr) & 1) == 0);
+			return bcc(!((ccr >> 2 | ccr) & 1));
 		case 0x23: // BLS
 			return bcc(((ccr >> 2 | ccr) & 1) != 0);
 		case 0x24: // BHS(BCC)
-			return bcc((ccr & 1) == 0);
+			return bcc(!(ccr & 1));
 		case 0x25: // BLO(BCS)
 			return bcc((ccr & 1) != 0);
 		case 0x26: // BNE
-			return bcc((ccr & 4) == 0);
+			return bcc(!(ccr & 4));
 		case 0x27: // BEQ
 			return bcc((ccr & 4) != 0);
 		case 0x28: // BVC
-			return bcc((ccr & 2) == 0);
+			return bcc(!(ccr & 2));
 		case 0x29: // BVS
 			return bcc((ccr & 2) != 0);
 		case 0x2a: // BPL
-			return bcc((ccr & 8) == 0);
+			return bcc(!(ccr & 8));
 		case 0x2b: // BMI
 			return bcc((ccr & 8) != 0);
 		case 0x2c: // BGE
-			return bcc(((ccr >> 2 ^ ccr) & 2) == 0);
+			return bcc(!((ccr >> 2 ^ ccr) & 2));
 		case 0x2d: // BLT
 			return bcc(((ccr >> 2 ^ ccr) & 2) != 0);
 		case 0x2e: // BGT
-			return bcc(((ccr >> 2 ^ ccr | ccr >> 1) & 2) == 0);
+			return bcc(!((ccr >> 2 ^ ccr | ccr >> 1) & 2));
 		case 0x2f: // BLE
 			return bcc(((ccr >> 2 ^ ccr | ccr >> 1) & 2) != 0);
 		case 0x30: // LEAX
@@ -426,75 +426,75 @@ struct MC6809 : Cpu {
 		case 0x33: // LEAU
 			return void(u = index());
 		case 0x34: // PSHS
-			if (((v = fetch()) & 0x80) != 0)
+			if ((v = fetch()) & 0x80)
 				pshs16(pc);
-			if ((v & 0x40) != 0)
+			if (v & 0x40)
 				pshs16(u);
-			if ((v & 0x20) != 0)
+			if (v & 0x20)
 				pshs16(y);
-			if ((v & 0x10) != 0)
+			if (v & 0x10)
 				pshs16(x);
-			if ((v & 8) != 0)
+			if (v & 8)
 				pshs(dp);
-			if ((v & 4) != 0)
+			if (v & 4)
 				pshs(b);
-			if ((v & 2) != 0)
+			if (v & 2)
 				pshs(a);
-			if ((v & 1) != 0)
+			if (v & 1)
 				pshs(ccr);
 			return;
 		case 0x35: // PULS
-			if (((v = fetch()) & 1) != 0)
+			if ((v = fetch()) & 1)
 				ccr = puls();
-			if ((v & 2) != 0)
+			if (v & 2)
 				a = puls();
-			if ((v & 4) != 0)
+			if (v & 4)
 				b = puls();
-			if ((v & 8) != 0)
+			if (v & 8)
 				dp = puls();
-			if ((v & 0x10) != 0)
+			if (v & 0x10)
 				x = puls16();
-			if ((v & 0x20) != 0)
+			if (v & 0x20)
 				y = puls16();
-			if ((v & 0x40) != 0)
+			if (v & 0x40)
 				u = puls16();
-			if ((v & 0x80) != 0)
+			if (v & 0x80)
 				pc = puls16();
 			return;
 		case 0x36: // PSHU
-			if (((v = fetch()) & 0x80) != 0)
+			if ((v = fetch()) & 0x80)
 				pshu16(pc);
-			if ((v & 0x40) != 0)
+			if (v & 0x40)
 				pshu16(s);
-			if ((v & 0x20) != 0)
+			if (v & 0x20)
 				pshu16(y);
-			if ((v & 0x10) != 0)
+			if (v & 0x10)
 				pshu16(x);
-			if ((v & 8) != 0)
+			if (v & 8)
 				pshu(dp);
-			if ((v & 4) != 0)
+			if (v & 4)
 				pshu(b);
-			if ((v & 2) != 0)
+			if (v & 2)
 				pshu(a);
-			if ((v & 1) != 0)
+			if (v & 1)
 				pshu(ccr);
 			return;
 		case 0x37: // PULU
-			if (((v = fetch()) & 1) != 0)
+			if ((v = fetch()) & 1)
 				ccr = pulu();
-			if ((v & 2) != 0)
+			if (v & 2)
 				a = pulu();
-			if ((v & 4) != 0)
+			if (v & 4)
 				b = pulu();
-			if ((v & 8) != 0)
+			if (v & 8)
 				dp = pulu();
-			if ((v & 0x10) != 0)
+			if (v & 0x10)
 				x = pulu16();
-			if ((v & 0x20) != 0)
+			if (v & 0x20)
 				y = pulu16();
-			if ((v & 0x40) != 0)
+			if (v & 0x40)
 				s = pulu16();
-			if ((v & 0x80) != 0)
+			if (v & 0x80)
 				pc = pulu16();
 			return;
 		case 0x39: // RTS
@@ -502,7 +502,7 @@ struct MC6809 : Cpu {
 		case 0x3a: // ABX
 			return void(x = x + b & 0xffff);
 		case 0x3b: // RTI
-			if (((ccr = puls()) & 0x80) != 0)
+			if ((ccr = puls()) & 0x80)
 				a = puls(), b = puls(), dp = puls(), x = puls16(), y = puls16(), u = puls16();
 			return void(pc = puls16());
 		case 0x3c: // CWAI
@@ -1400,9 +1400,9 @@ struct MC6809 : Cpu {
 
 	void daa() {
 		int cf = 0;
-		if ((ccr & 0x20) != 0 || (a & 0xf) > 9)
+		if (ccr & 0x20 || (a & 0xf) > 9)
 			cf += 6;
-		if ((ccr & 1) != 0 || (a & 0xf0) > 0x90 || (a & 0xf0) > 0x80 && (a & 0xf) > 9)
+		if (ccr & 1 || (a & 0xf0) > 0x90 || (a & 0xf0) > 0x80 && (a & 0xf) > 9)
 			cf += 0x60, ccr |= 1;
 		a = a + cf & 0xff, ccr = ccr & ~0x0c | a >> 4 & 8 | !a << 2;
 	}

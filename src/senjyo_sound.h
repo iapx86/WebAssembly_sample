@@ -6,6 +6,7 @@
 #define SENJYO_SOUND_H
 
 #include <cmath>
+#include <algorithm>
 #include <list>
 #include <mutex>
 #include <utility>
@@ -73,18 +74,13 @@ struct SenjyoSound {
 	void update() {
 		mutex.lock();
 		if (wheel.size() > resolution) {
-			while (!wheel.empty()) {
-				for (auto& e: wheel.front())
-					regwrite(e);
-				wheel.pop_front();
-			}
+			while (!wheel.empty())
+				for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { regwrite(e); }), wheel.pop_front();
 			count = sampleRate - 1;
 		}
-		for (auto& e: tmpwheel)
-			wheel.push_back(e);
+		wheel.insert(wheel.end(), tmpwheel.begin(), tmpwheel.end());
 		mutex.unlock();
-		for (auto& e: tmpwheel)
-			e.clear();
+		for_each(tmpwheel.begin(), tmpwheel.end(), [](list<pair<int, int>>& e) { e.clear(); });
 	}
 
 	void makeSound(float *data, uint32_t length) {
@@ -92,9 +88,7 @@ struct SenjyoSound {
 			for (count += 60 * resolution; count >= sampleRate; count -= sampleRate)
 				if (!wheel.empty()) {
 					mutex.lock();
-					for (auto& e: wheel.front())
-						regwrite(e);
-					wheel.pop_front();
+					for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { regwrite(e); }), wheel.pop_front();
 					mutex.unlock();
 				}
 			data[i] += bq.filter(snd[channel.phase] * channel.vol * gain);

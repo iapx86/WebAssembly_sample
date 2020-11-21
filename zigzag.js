@@ -12,5 +12,5 @@ read('zigzagb.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(
 	const BG = Uint8Array.concat(...['zz_6.1h', 'zz_5.1k'].map(e => zip.decompress(e).subarray(0, 0x800)));
 	const OBJ = Uint8Array.concat(...['zz_6.1h', 'zz_5.1k'].map(e => zip.decompress(e).subarray(0x800)));
 	const RGB = zip.decompress('zzbpr_e9.bin');
-	init(bufferSource, {BG, OBJ, RGB, PRG}).then();
+	return init(bufferSource, {BG, OBJ, RGB, PRG});
 });

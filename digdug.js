@@ -22,5 +22,5 @@ read('digdug.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(z
 	SND = zip.decompress('136007.110');
 }).then(() =>read('namco51.zip')).then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	IO = zip.decompress('51xx.bin');
-	init(bufferSource, {PRG1, PRG2, PRG3, BG2, MAPDATA, BG4, OBJ, SND, BGCOLOR, OBJCOLOR, RGB, IO}).then();
+	return init(bufferSource, {PRG1, PRG2, PRG3, BG2, MAPDATA, BG4, OBJ, SND, BGCOLOR, OBJCOLOR, RGB, IO});
 });

@@ -39,8 +39,7 @@ struct DigDug {
 	int fCoin = 0;
 	int fStart1P = 0;
 	int fStart2P = 0;
-	int dwStick = 0;
-	int abStick[0x10] = {~0, ~1, ~2, ~1, ~4, ~0, ~2, ~2, ~8, ~8, ~0, ~1, ~4, ~8, ~4, ~0};
+	int dwStick = 0xf;
 	int nDigdug = 3;
 	int nBonus = BONUS_F;
 	int nRank = RANK_B;
@@ -79,10 +78,10 @@ struct DigDug {
 		memset(mmi, 0xff, 0x100);
 
 		auto range = [](int page, int start, int end, int mirror = 0) { return (page & ~mirror) >= start && (page & ~mirror) <= end; };
-		auto interrupt = [](MB8840& mcu) {
-			mcu.cause = mcu.cause & ~4 | !mcu.interrupt() << 2;
-			for (int op = mcu.execute(); op != 0x3c && (op != 0x25 || mcu.cause & 4); op = mcu.execute())
-				op == 0x25 && (mcu.cause &= ~4);
+		auto interrupt = [](MB8840& _mcu) {
+			_mcu.cause = _mcu.cause & ~4 | !_mcu.interrupt() << 2;
+			for (int op = _mcu.execute(); op != 0x3c && (op != 0x25 || _mcu.cause & 4); op = _mcu.execute())
+				op == 0x25 && (_mcu.cause &= ~4);
 		};
 
 		for (int page = 0; page < 0x100; page++)
@@ -148,23 +147,23 @@ struct DigDug {
 				cpu[0].memorymap[page].write = nullptr;
 			} else if (range(page, 0xa0, 0xa0))
 				cpu[0].memorymap[0xa0].write = [&](int addr, int data) {
-				switch (addr & 7) {
-				case 0:
-					return void(dwBG4Select = dwBG4Select & 2 | data & 1);
-				case 1:
-					return void(dwBG4Select = dwBG4Select & 1 | data << 1 & 2);
-				case 2:
-					return void(fBG2Attribute = (data & 1) != 0);
-				case 3:
-					return void(fBG4Disable = (data & 1) != 0);
-				case 4:
-					return void(dwBG4Color = dwBG4Color & 2 | data & 1);
-				case 5:
-					return void(dwBG4Color = dwBG4Color & 1 | data << 1 & 2);
-				case 7:
-					return void(fFlip = false);
-				}
-			};
+					switch (addr & 7) {
+					case 0:
+						return void(dwBG4Select = dwBG4Select & 2 | data & 1);
+					case 1:
+						return void(dwBG4Select = dwBG4Select & 1 | data << 1 & 2);
+					case 2:
+						return void(fBG2Attribute = (data & 1) != 0);
+					case 3:
+						return void(fBG4Disable = (data & 1) != 0);
+					case 4:
+						return void(dwBG4Color = dwBG4Color & 2 | data & 1);
+					case 5:
+						return void(dwBG4Color = dwBG4Color & 1 | data << 1 & 2);
+					case 7:
+						return void(fFlip = false);
+					}
+				};
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0x1f))
@@ -308,8 +307,8 @@ struct DigDug {
 	}
 
 	DigDug *updateInput() {
-		mcu.r = mcu.r & ~0x4c0f | abStick[dwStick] & 0xf | (fStart1P <= 0) << 10 | (fStart2P <= 0) << 11 | (fCoin <= 0) << 14;
-		fCoin -= (fCoin > 0), fStart1P -= (fStart1P > 0), fStart2P -= (fStart2P > 0);
+		mcu.r = mcu.r & ~0x4c0f | dwStick | !fCoin << 14 | !fStart1P << 10 | !fStart2P << 11;
+		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		return this;
 	}
 
@@ -326,26 +325,23 @@ struct DigDug {
 	}
 
 	void up(bool fDown) {
-		dwStick = fDown ? dwStick & ~(1 << 2) | 1 << 0 : dwStick & ~(1 << 0);
+		dwStick = dwStick & ~(1 << 0) | fDown << 2 | !fDown << 0;
 	}
 
 	void right(bool fDown) {
-		dwStick = fDown ? dwStick & ~(1 << 3) | 1 << 1 : dwStick & ~(1 << 1);
+		dwStick = dwStick & ~(1 << 1) | fDown << 3 | !fDown << 1;
 	}
 
 	void down(bool fDown) {
-		dwStick = fDown ? dwStick & ~(1 << 0) | 1 << 2 : dwStick & ~(1 << 2);
+		dwStick = dwStick & ~(1 << 2) | fDown << 0 | !fDown << 2;
 	}
 
 	void left(bool fDown) {
-		dwStick = fDown ? dwStick & ~(1 << 1) | 1 << 3 : dwStick & ~(1 << 3);
+		dwStick = dwStick & ~(1 << 3) | fDown << 1 | !fDown << 3;
 	}
 
 	void triggerA(bool fDown) {
-		mcu.r = mcu.r & ~0x100 | !fDown << 8;
-	}
-
-	void triggerB(bool fDown) {
+		mcu.r = mcu.r & ~(1 << 8) | !fDown << 8;
 	}
 
 	void convertRGB() {
