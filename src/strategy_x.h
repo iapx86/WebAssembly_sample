@@ -7,9 +7,12 @@
 #ifndef STRATEGY_X_H
 #define STRATEGY_X_H
 
+#include <array>
 #include <list>
+#include <vector>
 #include "z80.h"
 #include "ay-3-8910.h"
+#include "utils.h"
 using namespace std;
 
 struct StrategyX {
@@ -50,9 +53,9 @@ struct StrategyX {
 	bool fBackgroundGreen = false;
 	bool fBackgroundBlue = false;
 	bool fBackgroundRed = false;
-	uint8_t bg[0x4000] = {};
-	uint8_t obj[0x4000] = {};
-	int rgb[0x20] = {};
+	array<uint8_t, 0x4000> bg;
+	array<uint8_t, 0x4000> obj;
+	array<int, 0x20> rgb;
 
 	Z80 cpu, cpu2;
 
@@ -127,25 +130,24 @@ struct StrategyX {
 		}
 
 		// Videoの初期化
-		convertRGB();
-		convertBG();
-		convertOBJ();
+		bg.fill(3), obj.fill(3);
+		convertGFX(&bg[0], BG, 256, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x4000}, 8);
+		convertGFX(&obj[0], BG, 64, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x4000}, 32);
+		for (int i = 0; i < 0x20; i++)
+			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
 	StrategyX *execute() {
 //		sound0->mute(!fSoundEnable);
 //		sound1->mute(!fSoundEnable);
-		if (fInterruptEnable)
-			cpu.non_maskable_interrupt();
-		cpu.execute(0x2000);
+		fInterruptEnable && cpu.non_maskable_interrupt(), cpu.execute(0x2000);
 		for (count = 0; count < 116; count++) { // 14318181 / 60 / 2048
 			if (!command.empty() && cpu2.interrupt())
 				sound0->write(0x0e, command.front()), command.pop_front();
 			const int table[] = {0x0e, 0x1e, 0x0e, 0x1e, 0x2e, 0x3e, 0x2e, 0x3e, 0x4e, 0x5e, 0x8e, 0x9e, 0x8e, 0x9e, 0xae, 0xbe, 0xae, 0xbe, 0xce, 0xde};
 			sound0->write(0x0f, table[timer]);
 			cpu2.execute(36);
-			if (++timer >= 20)
-				timer = 0;
+			++timer >= 20 && (timer = 0);
 		}
 		return this;
 	}
@@ -234,38 +236,6 @@ struct StrategyX {
 
 	void triggerX(bool fDown) {
 		ppi0[0] = ppi0[0] & ~(1 << 1) | !fDown << 1;
-	}
-
-	void convertRGB() {
-		for (int i = 0; i < 0x20; i++)
-			rgb[i] = (RGB[i] & 7) * 255 / 7			// Red
-				| (RGB[i] >> 3 & 7) * 255 / 7 << 8	// Green
-				| (RGB[i] >> 6) * 255 / 3 << 16		// Blue
-				| 0xff000000;						// Alpha
-	}
-
-	void convertBG() {
-		for (int p = 0, q = 0, i = 256; i != 0; q += 8, --i)
-			for (int j = 7; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = BG[q + k + 0x800] >> j & 1 | BG[q + k] >> j << 1 & 2;
-	}
-
-	void convertOBJ() {
-		for (int p = 0, q = 0, i = 64; i != 0; q += 32, --i) {
-			for (int j = 7; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = BG[q + k + 0x800 + 16] >> j & 1 | BG[q + k + 16] >> j << 1 & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = BG[q + k + 0x800] >> j & 1 | BG[q + k] >> j << 1 & 2;
-			}
-			for (int j = 7; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = BG[q + k + 0x800 + 24] >> j & 1 | BG[q + k + 24] >> j << 1 & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = BG[q + k + 0x800 + 8] >> j & 1 | BG[q + k + 8] >> j << 1 & 2;
-			}
-		}
 	}
 
 	void makeBitmap(int *data) {

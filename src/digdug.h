@@ -7,10 +7,14 @@
 #ifndef DIGDUG_H
 #define DIGDUG_H
 
-#include <cstring>
+#include <algorithm>
+#include <array>
+#include <vector>
 #include "z80.h"
 #include "mb8840.h"
 #include "pac-man_sound.h"
+#include "utils.h"
+using namespace std;
 
 enum {
 	RANK_A, RANK_B, RANK_C, RANK_D,
@@ -62,20 +66,19 @@ struct DigDug {
 	bool fFlip = true;
 	int dwBG4Color = 3;
 	int dwBG4Select = 3;
-	uint8_t bg2[0x2000] = {};
-	uint8_t bg4[0x10000] = {};
-	uint8_t obj[0x10000] = {};
-	uint8_t bgcolor[0x100] = {};
-	uint8_t objcolor[0x100] = {};
-	int rgb[0x20] = {};
+	array<uint8_t, 0x2000> bg2;
+	array<uint8_t, 0x10000> bg4;
+	array<uint8_t, 0x10000> obj;
+	array<uint8_t, 0x100> objcolor;
+	array<int, 0x20> rgb;
 
 	Z80 cpu[3];
 	MB8840 mcu;
 
 	DigDug() {
 		// CPU周りの初期化
-		memcpy(ram, RAM, 0x2000);
-		memset(mmi, 0xff, 0x100);
+		copy_n(RAM, 0x2000, ram);
+		fill_n(mmi, 0x100, 0xff);
 
 		auto range = [](int page, int start, int end, int mirror = 0) { return (page & ~mirror) >= start && (page & ~mirror) <= end; };
 		auto interrupt = [](MB8840& _mcu) {
@@ -130,7 +133,7 @@ struct DigDug {
 							for (mcu.execute(); mcu.pc != 0x182; mcu.execute()) {}
 						return mcu.t = mcu.t + 1 & 0xff, mcu.k |= 8, interrupt(mcu);
 					case 0xd2:
-						return void(memcpy(ioport, mmi, 2));
+						return void(copy_n(mmi, 2, ioport));
 					}
 				};
 			} else if (range(page, 0x80, 0x87)) {
@@ -177,43 +180,30 @@ struct DigDug {
 			else if (range(page, 0x40, 0xff))
 				cpu[2].memorymap[page] = cpu[0].memorymap[page];
 
-		memcpy(mcu.rom, IO, 0x400);
+		copy_n(IO, 0x400, mcu.rom);
 		mcu.r = 0xffff;
 
 		mmi[0] = 0x99; // DIPSW A
 		mmi[1] = 0x2e; // DIPSW B
 
 		// Videoの初期化
-		convertRGB();
-		convertBG();
-		convertOBJ();
+		bg2.fill(1), bg4.fill(3), obj.fill(3);
+		convertGFX(&bg2[0], BG2, 128, {rseq8(0, 8)}, {rseq8(0, 1)}, {0}, 8);
+		convertGFX(&bg4[0], BG4, 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], OBJ, 256, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
+		for (int i = 0; i < 256; i++)
+			objcolor[i] = 0x10 | OBJCOLOR[i];
+		for (int i = 0; i < 0x20; i++)
+			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
 	DigDug *execute() {
 		Cpu *cpus[] = {&cpu[0], &cpu[1], &cpu[2]};
-		if (fInterruptEnable0)
-			cpu[0].interrupt();
-		if (fInterruptEnable1)
-			cpu[1].interrupt();
-		count = 0;
-		if (fInterruptEnable2) {
-			fInterruptEnable2 = false;
-			cpu[2].non_maskable_interrupt();		// SOUND INTERRUPT
-		}
-		for (int i = 128; i != 0; --i) {
-			if (fNmiEnable)
-				cpu[0].non_maskable_interrupt();	// DMA INTERRUPT
-			Cpu::multiple_execute(3, cpus, 32);
-		}
-		count = 1;
-		if (fInterruptEnable2) {
-			fInterruptEnable2 = false;
-			cpu[2].non_maskable_interrupt();		// SOUND INTERRUPT
-		}
-		for (int i = 128; i != 0; --i) {
-			if (fNmiEnable)
-				cpu[0].non_maskable_interrupt();	// DMA INTERRUPT
-			Cpu::multiple_execute(3, cpus, 32);
+		fInterruptEnable0 && cpu[0].interrupt(), fInterruptEnable1 && cpu[1].interrupt();
+		for (count = 0; count < 2; count++) {
+			fInterruptEnable2 && (fInterruptEnable2 = false, cpu[2].non_maskable_interrupt());
+			for (int i = 128; i != 0; --i)
+				fNmiEnable && cpu[0].non_maskable_interrupt(), Cpu::multiple_execute(3, cpus, 32);
 		}
 		return this;
 	}
@@ -344,107 +334,41 @@ struct DigDug {
 		mcu.r = mcu.r & ~(1 << 8) | !fDown << 8;
 	}
 
-	void convertRGB() {
-		for (int i = 0; i < 0x20; i++)
-			rgb[i] = (RGB[i] & 7) * 255 / 7			// Red
-				| (RGB[i] >> 3 & 7) * 255 / 7 << 8	// Green
-				| (RGB[i] >> 6) * 255 / 3 << 16		// Blue
-				| 0xff000000;						// Alpha
-	}
-
-	void convertBG() {
-		for (int i = 0; i < 256; i++)
-			bgcolor[i] = BGCOLOR[i] & 0xf;
-		for (int p = 0, q = 0, i = 128; i != 0; q += 8, --i)
-			for (int j = 0; j < 8; j++)
-				for (int k = 7; k >= 0; --k)
-					bg2[p++] = BG2[q + k] >> j & 1;
-		for (int p = 0, q = 0, i = 256; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg4[p++] = BG4[q + k + 8] >> j & 1 | BG4[q + k + 8] >> (j + 3) & 2;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg4[p++] = BG4[q + k] >> j & 1 | BG4[q + k] >> (j + 3) & 2;
-		}
-	}
-
-	void convertOBJ() {
-		for (int i = 0; i < 256; i++)
-			objcolor[i] = OBJCOLOR[i] & 0xf | 0x10;
-		for (int p = 0, q = 0, i = 256; i != 0; q += 64, --i) {
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 32] >> j & 1 | OBJ[q + k + 32] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 40] >> j & 1 | OBJ[q + k + 40] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 8] >> j & 1 | OBJ[q + k + 8] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 48] >> j & 1 | OBJ[q + k + 48] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 16] >> j & 1 | OBJ[q + k + 16] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 56] >> j & 1 | OBJ[q + k + 56] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 24] >> j & 1 | OBJ[q + k + 24] >> (j + 3) & 2;
-			}
-		}
-	}
-
 	void makeBitmap(int *data) {
 		// bg描画
 		if (!fFlip) {
 			int p = 256 * 8 * 4 + 232;
-			int k = 0x40;
-			for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
+			for (int k = 0x40, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 				for (int j = 0; j < 32; k++, p += 256 * 8, j++)
 					xfer8x8(data, p, k);
 			p = 256 * 8 * 36 + 232;
-			k = 2;
-			for (int i = 0; i < 28; p -= 8, k++, i++)
+			for (int k = 2, i = 0; i < 28; p -= 8, k++, i++)
 				xfer8x8(data, p, k);
 			p = 256 * 8 * 37 + 232;
-			k = 0x22;
-			for (int i = 0; i < 28; p -= 8, k++, i++)
+			for (int k = 0x22, i = 0; i < 28; p -= 8, k++, i++)
 				xfer8x8(data, p, k);
 			p = 256 * 8 * 2 + 232;
-			k = 0x3c2;
-			for (int i = 0; i < 28; p -= 8, k++, i++)
+			for (int k = 0x3c2, i = 0; i < 28; p -= 8, k++, i++)
 				xfer8x8(data, p, k);
 			p = 256 * 8 * 3 + 232;
-			k = 0x3e2;
-			for (int i = 0; i < 28; p -= 8, k++, i++)
+			for (int k = 0x3e2, i = 0; i < 28; p -= 8, k++, i++)
 				xfer8x8(data, p, k);
 		} else {
 			int p = 256 * 8 * 35 + 16;
-			int k = 0x40;
-			for (int i = 0; i < 28; p += 256 * 8 * 32 + 8, i++)
+			for (int k = 0x40, i = 0; i < 28; p += 256 * 8 * 32 + 8, i++)
 				for (int j = 0; j < 32; k++, p -= 256 * 8, j++)
 					xfer8x8HV(data, p, k);
 			p = 256 * 8 * 3 + 16;
-			k = 2;
-			for (int i = 0; i < 28; p += 8, k++, i++)
+			for (int k = 2, i = 0; i < 28; p += 8, k++, i++)
 				xfer8x8HV(data, p, k);
 			p = 256 * 8 * 2 + 16;
-			k = 0x22;
-			for (int i = 0; i < 28; p += 8, k++, i++)
+			for (int k = 0x22, i = 0; i < 28; p += 8, k++, i++)
 				xfer8x8HV(data, p, k);
 			p = 256 * 8 * 37 + 16;
-			k = 0x3c2;
-			for (int i = 0; i < 28; p += 8, k++, i++)
+			for (int k = 0x3c2, i = 0; i < 28; p += 8, k++, i++)
 				xfer8x8HV(data, p, k);
 			p = 256 * 8 * 36 + 16;
-			k = 0x3e2;
-			for (int i = 0; i < 28; p += 8, k++, i++)
+			for (int k = 0x3e2, i = 0; i < 28; p += 8, k++, i++)
 				xfer8x8HV(data, p, k);
 		}
 
@@ -683,70 +607,70 @@ struct DigDug {
 			data[p + 0x706] = bg2[q | 0x3e] * color;
 			data[p + 0x707] = bg2[q | 0x3f] * color;
 		} else {
-			data[p + 0x000] = bg2[q | 0x00] ? color : bgcolor[idx | bg4[r | 0x00]];
-			data[p + 0x001] = bg2[q | 0x01] ? color : bgcolor[idx | bg4[r | 0x01]];
-			data[p + 0x002] = bg2[q | 0x02] ? color : bgcolor[idx | bg4[r | 0x02]];
-			data[p + 0x003] = bg2[q | 0x03] ? color : bgcolor[idx | bg4[r | 0x03]];
-			data[p + 0x004] = bg2[q | 0x04] ? color : bgcolor[idx | bg4[r | 0x04]];
-			data[p + 0x005] = bg2[q | 0x05] ? color : bgcolor[idx | bg4[r | 0x05]];
-			data[p + 0x006] = bg2[q | 0x06] ? color : bgcolor[idx | bg4[r | 0x06]];
-			data[p + 0x007] = bg2[q | 0x07] ? color : bgcolor[idx | bg4[r | 0x07]];
-			data[p + 0x100] = bg2[q | 0x08] ? color : bgcolor[idx | bg4[r | 0x08]];
-			data[p + 0x101] = bg2[q | 0x09] ? color : bgcolor[idx | bg4[r | 0x09]];
-			data[p + 0x102] = bg2[q | 0x0a] ? color : bgcolor[idx | bg4[r | 0x0a]];
-			data[p + 0x103] = bg2[q | 0x0b] ? color : bgcolor[idx | bg4[r | 0x0b]];
-			data[p + 0x104] = bg2[q | 0x0c] ? color : bgcolor[idx | bg4[r | 0x0c]];
-			data[p + 0x105] = bg2[q | 0x0d] ? color : bgcolor[idx | bg4[r | 0x0d]];
-			data[p + 0x106] = bg2[q | 0x0e] ? color : bgcolor[idx | bg4[r | 0x0e]];
-			data[p + 0x107] = bg2[q | 0x0f] ? color : bgcolor[idx | bg4[r | 0x0f]];
-			data[p + 0x200] = bg2[q | 0x10] ? color : bgcolor[idx | bg4[r | 0x10]];
-			data[p + 0x201] = bg2[q | 0x11] ? color : bgcolor[idx | bg4[r | 0x11]];
-			data[p + 0x202] = bg2[q | 0x12] ? color : bgcolor[idx | bg4[r | 0x12]];
-			data[p + 0x203] = bg2[q | 0x13] ? color : bgcolor[idx | bg4[r | 0x13]];
-			data[p + 0x204] = bg2[q | 0x14] ? color : bgcolor[idx | bg4[r | 0x14]];
-			data[p + 0x205] = bg2[q | 0x15] ? color : bgcolor[idx | bg4[r | 0x15]];
-			data[p + 0x206] = bg2[q | 0x16] ? color : bgcolor[idx | bg4[r | 0x16]];
-			data[p + 0x207] = bg2[q | 0x17] ? color : bgcolor[idx | bg4[r | 0x17]];
-			data[p + 0x300] = bg2[q | 0x18] ? color : bgcolor[idx | bg4[r | 0x18]];
-			data[p + 0x301] = bg2[q | 0x19] ? color : bgcolor[idx | bg4[r | 0x19]];
-			data[p + 0x302] = bg2[q | 0x1a] ? color : bgcolor[idx | bg4[r | 0x1a]];
-			data[p + 0x303] = bg2[q | 0x1b] ? color : bgcolor[idx | bg4[r | 0x1b]];
-			data[p + 0x304] = bg2[q | 0x1c] ? color : bgcolor[idx | bg4[r | 0x1c]];
-			data[p + 0x305] = bg2[q | 0x1d] ? color : bgcolor[idx | bg4[r | 0x1d]];
-			data[p + 0x306] = bg2[q | 0x1e] ? color : bgcolor[idx | bg4[r | 0x1e]];
-			data[p + 0x307] = bg2[q | 0x1f] ? color : bgcolor[idx | bg4[r | 0x1f]];
-			data[p + 0x400] = bg2[q | 0x20] ? color : bgcolor[idx | bg4[r | 0x20]];
-			data[p + 0x401] = bg2[q | 0x21] ? color : bgcolor[idx | bg4[r | 0x21]];
-			data[p + 0x402] = bg2[q | 0x22] ? color : bgcolor[idx | bg4[r | 0x22]];
-			data[p + 0x403] = bg2[q | 0x23] ? color : bgcolor[idx | bg4[r | 0x23]];
-			data[p + 0x404] = bg2[q | 0x24] ? color : bgcolor[idx | bg4[r | 0x24]];
-			data[p + 0x405] = bg2[q | 0x25] ? color : bgcolor[idx | bg4[r | 0x25]];
-			data[p + 0x406] = bg2[q | 0x26] ? color : bgcolor[idx | bg4[r | 0x26]];
-			data[p + 0x407] = bg2[q | 0x27] ? color : bgcolor[idx | bg4[r | 0x27]];
-			data[p + 0x500] = bg2[q | 0x28] ? color : bgcolor[idx | bg4[r | 0x28]];
-			data[p + 0x501] = bg2[q | 0x29] ? color : bgcolor[idx | bg4[r | 0x29]];
-			data[p + 0x502] = bg2[q | 0x2a] ? color : bgcolor[idx | bg4[r | 0x2a]];
-			data[p + 0x503] = bg2[q | 0x2b] ? color : bgcolor[idx | bg4[r | 0x2b]];
-			data[p + 0x504] = bg2[q | 0x2c] ? color : bgcolor[idx | bg4[r | 0x2c]];
-			data[p + 0x505] = bg2[q | 0x2d] ? color : bgcolor[idx | bg4[r | 0x2d]];
-			data[p + 0x506] = bg2[q | 0x2e] ? color : bgcolor[idx | bg4[r | 0x2e]];
-			data[p + 0x507] = bg2[q | 0x2f] ? color : bgcolor[idx | bg4[r | 0x2f]];
-			data[p + 0x600] = bg2[q | 0x30] ? color : bgcolor[idx | bg4[r | 0x30]];
-			data[p + 0x601] = bg2[q | 0x31] ? color : bgcolor[idx | bg4[r | 0x31]];
-			data[p + 0x602] = bg2[q | 0x32] ? color : bgcolor[idx | bg4[r | 0x32]];
-			data[p + 0x603] = bg2[q | 0x33] ? color : bgcolor[idx | bg4[r | 0x33]];
-			data[p + 0x604] = bg2[q | 0x34] ? color : bgcolor[idx | bg4[r | 0x34]];
-			data[p + 0x605] = bg2[q | 0x35] ? color : bgcolor[idx | bg4[r | 0x35]];
-			data[p + 0x606] = bg2[q | 0x36] ? color : bgcolor[idx | bg4[r | 0x36]];
-			data[p + 0x607] = bg2[q | 0x37] ? color : bgcolor[idx | bg4[r | 0x37]];
-			data[p + 0x700] = bg2[q | 0x38] ? color : bgcolor[idx | bg4[r | 0x38]];
-			data[p + 0x701] = bg2[q | 0x39] ? color : bgcolor[idx | bg4[r | 0x39]];
-			data[p + 0x702] = bg2[q | 0x3a] ? color : bgcolor[idx | bg4[r | 0x3a]];
-			data[p + 0x703] = bg2[q | 0x3b] ? color : bgcolor[idx | bg4[r | 0x3b]];
-			data[p + 0x704] = bg2[q | 0x3c] ? color : bgcolor[idx | bg4[r | 0x3c]];
-			data[p + 0x705] = bg2[q | 0x3d] ? color : bgcolor[idx | bg4[r | 0x3d]];
-			data[p + 0x706] = bg2[q | 0x3e] ? color : bgcolor[idx | bg4[r | 0x3e]];
-			data[p + 0x707] = bg2[q | 0x3f] ? color : bgcolor[idx | bg4[r | 0x3f]];
+			data[p + 0x000] = bg2[q | 0x00] ? color : BGCOLOR[idx | bg4[r | 0x00]];
+			data[p + 0x001] = bg2[q | 0x01] ? color : BGCOLOR[idx | bg4[r | 0x01]];
+			data[p + 0x002] = bg2[q | 0x02] ? color : BGCOLOR[idx | bg4[r | 0x02]];
+			data[p + 0x003] = bg2[q | 0x03] ? color : BGCOLOR[idx | bg4[r | 0x03]];
+			data[p + 0x004] = bg2[q | 0x04] ? color : BGCOLOR[idx | bg4[r | 0x04]];
+			data[p + 0x005] = bg2[q | 0x05] ? color : BGCOLOR[idx | bg4[r | 0x05]];
+			data[p + 0x006] = bg2[q | 0x06] ? color : BGCOLOR[idx | bg4[r | 0x06]];
+			data[p + 0x007] = bg2[q | 0x07] ? color : BGCOLOR[idx | bg4[r | 0x07]];
+			data[p + 0x100] = bg2[q | 0x08] ? color : BGCOLOR[idx | bg4[r | 0x08]];
+			data[p + 0x101] = bg2[q | 0x09] ? color : BGCOLOR[idx | bg4[r | 0x09]];
+			data[p + 0x102] = bg2[q | 0x0a] ? color : BGCOLOR[idx | bg4[r | 0x0a]];
+			data[p + 0x103] = bg2[q | 0x0b] ? color : BGCOLOR[idx | bg4[r | 0x0b]];
+			data[p + 0x104] = bg2[q | 0x0c] ? color : BGCOLOR[idx | bg4[r | 0x0c]];
+			data[p + 0x105] = bg2[q | 0x0d] ? color : BGCOLOR[idx | bg4[r | 0x0d]];
+			data[p + 0x106] = bg2[q | 0x0e] ? color : BGCOLOR[idx | bg4[r | 0x0e]];
+			data[p + 0x107] = bg2[q | 0x0f] ? color : BGCOLOR[idx | bg4[r | 0x0f]];
+			data[p + 0x200] = bg2[q | 0x10] ? color : BGCOLOR[idx | bg4[r | 0x10]];
+			data[p + 0x201] = bg2[q | 0x11] ? color : BGCOLOR[idx | bg4[r | 0x11]];
+			data[p + 0x202] = bg2[q | 0x12] ? color : BGCOLOR[idx | bg4[r | 0x12]];
+			data[p + 0x203] = bg2[q | 0x13] ? color : BGCOLOR[idx | bg4[r | 0x13]];
+			data[p + 0x204] = bg2[q | 0x14] ? color : BGCOLOR[idx | bg4[r | 0x14]];
+			data[p + 0x205] = bg2[q | 0x15] ? color : BGCOLOR[idx | bg4[r | 0x15]];
+			data[p + 0x206] = bg2[q | 0x16] ? color : BGCOLOR[idx | bg4[r | 0x16]];
+			data[p + 0x207] = bg2[q | 0x17] ? color : BGCOLOR[idx | bg4[r | 0x17]];
+			data[p + 0x300] = bg2[q | 0x18] ? color : BGCOLOR[idx | bg4[r | 0x18]];
+			data[p + 0x301] = bg2[q | 0x19] ? color : BGCOLOR[idx | bg4[r | 0x19]];
+			data[p + 0x302] = bg2[q | 0x1a] ? color : BGCOLOR[idx | bg4[r | 0x1a]];
+			data[p + 0x303] = bg2[q | 0x1b] ? color : BGCOLOR[idx | bg4[r | 0x1b]];
+			data[p + 0x304] = bg2[q | 0x1c] ? color : BGCOLOR[idx | bg4[r | 0x1c]];
+			data[p + 0x305] = bg2[q | 0x1d] ? color : BGCOLOR[idx | bg4[r | 0x1d]];
+			data[p + 0x306] = bg2[q | 0x1e] ? color : BGCOLOR[idx | bg4[r | 0x1e]];
+			data[p + 0x307] = bg2[q | 0x1f] ? color : BGCOLOR[idx | bg4[r | 0x1f]];
+			data[p + 0x400] = bg2[q | 0x20] ? color : BGCOLOR[idx | bg4[r | 0x20]];
+			data[p + 0x401] = bg2[q | 0x21] ? color : BGCOLOR[idx | bg4[r | 0x21]];
+			data[p + 0x402] = bg2[q | 0x22] ? color : BGCOLOR[idx | bg4[r | 0x22]];
+			data[p + 0x403] = bg2[q | 0x23] ? color : BGCOLOR[idx | bg4[r | 0x23]];
+			data[p + 0x404] = bg2[q | 0x24] ? color : BGCOLOR[idx | bg4[r | 0x24]];
+			data[p + 0x405] = bg2[q | 0x25] ? color : BGCOLOR[idx | bg4[r | 0x25]];
+			data[p + 0x406] = bg2[q | 0x26] ? color : BGCOLOR[idx | bg4[r | 0x26]];
+			data[p + 0x407] = bg2[q | 0x27] ? color : BGCOLOR[idx | bg4[r | 0x27]];
+			data[p + 0x500] = bg2[q | 0x28] ? color : BGCOLOR[idx | bg4[r | 0x28]];
+			data[p + 0x501] = bg2[q | 0x29] ? color : BGCOLOR[idx | bg4[r | 0x29]];
+			data[p + 0x502] = bg2[q | 0x2a] ? color : BGCOLOR[idx | bg4[r | 0x2a]];
+			data[p + 0x503] = bg2[q | 0x2b] ? color : BGCOLOR[idx | bg4[r | 0x2b]];
+			data[p + 0x504] = bg2[q | 0x2c] ? color : BGCOLOR[idx | bg4[r | 0x2c]];
+			data[p + 0x505] = bg2[q | 0x2d] ? color : BGCOLOR[idx | bg4[r | 0x2d]];
+			data[p + 0x506] = bg2[q | 0x2e] ? color : BGCOLOR[idx | bg4[r | 0x2e]];
+			data[p + 0x507] = bg2[q | 0x2f] ? color : BGCOLOR[idx | bg4[r | 0x2f]];
+			data[p + 0x600] = bg2[q | 0x30] ? color : BGCOLOR[idx | bg4[r | 0x30]];
+			data[p + 0x601] = bg2[q | 0x31] ? color : BGCOLOR[idx | bg4[r | 0x31]];
+			data[p + 0x602] = bg2[q | 0x32] ? color : BGCOLOR[idx | bg4[r | 0x32]];
+			data[p + 0x603] = bg2[q | 0x33] ? color : BGCOLOR[idx | bg4[r | 0x33]];
+			data[p + 0x604] = bg2[q | 0x34] ? color : BGCOLOR[idx | bg4[r | 0x34]];
+			data[p + 0x605] = bg2[q | 0x35] ? color : BGCOLOR[idx | bg4[r | 0x35]];
+			data[p + 0x606] = bg2[q | 0x36] ? color : BGCOLOR[idx | bg4[r | 0x36]];
+			data[p + 0x607] = bg2[q | 0x37] ? color : BGCOLOR[idx | bg4[r | 0x37]];
+			data[p + 0x700] = bg2[q | 0x38] ? color : BGCOLOR[idx | bg4[r | 0x38]];
+			data[p + 0x701] = bg2[q | 0x39] ? color : BGCOLOR[idx | bg4[r | 0x39]];
+			data[p + 0x702] = bg2[q | 0x3a] ? color : BGCOLOR[idx | bg4[r | 0x3a]];
+			data[p + 0x703] = bg2[q | 0x3b] ? color : BGCOLOR[idx | bg4[r | 0x3b]];
+			data[p + 0x704] = bg2[q | 0x3c] ? color : BGCOLOR[idx | bg4[r | 0x3c]];
+			data[p + 0x705] = bg2[q | 0x3d] ? color : BGCOLOR[idx | bg4[r | 0x3d]];
+			data[p + 0x706] = bg2[q | 0x3e] ? color : BGCOLOR[idx | bg4[r | 0x3e]];
+			data[p + 0x707] = bg2[q | 0x3f] ? color : BGCOLOR[idx | bg4[r | 0x3f]];
 		}
 	}
 
@@ -820,70 +744,70 @@ struct DigDug {
 			data[p + 0x706] = bg2[q | 0x01] * color;
 			data[p + 0x707] = bg2[q | 0x00] * color;
 		} else {
-			data[p + 0x000] = bg2[q | 0x3f] ? color : bgcolor[idx | bg4[r | 0x3f]];
-			data[p + 0x001] = bg2[q | 0x3e] ? color : bgcolor[idx | bg4[r | 0x3e]];
-			data[p + 0x002] = bg2[q | 0x3d] ? color : bgcolor[idx | bg4[r | 0x3d]];
-			data[p + 0x003] = bg2[q | 0x3c] ? color : bgcolor[idx | bg4[r | 0x3c]];
-			data[p + 0x004] = bg2[q | 0x3b] ? color : bgcolor[idx | bg4[r | 0x3b]];
-			data[p + 0x005] = bg2[q | 0x3a] ? color : bgcolor[idx | bg4[r | 0x3a]];
-			data[p + 0x006] = bg2[q | 0x39] ? color : bgcolor[idx | bg4[r | 0x39]];
-			data[p + 0x007] = bg2[q | 0x38] ? color : bgcolor[idx | bg4[r | 0x38]];
-			data[p + 0x100] = bg2[q | 0x37] ? color : bgcolor[idx | bg4[r | 0x37]];
-			data[p + 0x101] = bg2[q | 0x36] ? color : bgcolor[idx | bg4[r | 0x36]];
-			data[p + 0x102] = bg2[q | 0x35] ? color : bgcolor[idx | bg4[r | 0x35]];
-			data[p + 0x103] = bg2[q | 0x34] ? color : bgcolor[idx | bg4[r | 0x34]];
-			data[p + 0x104] = bg2[q | 0x33] ? color : bgcolor[idx | bg4[r | 0x33]];
-			data[p + 0x105] = bg2[q | 0x32] ? color : bgcolor[idx | bg4[r | 0x32]];
-			data[p + 0x106] = bg2[q | 0x31] ? color : bgcolor[idx | bg4[r | 0x31]];
-			data[p + 0x107] = bg2[q | 0x30] ? color : bgcolor[idx | bg4[r | 0x30]];
-			data[p + 0x200] = bg2[q | 0x2f] ? color : bgcolor[idx | bg4[r | 0x2f]];
-			data[p + 0x201] = bg2[q | 0x2e] ? color : bgcolor[idx | bg4[r | 0x2e]];
-			data[p + 0x202] = bg2[q | 0x2d] ? color : bgcolor[idx | bg4[r | 0x2d]];
-			data[p + 0x203] = bg2[q | 0x2c] ? color : bgcolor[idx | bg4[r | 0x2c]];
-			data[p + 0x204] = bg2[q | 0x2b] ? color : bgcolor[idx | bg4[r | 0x2b]];
-			data[p + 0x205] = bg2[q | 0x2a] ? color : bgcolor[idx | bg4[r | 0x2a]];
-			data[p + 0x206] = bg2[q | 0x29] ? color : bgcolor[idx | bg4[r | 0x29]];
-			data[p + 0x207] = bg2[q | 0x28] ? color : bgcolor[idx | bg4[r | 0x28]];
-			data[p + 0x300] = bg2[q | 0x27] ? color : bgcolor[idx | bg4[r | 0x27]];
-			data[p + 0x301] = bg2[q | 0x26] ? color : bgcolor[idx | bg4[r | 0x26]];
-			data[p + 0x302] = bg2[q | 0x25] ? color : bgcolor[idx | bg4[r | 0x25]];
-			data[p + 0x303] = bg2[q | 0x24] ? color : bgcolor[idx | bg4[r | 0x24]];
-			data[p + 0x304] = bg2[q | 0x23] ? color : bgcolor[idx | bg4[r | 0x23]];
-			data[p + 0x305] = bg2[q | 0x22] ? color : bgcolor[idx | bg4[r | 0x22]];
-			data[p + 0x306] = bg2[q | 0x21] ? color : bgcolor[idx | bg4[r | 0x21]];
-			data[p + 0x307] = bg2[q | 0x20] ? color : bgcolor[idx | bg4[r | 0x20]];
-			data[p + 0x400] = bg2[q | 0x1f] ? color : bgcolor[idx | bg4[r | 0x1f]];
-			data[p + 0x401] = bg2[q | 0x1e] ? color : bgcolor[idx | bg4[r | 0x1e]];
-			data[p + 0x402] = bg2[q | 0x1d] ? color : bgcolor[idx | bg4[r | 0x1d]];
-			data[p + 0x403] = bg2[q | 0x1c] ? color : bgcolor[idx | bg4[r | 0x1c]];
-			data[p + 0x404] = bg2[q | 0x1b] ? color : bgcolor[idx | bg4[r | 0x1b]];
-			data[p + 0x405] = bg2[q | 0x1a] ? color : bgcolor[idx | bg4[r | 0x1a]];
-			data[p + 0x406] = bg2[q | 0x19] ? color : bgcolor[idx | bg4[r | 0x19]];
-			data[p + 0x407] = bg2[q | 0x18] ? color : bgcolor[idx | bg4[r | 0x18]];
-			data[p + 0x500] = bg2[q | 0x17] ? color : bgcolor[idx | bg4[r | 0x17]];
-			data[p + 0x501] = bg2[q | 0x16] ? color : bgcolor[idx | bg4[r | 0x16]];
-			data[p + 0x502] = bg2[q | 0x15] ? color : bgcolor[idx | bg4[r | 0x15]];
-			data[p + 0x503] = bg2[q | 0x14] ? color : bgcolor[idx | bg4[r | 0x14]];
-			data[p + 0x504] = bg2[q | 0x13] ? color : bgcolor[idx | bg4[r | 0x13]];
-			data[p + 0x505] = bg2[q | 0x12] ? color : bgcolor[idx | bg4[r | 0x12]];
-			data[p + 0x506] = bg2[q | 0x11] ? color : bgcolor[idx | bg4[r | 0x11]];
-			data[p + 0x507] = bg2[q | 0x10] ? color : bgcolor[idx | bg4[r | 0x10]];
-			data[p + 0x600] = bg2[q | 0x0f] ? color : bgcolor[idx | bg4[r | 0x0f]];
-			data[p + 0x601] = bg2[q | 0x0e] ? color : bgcolor[idx | bg4[r | 0x0e]];
-			data[p + 0x602] = bg2[q | 0x0d] ? color : bgcolor[idx | bg4[r | 0x0d]];
-			data[p + 0x603] = bg2[q | 0x0c] ? color : bgcolor[idx | bg4[r | 0x0c]];
-			data[p + 0x604] = bg2[q | 0x0b] ? color : bgcolor[idx | bg4[r | 0x0b]];
-			data[p + 0x605] = bg2[q | 0x0a] ? color : bgcolor[idx | bg4[r | 0x0a]];
-			data[p + 0x606] = bg2[q | 0x09] ? color : bgcolor[idx | bg4[r | 0x09]];
-			data[p + 0x607] = bg2[q | 0x08] ? color : bgcolor[idx | bg4[r | 0x08]];
-			data[p + 0x700] = bg2[q | 0x07] ? color : bgcolor[idx | bg4[r | 0x07]];
-			data[p + 0x701] = bg2[q | 0x06] ? color : bgcolor[idx | bg4[r | 0x06]];
-			data[p + 0x702] = bg2[q | 0x05] ? color : bgcolor[idx | bg4[r | 0x05]];
-			data[p + 0x703] = bg2[q | 0x04] ? color : bgcolor[idx | bg4[r | 0x04]];
-			data[p + 0x704] = bg2[q | 0x03] ? color : bgcolor[idx | bg4[r | 0x03]];
-			data[p + 0x705] = bg2[q | 0x02] ? color : bgcolor[idx | bg4[r | 0x02]];
-			data[p + 0x706] = bg2[q | 0x01] ? color : bgcolor[idx | bg4[r | 0x01]];
-			data[p + 0x707] = bg2[q | 0x00] ? color : bgcolor[idx | bg4[r | 0x00]];
+			data[p + 0x000] = bg2[q | 0x3f] ? color : BGCOLOR[idx | bg4[r | 0x3f]];
+			data[p + 0x001] = bg2[q | 0x3e] ? color : BGCOLOR[idx | bg4[r | 0x3e]];
+			data[p + 0x002] = bg2[q | 0x3d] ? color : BGCOLOR[idx | bg4[r | 0x3d]];
+			data[p + 0x003] = bg2[q | 0x3c] ? color : BGCOLOR[idx | bg4[r | 0x3c]];
+			data[p + 0x004] = bg2[q | 0x3b] ? color : BGCOLOR[idx | bg4[r | 0x3b]];
+			data[p + 0x005] = bg2[q | 0x3a] ? color : BGCOLOR[idx | bg4[r | 0x3a]];
+			data[p + 0x006] = bg2[q | 0x39] ? color : BGCOLOR[idx | bg4[r | 0x39]];
+			data[p + 0x007] = bg2[q | 0x38] ? color : BGCOLOR[idx | bg4[r | 0x38]];
+			data[p + 0x100] = bg2[q | 0x37] ? color : BGCOLOR[idx | bg4[r | 0x37]];
+			data[p + 0x101] = bg2[q | 0x36] ? color : BGCOLOR[idx | bg4[r | 0x36]];
+			data[p + 0x102] = bg2[q | 0x35] ? color : BGCOLOR[idx | bg4[r | 0x35]];
+			data[p + 0x103] = bg2[q | 0x34] ? color : BGCOLOR[idx | bg4[r | 0x34]];
+			data[p + 0x104] = bg2[q | 0x33] ? color : BGCOLOR[idx | bg4[r | 0x33]];
+			data[p + 0x105] = bg2[q | 0x32] ? color : BGCOLOR[idx | bg4[r | 0x32]];
+			data[p + 0x106] = bg2[q | 0x31] ? color : BGCOLOR[idx | bg4[r | 0x31]];
+			data[p + 0x107] = bg2[q | 0x30] ? color : BGCOLOR[idx | bg4[r | 0x30]];
+			data[p + 0x200] = bg2[q | 0x2f] ? color : BGCOLOR[idx | bg4[r | 0x2f]];
+			data[p + 0x201] = bg2[q | 0x2e] ? color : BGCOLOR[idx | bg4[r | 0x2e]];
+			data[p + 0x202] = bg2[q | 0x2d] ? color : BGCOLOR[idx | bg4[r | 0x2d]];
+			data[p + 0x203] = bg2[q | 0x2c] ? color : BGCOLOR[idx | bg4[r | 0x2c]];
+			data[p + 0x204] = bg2[q | 0x2b] ? color : BGCOLOR[idx | bg4[r | 0x2b]];
+			data[p + 0x205] = bg2[q | 0x2a] ? color : BGCOLOR[idx | bg4[r | 0x2a]];
+			data[p + 0x206] = bg2[q | 0x29] ? color : BGCOLOR[idx | bg4[r | 0x29]];
+			data[p + 0x207] = bg2[q | 0x28] ? color : BGCOLOR[idx | bg4[r | 0x28]];
+			data[p + 0x300] = bg2[q | 0x27] ? color : BGCOLOR[idx | bg4[r | 0x27]];
+			data[p + 0x301] = bg2[q | 0x26] ? color : BGCOLOR[idx | bg4[r | 0x26]];
+			data[p + 0x302] = bg2[q | 0x25] ? color : BGCOLOR[idx | bg4[r | 0x25]];
+			data[p + 0x303] = bg2[q | 0x24] ? color : BGCOLOR[idx | bg4[r | 0x24]];
+			data[p + 0x304] = bg2[q | 0x23] ? color : BGCOLOR[idx | bg4[r | 0x23]];
+			data[p + 0x305] = bg2[q | 0x22] ? color : BGCOLOR[idx | bg4[r | 0x22]];
+			data[p + 0x306] = bg2[q | 0x21] ? color : BGCOLOR[idx | bg4[r | 0x21]];
+			data[p + 0x307] = bg2[q | 0x20] ? color : BGCOLOR[idx | bg4[r | 0x20]];
+			data[p + 0x400] = bg2[q | 0x1f] ? color : BGCOLOR[idx | bg4[r | 0x1f]];
+			data[p + 0x401] = bg2[q | 0x1e] ? color : BGCOLOR[idx | bg4[r | 0x1e]];
+			data[p + 0x402] = bg2[q | 0x1d] ? color : BGCOLOR[idx | bg4[r | 0x1d]];
+			data[p + 0x403] = bg2[q | 0x1c] ? color : BGCOLOR[idx | bg4[r | 0x1c]];
+			data[p + 0x404] = bg2[q | 0x1b] ? color : BGCOLOR[idx | bg4[r | 0x1b]];
+			data[p + 0x405] = bg2[q | 0x1a] ? color : BGCOLOR[idx | bg4[r | 0x1a]];
+			data[p + 0x406] = bg2[q | 0x19] ? color : BGCOLOR[idx | bg4[r | 0x19]];
+			data[p + 0x407] = bg2[q | 0x18] ? color : BGCOLOR[idx | bg4[r | 0x18]];
+			data[p + 0x500] = bg2[q | 0x17] ? color : BGCOLOR[idx | bg4[r | 0x17]];
+			data[p + 0x501] = bg2[q | 0x16] ? color : BGCOLOR[idx | bg4[r | 0x16]];
+			data[p + 0x502] = bg2[q | 0x15] ? color : BGCOLOR[idx | bg4[r | 0x15]];
+			data[p + 0x503] = bg2[q | 0x14] ? color : BGCOLOR[idx | bg4[r | 0x14]];
+			data[p + 0x504] = bg2[q | 0x13] ? color : BGCOLOR[idx | bg4[r | 0x13]];
+			data[p + 0x505] = bg2[q | 0x12] ? color : BGCOLOR[idx | bg4[r | 0x12]];
+			data[p + 0x506] = bg2[q | 0x11] ? color : BGCOLOR[idx | bg4[r | 0x11]];
+			data[p + 0x507] = bg2[q | 0x10] ? color : BGCOLOR[idx | bg4[r | 0x10]];
+			data[p + 0x600] = bg2[q | 0x0f] ? color : BGCOLOR[idx | bg4[r | 0x0f]];
+			data[p + 0x601] = bg2[q | 0x0e] ? color : BGCOLOR[idx | bg4[r | 0x0e]];
+			data[p + 0x602] = bg2[q | 0x0d] ? color : BGCOLOR[idx | bg4[r | 0x0d]];
+			data[p + 0x603] = bg2[q | 0x0c] ? color : BGCOLOR[idx | bg4[r | 0x0c]];
+			data[p + 0x604] = bg2[q | 0x0b] ? color : BGCOLOR[idx | bg4[r | 0x0b]];
+			data[p + 0x605] = bg2[q | 0x0a] ? color : BGCOLOR[idx | bg4[r | 0x0a]];
+			data[p + 0x606] = bg2[q | 0x09] ? color : BGCOLOR[idx | bg4[r | 0x09]];
+			data[p + 0x607] = bg2[q | 0x08] ? color : BGCOLOR[idx | bg4[r | 0x08]];
+			data[p + 0x700] = bg2[q | 0x07] ? color : BGCOLOR[idx | bg4[r | 0x07]];
+			data[p + 0x701] = bg2[q | 0x06] ? color : BGCOLOR[idx | bg4[r | 0x06]];
+			data[p + 0x702] = bg2[q | 0x05] ? color : BGCOLOR[idx | bg4[r | 0x05]];
+			data[p + 0x703] = bg2[q | 0x04] ? color : BGCOLOR[idx | bg4[r | 0x04]];
+			data[p + 0x704] = bg2[q | 0x03] ? color : BGCOLOR[idx | bg4[r | 0x03]];
+			data[p + 0x705] = bg2[q | 0x02] ? color : BGCOLOR[idx | bg4[r | 0x02]];
+			data[p + 0x706] = bg2[q | 0x01] ? color : BGCOLOR[idx | bg4[r | 0x01]];
+			data[p + 0x707] = bg2[q | 0x00] ? color : BGCOLOR[idx | bg4[r | 0x00]];
 		}
 	}
 

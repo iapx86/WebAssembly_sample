@@ -49,25 +49,25 @@ struct MB8840 {
 	}
 
 	bool interrupt(int _cause = MB8840_EXTERNAL) {
-		int vector;
+		int intvec;
 		switch (_cause) {
 		default:
 		case MB8840_EXTERNAL:
 			if (~mask & 4)
 				return false;
-			mask &= ~4, vector = 2;
+			mask &= ~4, intvec = 2;
 			break;
 		case MB8840_TIMER:
 			if (~mask & 2)
 				return false;
-			mask &= ~2, vector = 4;
+			mask &= ~2, intvec = 4;
 			break;
 		case MB8840_SERIAL:
 			if (~mask & 1)
 				return false;
-			mask &= ~1, vector = 6;
+			mask &= ~1, intvec = 6;
 		}
-		return push(pc | zf << 13 | cf << 14 | st << 15), pc = vector, st = true, cycles -= 3, true;
+		return push(pc | zf << 13 | cf << 14 | st << 15), pc = intvec, st = true, cycles -= 3, true;
 	}
 
 	int execute() {

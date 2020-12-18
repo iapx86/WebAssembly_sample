@@ -5,7 +5,6 @@
 #ifndef SN76489_H
 #define SN76489_H
 
-#include <cstring>
 #include <algorithm>
 #include <list>
 #include <mutex>
@@ -21,8 +20,9 @@ struct SN76489 {
 	vector<list<int>> tmpwheel;
 	list<list<int>> wheel;
 	mutex mutex;
+	bool enable = true;
 	int addr = 0;
-	uint16_t reg[8] = {};
+	uint16_t reg[8];
 	int cycles = 0;
 	struct {
 		int freq = 0;
@@ -39,7 +39,11 @@ struct SN76489 {
 		this->resolution = resolution;
 		this->gain = gain;
 		tmpwheel.resize(resolution);
-		memset(reg, 0xff, sizeof(reg));
+		fill_n(reg, sizeof(reg) / sizeof(uint16_t), 0xffff);
+	}
+
+	void mute(bool flag) {
+		enable = !flag;
 	}
 
 	void write(int data, int timer = 0) {
@@ -70,10 +74,10 @@ struct SN76489 {
 				auto& ch = channel[j];
 				ch.freq = reg[j * 2];
 				const int vol = ~reg[j * 2 + 1] & 0xf;
-				data[i] += ((ch.output & 1) * 2 - 1) * (vol ? pow(10, (vol - 15) / 10.0) : 0.0) * gain;
+				data[i] += ((ch.output & 1) * 2 - 1) * (vol ? pow(10, (vol - 15) / 10.0) : 0.0) * gain * enable;
 			}
 			const int nfreq = (reg[6] & 3) == 3 ? channel[2].freq << 1 : 32 << (reg[6] & 3), nvol = ~reg[7] & 0xf;
-			data[i] += ((rng & 1) * 2 - 1) * (nvol ? pow(10, (nvol - 15) / 10.0) : 0.0) * gain;
+			data[i] += ((rng & 1) * 2 - 1) * (nvol ? pow(10, (nvol - 15) / 10.0) : 0.0) * gain * enable;
 			for (cycles += rate; cycles >= sampleRate; cycles -= sampleRate) {
 				for (auto& ch: channel)
 					!(--ch.count & 0x3ff) && (ch.output = ~ch.output, ch.count = ch.freq);

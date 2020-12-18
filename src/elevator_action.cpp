@@ -5,7 +5,7 @@
  */
 
 #include <emscripten.h>
-#include <cstring>
+#include <array>
 #include <vector>
 #include "elevator_action.h"
 using namespace std;
@@ -27,9 +27,9 @@ vector<int> rom_table = {
 	(int)"PRI", (int)strlen("PRI"), (int)game->PRI, (int)sizeof(game->PRI),
 	0
 };
-vector<int> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
-vector<int> data(game->width * game->height);
-vector<float> sample(512);
+array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
+array<int, ElevatorAction::width * ElevatorAction::height> data = {};
+array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 	return rom_table.data();
@@ -55,7 +55,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void update() {
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE float *sound() {
-	fill(sample.begin(), sample.end(), 0);
+	sample.fill(0);
 	game->sound0->makeSound(sample.data(), sample.size());
 	game->sound1->makeSound(sample.data(), sample.size());
 	game->sound2->makeSound(sample.data(), sample.size());

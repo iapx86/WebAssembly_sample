@@ -6,7 +6,7 @@
 #define VLM5030_H
 
 #include <algorithm>
-#include <cstring>
+#include <array>
 #include <mutex>
 using namespace std;
 
@@ -29,17 +29,17 @@ struct VLM5030 {
 	int pcount = 0;
 	int pitch0 = 0;
 	int energy0 = 0;
-	int16_t k0[10] = {};
+	array<int16_t, 10> k0 = {};
 	int npitch = 0;
 	int nenergy = 0;
-	int16_t nk[10] = {};
+	array<int16_t, 10> nk = {};
 	int pitch1 = 0;
 	int energy1 = 0;
-	int16_t k1[10] = {};
+	array<int16_t, 10> k1 = {};
 	int pitch = 0;
 	int energy = 0;
-	int16_t k[10] = {};
-	int x[10] = {};
+	array<int16_t, 10> k = {};
+	array<int, 10> x = {};
 	float output = 0;
 
 	VLM5030(uint8_t *VLM, int size, int clock, int sampleRate = 48000, float gain = 0.1) {
@@ -61,14 +61,14 @@ struct VLM5030 {
 			offset = 0;
 			icount = scount = pcount = 0;
 			pitch0 = energy0 = 0;
-			memset(k0, 0, sizeof(k0));
+			k0.fill(0);
 			npitch = nenergy = 0;
-			memset(nk, 0, sizeof(nk));
+			nk.fill(0);
 			pitch1 = energy1 = 0;
-			memset(k1, 0, sizeof(k1));
+			k1.fill(0);
 			pitch = energy = 0;
-			memset(k, 0, sizeof(k));
-			memset(x, 0, sizeof(x));
+			k.fill(0);
+			x.fill(0);
 			output = 0;
 		}
 		param = data;
@@ -99,9 +99,9 @@ struct VLM5030 {
 					if (!icount) {
 						pitch0 = npitch;
 						energy0 = nenergy;
-						memcpy(k0, nk, sizeof(k0));
+						copy(nk.begin(), nk.end(), k0.begin());
 						npitch = nenergy = 0;
-						memset(nk, 0, sizeof(nk));
+						nk.fill(0);
 						const uint8_t *frame = base + offset;
 						if (~frame[0] & 1) {
 							const int ptable[] = {0, 8, -8, -8};
@@ -129,9 +129,9 @@ struct VLM5030 {
 							continue;
 						}
 						if (energy0)
-							pitch1 = npitch, energy1 = nenergy, memcpy(k1, nk, sizeof(k1));
+							pitch1 = npitch, energy1 = nenergy, copy(nk.begin(), nk.end(), k1.begin());
 						else
-							pitch1 = pitch0, energy1 = energy0, memcpy(k1, k0, sizeof(k1));
+							pitch1 = pitch0, energy1 = energy0, copy(k0.begin(), k0.end(), k1.begin());
 					}
 					const int itable[] = {1, 2, 4, 4};
 					const int ieffect = (~(icount -= itable[param & 3]) & 3) + 1;

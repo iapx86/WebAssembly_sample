@@ -62,13 +62,13 @@ struct Z80 : Cpu {
 		return true;
 	}
 
-	bool interrupt(int vector) {
+	bool interrupt(int intvec) {
 		if (!Cpu::interrupt() || iff != 3)
 			return false;
 		iff = 0;
 		switch (im) {
 		case 0:
-			switch (vector) {
+			switch (intvec) {
 			case 0xc7: // RST 00h
 				return rst(0x00), true;
 			case 0xcf: // RST 08h
@@ -90,7 +90,7 @@ struct Z80 : Cpu {
 		case 1:
 			return rst(0x38), true;
 		case 2:
-			return rst(read16(vector & 0xff | i << 8)), true;
+			return rst(read16(intvec & 0xff | i << 8)), true;
 		}
 		return true;
 	}

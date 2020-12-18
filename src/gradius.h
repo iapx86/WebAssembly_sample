@@ -7,6 +7,7 @@
 #ifndef GRADIUS_H
 #define GRADIUS_H
 
+#include <algorithm>
 #include <list>
 #include "mc68000.h"
 #include "z80.h"
@@ -106,10 +107,7 @@ struct Gradius {
 			cpu.memorymap[0x5a0 + i].write16 = [&](int addr, int data) {
 				const int offset = addr & 0xffe;
 				ram[0x28000 | offset] = data >> 8, ram[0x28001 | offset] = data;
-				rgb[offset >> 1] = intensity[data & 0x1f]	// Red
-					| intensity[data >> 5 & 0x1f] << 8		// Green
-					| intensity[data >> 10 & 0x1f] << 16	// Blue
-					| 0xff000000;							// Alpha
+				rgb[offset >> 1] = 0xff000000 | intensity[data >> 10 & 31] << 16 | intensity[data >> 5 & 31] << 8 | intensity[data & 31];
 			};
 		}
 		cpu.memorymap[0x5c0].write = [&](int addr, int data) { if (addr == 0x5c001) command.push_back(data); };
@@ -209,15 +207,12 @@ struct Gradius {
 
 	Gradius *execute() {
 		for (int vpos = 0; vpos < 256; vpos++) {
-			if (!vpos && fInterrupt2Enable)
-				cpu.interrupt(2);
-			if (vpos == 120 && fInterrupt4Enable)
-				cpu.interrupt(4);
+			!vpos && fInterrupt2Enable && cpu.interrupt(2);
+			vpos == 120 && fInterrupt4Enable && cpu.interrupt(4);
 			cpu.execute(64);
 		}
 		for (count = 0; count < 58; count++) { // 14318180 / 4 / 60 / 1024
-			if (!command.empty())
-				cpu2.interrupt();
+			!command.empty() && cpu2.interrupt();
 			sound0->write(0x0e, timer & 0x2f | sound3->BSY << 5 | 0xd0);
 			cpu2.execute(146);
 			timer = timer + 1 & 0xff;
@@ -352,7 +347,7 @@ struct Gradius {
 		// 画面クリア
 		int p = 256 * 16 + 16;
 		for (int i = 0; i < 256; p += 256, i++)
-			memset(&data[p], 0, 224 * sizeof(int));
+			fill_n(&data[p], 224, 0);
 
 		// bg描画
 		for (int k = 0x23000; k < 0x24000; k += 2)

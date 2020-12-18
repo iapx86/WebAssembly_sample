@@ -7,11 +7,13 @@
 #ifndef GROBDA_H
 #define GROBDA_H
 
-#include <cstring>
+#include <algorithm>
+#include <array>
 #include <vector>
 #include "mc6809.h"
 #include "mappy_sound.h"
 #include "sound_effect.h"
+#include "utils.h"
 using namespace std;
 
 enum {
@@ -58,11 +60,10 @@ struct Grobda {
 	uint8_t in[10] = {0, 0, 0, 0, 0, 0, 6, 3, 0, 0};
 	int edge = 0xf;
 
-	uint8_t bg[0x4000] = {};
-	uint8_t obj[0x10000] = {};
-	uint8_t bgcolor[0x100] = {};
-	uint8_t objcolor[0x100] = {};
-	int rgb[0x20] = {};
+	array<uint8_t, 0x4000> bg;
+	array<uint8_t, 0x10000> obj;
+	array<uint8_t, 0x100> bgcolor;
+	array<int, 0x20> rgb;
 
 	vector<SE> se;
 
@@ -121,25 +122,26 @@ struct Grobda {
 		cpu2.set_breakpoint(0xea2c); // Get Ready
 
 		// Videoの初期化
-		convertRGB();
-		convertBG();
-		convertOBJ();
+		bg.fill(3), obj.fill(3);
+		convertGFX(&bg[0], BG, 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], OBJ, 256, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
+		for (int i = 0; i < 256; i++)
+			bgcolor[i] = 0x10 | ~BGCOLOR[i] & 0xf;
+		for (int i = 0; i < 0x20; i++)
+			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 
 		// 効果音の初期化
 		convertGETREADY();
 		se.resize(1);
 		se[0].freq = 14800;
 		se[0].buf.resize(8837);
-		memcpy(se[0].buf.data(), GETREADY, 8837 * sizeof(short));
+		copy_n(GETREADY, 8837, se[0].buf.begin());
 	}
 
 	Grobda *execute() {
-//		sound0->mute(!fSoundEnable);
-		if (fInterruptEnable0)
-			cpu.interrupt();
-		if (fInterruptEnable1)
-			cpu2.interrupt();
 		Cpu *cpus[] = {&cpu, &cpu2};
+//		sound0->mute(!fSoundEnable);
+		fInterruptEnable0 && cpu.interrupt(), fInterruptEnable1 && cpu2.interrupt();
 		Cpu::multiple_execute(2, cpus, 0x2000);
 		return this;
 	}
@@ -229,7 +231,7 @@ struct Grobda {
 		if (fPortTest)
 			return edge = in[3] ^ 0xf, this;
 		if (port[8] == 1)
-			memcpy(port + 4, in, 4);
+			copy_n(in, 4, port + 4);
 		else if (port[8] == 3) {
 			int credit = port[2] * 10 + port[3];
 			if (fCoin && credit < 150)
@@ -239,13 +241,13 @@ struct Grobda {
 			if (!port[9] && fStart2P && credit > 1)
 				port[1] += 2, credit -= (credit < 150) * 2;
 			port[2] = credit / 10, port[3] = credit % 10;
-			memcpy(port + 4, vector<uint8_t>{in[1], uint8_t(in[3] << 1 & 0xa | edge & 5), in[2], uint8_t(in[3] & 0xa | edge >> 1 & 5)}.data(), 4);
+			copy_n(vector<uint8_t>{in[1], uint8_t(in[3] << 1 & 0xa | edge & 5), in[2], uint8_t(in[3] & 0xa | edge >> 1 & 5)}.data(), 4, port + 4);
 		} else if (port[8] == 5)
 			port[2] = 0xf, port[6] = 0xc;
 		if (port[0x18] == 8)
 			port[0x10] = 6, port[0x11] = 9;
 		else if (port[0x18] == 9)
-			memcpy(port + 0x10, vector<uint8_t>{in[5], in[9], in[6], in[6], in[7], in[7], in[8], in[8]}.data(), 8);
+			copy_n(vector<uint8_t>{in[5], in[9], in[6], in[6], in[7], in[7], in[8], in[8]}.data(), 8, port + 0x10);
 		return edge = in[3] ^ 0xf, this;
 	}
 
@@ -285,58 +287,6 @@ struct Grobda {
 		in[8] = in[8] & ~(1 << 0) | fDown << 0;
 	}
 
-	void convertRGB() {
-		for (int i = 0; i < 0x20; i++)
-			rgb[i] = (RGB[i] & 7) * 255 / 7			// Red
-				| (RGB[i] >> 3 & 7) * 255 / 7 << 8	// Green
-				| (RGB[i] >> 6) * 255 / 3 << 16		// Blue
-				| 0xff000000;						// Alpha
-	}
-
-	void convertBG() {
-		for (int i = 0; i < 256; i++)
-			bgcolor[i] = ~BGCOLOR[i] & 0xf | 0x10;
-		for (int p = 0, q = 0, i = 256; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = BG[q + k + 8] >> j & 1 | BG[q + k + 8] >> (j + 3) & 2;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = BG[q + k] >> j & 1 | BG[q + k] >> (j + 3) & 2;
-		}
-	}
-
-	void convertOBJ() {
-		for (int i = 0; i < 256; i++)
-			objcolor[i] = OBJCOLOR[i] & 0xf;
-		for (int p = 0, q = 0, i = 256; i != 0; q += 64, --i) {
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 32] >> j & 1 | OBJ[q + k + 32] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 40] >> j & 1 | OBJ[q + k + 40] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 8] >> j & 1 | OBJ[q + k + 8] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 48] >> j & 1 | OBJ[q + k + 48] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 16] >> j & 1 | OBJ[q + k + 16] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 56] >> j & 1 | OBJ[q + k + 56] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 24] >> j & 1 | OBJ[q + k + 24] >> (j + 3) & 2;
-			}
-		}
-	}
-
 	static void convertGETREADY() {
 		static bool converted = false;
 		if (converted)
@@ -363,9 +313,8 @@ struct Grobda {
 	void makeBitmap(int *data) {
 		// 画面クリア
 		int p = 256 * 16 + 16;
-		for (int i = 0; i < 288; p += 256 - 224, i++)
-			for (int j = 0; j < 224; p++, j++)
-				data[p] = 0x1f;
+		for (int i = 0; i < 288; p += 256, i++)
+			fill_n(&data[p], 224, 0x1f);
 
 		// bg描画
 		drawBG(data, 0);
@@ -459,25 +408,20 @@ struct Grobda {
 
 	void drawBG(int *data, int pri) {
 		int p = 256 * 8 * 4 + 232;
-		int k = 0x40;
-		for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
+		for (int k = 0x40, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
 				xfer8x8(data, p, k, pri);
 		p = 256 * 8 * 36 + 232;
-		k = 2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k, pri);
 		p = 256 * 8 * 37 + 232;
-		k = 0x22;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x22, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k, pri);
 		p = 256 * 8 * 2 + 232;
-		k = 0x3c2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x3c2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k, pri);
 		p = 256 * 8 * 3 + 232;
-		k = 0x3e2;
-		for (int i = 0; i < 28; p -= 8, k++, i++)
+		for (int k = 0x3e2, i = 0; i < 28; p -= 8, k++, i++)
 			xfer8x8(data, p, k, pri);
 	}
 
@@ -562,7 +506,7 @@ struct Grobda {
 		src = src << 8 & 0xff00;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[src++]]) != 0xf)
+				if ((px = OBJCOLOR[idx | obj[src++]]) != 0xf)
 					data[dst] = px;
 	}
 
@@ -575,7 +519,7 @@ struct Grobda {
 		src = (src << 8 & 0xff00) + 256 - 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src -= 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[src++]]) != 0xf)
+				if ((px = OBJCOLOR[idx | obj[src++]]) != 0xf)
 					data[dst] = px;
 	}
 
@@ -588,7 +532,7 @@ struct Grobda {
 		src = (src << 8 & 0xff00) + 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src += 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[--src]]) != 0xf)
+				if ((px = OBJCOLOR[idx | obj[--src]]) != 0xf)
 					data[dst] = px;
 	}
 
@@ -601,7 +545,7 @@ struct Grobda {
 		src = (src << 8 & 0xff00) + 256;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[--src]]) != 0xf)
+				if ((px = OBJCOLOR[idx | obj[--src]]) != 0xf)
 					data[dst] = px;
 	}
 

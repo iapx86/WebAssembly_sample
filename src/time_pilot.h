@@ -7,9 +7,13 @@
 #ifndef TIME_PILOT_H
 #define TIME_PILOT_H
 
+#include <algorithm>
+#include <array>
 #include <list>
+#include <vector>
 #include "z80.h"
 #include "ay-3-8910.h"
+#include "utils.h"
 using namespace std;
 
 enum {
@@ -52,11 +56,10 @@ struct TimePilot {
 	int timer = 0;
 	list<int> command;
 
-	uint8_t bg[0x8000] = {};
-	uint8_t obj[0x10000] = {};
-	uint8_t bgcolor[0x100] = {};
-	uint8_t objcolor[0x100] = {};
-	int rgb[0x20] = {};
+	array<uint8_t, 0x8000> bg;
+	array<uint8_t, 0x10000> obj;
+	array<uint8_t, 0x100> bgcolor;
+	array<int, 0x20> rgb;
 	int vpos = 0;
 
 	Z80 cpu, cpu2;
@@ -112,9 +115,15 @@ struct TimePilot {
 				cpu2.memorymap[page].write = [&](int addr, int data) { psg[1].addr = data; };
 
 		// Videoの初期化
-		convertRGB();
-		convertBG();
-		convertOBJ();
+		bg.fill(3), obj.fill(3);
+		convertGFX(&bg[0], BG, 512, {rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1)}, {4, 0}, 16);
+		convertGFX(&obj[0], OBJ, 256, {rseq8(256, 8), rseq8(0, 8)}, {rseq4(192, 1), rseq4(128, 1), rseq4(64, 1), rseq4(0, 1)}, {4, 0}, 64);
+		for (int i = 0; i < 256; i++)
+			bgcolor[i] = 0x10 | BGCOLOR[i];
+		for (int i = 0; i < 0x20; i++) {
+			const int e = RGB_H[i] << 8 | RGB_L[i];
+			rgb[i] = 0xff000000 | (e >> 11) * 255 / 31 << 16 | (e >> 6 & 31) * 255 / 31 << 8 | (e >> 1 & 31) * 255 / 31;
+		}
 	}
 
 	TimePilot *execute() {
@@ -123,10 +132,8 @@ struct TimePilot {
 		for (int i = 0; i < 256; i++) {
 			vpos = i + 144 & 0xff;
 			if (!vpos)
-				memcpy(ram + 0x1200, ram + 0x1000, 0x200);
-			if (vpos == 240 && fInterruptEnable)
-				cpu.non_maskable_interrupt();
-			cpu.execute(32);
+				copy_n(ram + 0x1000, 0x200, ram + 0x1200);
+			vpos == 240 && fInterruptEnable && cpu.non_maskable_interrupt(), cpu.execute(32);
 		}
 		for (count = 0; count < 58; count++) { // 14318181 / 8 / 60 / 512
 			if (command.size() && cpu2.interrupt())
@@ -134,8 +141,7 @@ struct TimePilot {
 			const int table[] = {0x00, 0x10, 0x20, 0x30, 0x40, 0x90, 0xa0, 0xb0, 0xa0, 0xd0};
 			sound0->write(0x0f, table[timer]);
 			cpu2.execute(73);
-			if (++timer >= 10)
-				timer = 0;
+			++timer >= 10 && (timer = 0);
 		}
 		return this;
 	}
@@ -248,58 +254,6 @@ struct TimePilot {
 
 	void triggerA(bool fDown) {
 		in[1] = in[1] & ~(1 << 4) | !fDown << 4;
-	}
-
-	void convertRGB() {
-		for (int i = 0; i < 0x20; i++)
-			rgb[i] = ((RGB_H[i] << 8 | RGB_L[i]) >> 1 & 31) * 255 / 31		// Red
-				| ((RGB_H[i] << 8 | RGB_L[i]) >> 6 & 31) * 255 / 31 << 8	// Green
-				| ((RGB_H[i] << 8 | RGB_L[i]) >> 11) * 255 / 31 << 16		// Blue
-				| 0xff000000;
-	}
-
-	void convertBG() {
-		for (int i = 0; i < 256; i++)
-			bgcolor[i] = BGCOLOR[i] & 0xf | 0x10;
-		for (int p = 0, q = 0, i = 512; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = BG[q + k] >> (j + 4) & 1 | BG[q + k] >> j << 1 & 2;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = BG[q + k + 8] >> (j + 4) & 1 | BG[q + k + 8] >> j << 1 & 2;
-		}
-	}
-
-	void convertOBJ() {
-		for (int i = 0; i < 256; i++)
-			objcolor[i] = OBJCOLOR[i] & 0xf;
-		for (int p = 0, q = 0, i = 256; i != 0; q += 64, --i) {
-			for (int j = 0; j < 4; j++) {
-				for (int k = 63; k >= 56; --k)
-					obj[p++] = OBJ[q + k] >> (j + 4) & 1 | OBJ[q + k] >> j << 1 & 2;
-				for (int k = 31; k >= 24; --k)
-					obj[p++] = OBJ[q + k] >> (j + 4) & 1 | OBJ[q + k] >> j << 1 & 2;
-			}
-			for (int j = 0; j < 4; j++) {
-				for (int k = 55; k >= 48; --k)
-					obj[p++] = OBJ[q + k] >> (j + 4) & 1 | OBJ[q + k] >> j << 1 & 2;
-				for (int k = 23; k >= 16; --k)
-					obj[p++] = OBJ[q + k] >> (j + 4) & 1 | OBJ[q + k] >> j << 1 & 2;
-			}
-			for (int j = 0; j < 4; j++) {
-				for (int k = 47; k >= 40; --k)
-					obj[p++] = OBJ[q + k] >> (j + 4) & 1 | OBJ[q + k] >> j << 1 & 2;
-				for (int k = 15; k >= 8; --k)
-					obj[p++] = OBJ[q + k] >> (j + 4) & 1 | OBJ[q + k] >> j << 1 & 2;
-			}
-			for (int j = 0; j < 4; j++) {
-				for (int k = 39; k >= 32; --k)
-					obj[p++] = OBJ[q + k] >> (j + 4) & 1 | OBJ[q + k] >> j << 1 & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k] >> (j + 4) & 1 | OBJ[q + k] >> j << 1 & 2;
-			}
-		}
 	}
 
 	void makeBitmap(int *data) {
@@ -642,7 +596,7 @@ struct TimePilot {
 		src = src << 8 & 0xff00;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[src++]]))
+				if ((px = OBJCOLOR[idx | obj[src++]]))
 					data[dst] = px;
 	}
 
@@ -655,7 +609,7 @@ struct TimePilot {
 		src = (src << 8 & 0xff00) + 256 - 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src -= 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[src++]]))
+				if ((px = OBJCOLOR[idx | obj[src++]]))
 					data[dst] = px;
 	}
 
@@ -668,7 +622,7 @@ struct TimePilot {
 		src = (src << 8 & 0xff00) + 16;
 		for (int i = 16; i != 0; dst += 256 - 16, src += 32, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[--src]]))
+				if ((px = OBJCOLOR[idx | obj[--src]]))
 					data[dst] = px;
 	}
 
@@ -681,7 +635,7 @@ struct TimePilot {
 		src = (src << 8 & 0xff00) + 256;
 		for (int i = 16; i != 0; dst += 256 - 16, --i)
 			for (int j = 16; j != 0; dst++, --j)
-				if ((px = objcolor[idx | obj[--src]]))
+				if ((px = OBJCOLOR[idx | obj[--src]]))
 					data[dst] = px;
 	}
 

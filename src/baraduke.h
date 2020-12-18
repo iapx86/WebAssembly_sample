@@ -7,9 +7,13 @@
 #ifndef BARADUKE_H
 #define BARADUKE_H
 
+#include <array>
+#include <vector>
 #include "mc6809.h"
 #include "mc6801.h"
 #include "c30.h"
+#include "utils.h"
+using namespace std;
 
 enum {
 	BONUS_A, BONUS_B, BONUS_C, BONUS_D,
@@ -54,10 +58,10 @@ struct Baraduke {
 	bool cpu_irq = false;
 	bool mcu_irq = false;
 
-	uint8_t fg[0x8000] = {};
-	uint8_t bg[0x20000] = {};
-	uint8_t obj[0x20000] = {};
-	int rgb[0x800] = {};
+	array<uint8_t, 0x8000> fg;
+	array<uint8_t, 0x20000> bg;
+	array<uint8_t, 0x20000> obj;
+	array<int, 0x800> rgb;
 	int vScroll[2] = {};
 	int hScroll[2] = {};
 
@@ -130,10 +134,15 @@ struct Baraduke {
 		mcu.check_interrupt = [&]() { return mcu_irq && mcu.interrupt() ? (mcu_irq = false, true) : (ram2[8] & 0x48) == 0x48 && mcu.interrupt(MC6801_OCF); };
 
 		// Videoの初期化
-		convertRGB();
-		convertFG();
-		convertBG();
-		convertOBJ();
+		fg.fill(3), bg.fill(7), obj.fill(15);
+		convertGFX(&fg[0], FG, 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&bg[0], BG, 512, {rseq8(0, 16)}, {seq4(0, 1), seq4(8, 1)}, {0x40000, 0, 4}, 16);
+		convertGFX(&bg[0x8000], &BG[0x2000], 512, {rseq8(0, 16)}, {seq4(0, 1), seq4(8, 1)}, {0x30004, 0, 4}, 16);
+		convertGFX(&bg[0x10000], &BG[0x4000], 512, {rseq8(0, 16)}, {seq4(0, 1), seq4(8, 1)}, {0x30000, 0, 4}, 16);
+		convertGFX(&bg[0x18000], &BG[0x6000], 512, {rseq8(0, 16)}, {seq4(0, 1), seq4(8, 1)}, {0x20004, 0, 4}, 16);
+		convertGFX(&obj[0], OBJ, 512, {rseq16(0, 64)}, {seq16(0, 4)}, {seq4(0, 1)}, 128);
+		for (int i = 0; i < 0x800; i++)
+			rgb[i] = 0xff000000 | (GREEN[i] >> 4) * 255 / 15 << 16 | (GREEN[i] & 15) * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
 	Baraduke *execute() {
@@ -272,89 +281,6 @@ struct Baraduke {
 
 	void triggerA(bool fDown) {
 		in[6] = in[6] & ~(1 << 4) | !fDown << 4;
-	}
-
-	void convertRGB() {
-		for (int i = 0; i < 0x800; i++)
-			rgb[i] = (RED[i] & 0xf) * 255 / 15		// Red
-				| (GREEN[i] & 0xf) * 255 / 15 << 8	// Green
-				| (GREEN[i] >> 4) * 255 / 15 << 16	// Blue
-				| 0xff000000;						// Alpha
-	}
-
-	void convertFG() {
-		for (int p = 0, q = 0, i = 512; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					fg[p++] = FG[q + k + 8] >> j & 1 | FG[q + k + 8] >> (j + 3) & 2;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					fg[p++] = FG[q + k] >> j & 1 | FG[q + k] >> (j + 3) & 2;
-		}
-	}
-
-	void convertBG() {
-		for (int p = 0, q = 0, i = 512; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 14; k >= 0; k -= 2)
-					bg[p++] = BG[q + k] >> j & 1 | BG[q + k] >> (j + 3) & 2 | BG[q + k + 0x8000] >> (j + 2) & 4;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 14; k >= 0; k -= 2)
-					bg[p++] = BG[q + k + 1] >> j & 1 | BG[q + k + 1] >> (j + 3) & 2 | BG[q + k + 0x8000 + 1] >> (j + 2) & 4;
-		}
-		for (int p = 0x8000, q = 0x2000, i = 512; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 14; k >= 0; k -= 2)
-					bg[p++] = BG[q + k] >> j & 1 | BG[q + k] >> (j + 3) & 2 | BG[q + k + 0x6000] >> j << 2 & 4;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 14; k >= 0; k -= 2)
-					bg[p++] = BG[q + k + 1] >> j & 1 | BG[q + k + 1] >> (j + 3) & 2 | BG[q + k + 0x6000 + 1] >> j << 2 & 4;
-		}
-		for (int p = 0x10000, q = 0x4000, i = 512; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 14; k >= 0; k -= 2)
-					bg[p++] = BG[q + k] >> j & 1 | BG[q + k] >> (j + 3) & 2 | BG[q + k + 0x6000] >> (j + 2) & 4;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 14; k >= 0; k -= 2)
-					bg[p++] = BG[q + k + 1] >> j & 1 | BG[q + k + 1] >> (j + 3) & 2 | BG[q + k + 0x6000 + 1] >> (j + 2) & 4;
-		}
-		for (int p = 0x18000, q = 0x6000, i = 512; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 14; k >= 0; k -= 2)
-					bg[p++] = BG[q + k] >> j & 1 | BG[q + k] >> (j + 3) & 2 | BG[q + k + 0x4000] >> j << 2 & 4;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 14; k >= 0; k -= 2)
-					bg[p++] = BG[q + k + 1] >> j & 1 | BG[q + k + 1] >> (j + 3) & 2 | BG[q + k + 0x4000 + 1] >> j << 2 & 4;
-		}
-	}
-
-	void convertOBJ() {
-		for (int p = 0, q = 0, i = 512; i != 0; q += 128, --i) {
-			for (int j = 4; j >= 0; j -= 4)
-				for (int k = 120; k >= 0; k -= 8)
-					obj[p++] = OBJ[q + k] >> j & 0xf;
-			for (int j = 4; j >= 0; j -= 4)
-				for (int k = 120; k >= 0; k -= 8)
-					obj[p++] = OBJ[q + k + 1] >> j & 0xf;
-			for (int j = 4; j >= 0; j -= 4)
-				for (int k = 120; k >= 0; k -= 8)
-					obj[p++] = OBJ[q + k + 2] >> j & 0xf;
-			for (int j = 4; j >= 0; j -= 4)
-				for (int k = 120; k >= 0; k -= 8)
-					obj[p++] = OBJ[q + k + 3] >> j & 0xf;
-			for (int j = 4; j >= 0; j -= 4)
-				for (int k = 120; k >= 0; k -= 8)
-					obj[p++] = OBJ[q + k + 4] >> j & 0xf;
-			for (int j = 4; j >= 0; j -= 4)
-				for (int k = 120; k >= 0; k -= 8)
-					obj[p++] = OBJ[q + k + 5] >> j & 0xf;
-			for (int j = 4; j >= 0; j -= 4)
-				for (int k = 120; k >= 0; k -= 8)
-					obj[p++] = OBJ[q + k + 6] >> j & 0xf;
-			for (int j = 4; j >= 0; j -= 4)
-				for (int k = 120; k >= 0; k -= 8)
-					obj[p++] = OBJ[q + k + 7] >> j & 0xf;
-		}
 	}
 
 	void makeBitmap(int *data) {

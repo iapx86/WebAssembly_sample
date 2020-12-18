@@ -7,11 +7,13 @@
 #ifndef TIME_TUNNEL_H
 #define TIME_TUNNEL_H
 
-#include <cstring>
+#include <algorithm>
+#include <array>
 #include <vector>
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "sound_effect.h"
+#include "utils.h"
 using namespace std;
 
 struct TimeTunnel {
@@ -56,11 +58,11 @@ struct TimeTunnel {
 	int cpu2_flag = 0;
 	int cpu2_flag2 = 0;
 
-	uint8_t bg[0x8000] = {};
-	uint8_t obj[0x8000] = {};
-	int rgb[0x40] = {};
+	array<uint8_t, 0x8000> bg;
+	array<uint8_t, 0x8000> obj;
+	array<int, 0x40> rgb;
 	uint8_t pri[32][4] = {};
-	uint8_t layer[4][width * height] = {};
+	array<uint8_t, width * height> layer[4];
 	int priority = 0;
 	uint8_t collision[4] = {};
 	int gfxaddr = 0;
@@ -139,7 +141,7 @@ struct TimeTunnel {
 			case 7:
 				return void(colorbank[addr & 1] = data);
 			case 8:
-				return void(memset(collision, 0, sizeof(collision)));
+				return void(fill_n(collision, sizeof(collision), 0));
 			case 9:
 				return void(gfxaddr = gfxaddr & 0xff00 | data);
 			case 0xa:
@@ -351,58 +353,6 @@ struct TimeTunnel {
 				pri[i][j] = PRI[i << 4 & 0xf0 | mask] >> 2 & 3;
 	}
 
-	void convertRGB() {
-		for (int p = 0, q = 0x4a00, i = 0; i < 0x40; q += 2, i++)
-			rgb[p++] = (~(ram[q] << 8 | ram[q + 1]) >> 6 & 7) * 255 / 7	// Red
-				| (~(ram[q] << 8 | ram[q + 1]) >> 3 & 7) * 255 / 7 << 8	// Green
-				| (~(ram[q] << 8 | ram[q + 1]) & 7) * 255 / 7 << 16		// Blue
-				| 0xff000000;											// Alpha
-	}
-
-	void convertBG() {
-		for (int p = 0, q = 0x800, i = 0; i < 256; q += 8, i++) {
-			for (int j = 0; j < 8; j++)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = ram[q + k] >> j & 1 | ram[q + k + 0x800] >> j << 1 & 2 | ram[q + k + 0x1000] >> j << 2 & 4;
-		}
-		for (int p = 0x4000, q = 0x2000, i = 0; i < 256; q += 8, i++) {
-			for (int j = 0; j < 8; j++)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = ram[q + k] >> j & 1 | ram[q + k + 0x800] >> j << 1 & 2 | ram[q + k + 0x1000] >> j << 2 & 4;
-		}
-	}
-
-	void convertOBJ() {
-		for (int p = 0, q = 0x800, i = 0; i < 64; q += 32, i++) {
-			for (int j = 0; j < 8; j++) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = ram[q + k + 16] >> j & 1 | ram[q + k + 0x800 + 16] >> j << 1 & 2 | ram[q + k + 0x1000 + 16] >> j << 2 & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = ram[q + k] >> j & 1 | ram[q + k + 0x800] >> j << 1 & 2 | ram[q + k + 0x1000] >> j << 2 & 4;
-			}
-			for (int j = 0; j < 8; j++) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = ram[q + k + 24] >> j & 1 | ram[q + k + 0x800 + 24] >> j << 1 & 2 | ram[q + k + 0x1000 + 24] >> j << 2 & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = ram[q + k + 8] >> j & 1 | ram[q + k + 0x800 + 8] >> j << 1 & 2 | ram[q + k + 0x1000 + 8] >> j << 2 & 4;
-			}
-		}
-		for (int p = 0x4000, q = 0x2000, i = 0; i < 64; q += 32, i++) {
-			for (int j = 0; j < 8; j++) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = ram[q + k + 16] >> j & 1 | ram[q + k + 0x800 + 16] >> j << 1 & 2 | ram[q + k + 0x1000 + 16] >> j << 2 & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = ram[q + k] >> j & 1 | ram[q + k + 0x800] >> j << 1 & 2 | ram[q + k + 0x1000] >> j << 2 & 4;
-			}
-			for (int j = 0; j < 8; j++) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = ram[q + k + 24] >> j & 1 | ram[q + k + 0x800 + 24] >> j << 1 & 2 | ram[q + k + 0x1000 + 24] >> j << 2 & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = ram[q + k + 8] >> j & 1 | ram[q + k + 0x800 + 8] >> j << 1 & 2 | ram[q + k + 0x1000 + 8] >> j << 2 & 4;
-			}
-		}
-	}
-
 	static void convertPCM(int rate) {
 		static bool converted = false;
 		const int clock = 3000000;
@@ -463,15 +413,21 @@ struct TimeTunnel {
 	}
 
 	void makeBitmap(int *data) {
-		convertRGB();
-		convertBG();
-		convertOBJ();
+		// 画像データ変換
+		bg.fill(7), obj.fill(7);
+		convertGFX(&bg[0], &ram[0x800], 256, {rseq8(0, 8)}, {rseq8(0, 1)}, {0x8000, 0x4000, 0}, 8);
+		convertGFX(&bg[0x4000], &ram[0x2000], 256, {rseq8(0, 8)}, {rseq8(0, 1)}, {0x8000, 0x4000, 0}, 8);
+		convertGFX(&obj[0], &ram[0x800], 64, {rseq8(128, 8), rseq8(0, 8)}, {rseq8(0, 1), rseq8(64, 1)}, {0x8000, 0x4000, 0}, 32);
+		convertGFX(&obj[0x4000], &ram[0x2000], 64, {rseq8(128, 8), rseq8(0, 8)}, {rseq8(0, 1), rseq8(64, 1)}, {0x8000, 0x4000, 0}, 32);
+		for (int k = 0x4a00, i = 0; i < 0x40; k += 2, i++) {
+			const int e = ~(ram[k] << 8 | ram[k + 1]);
+			rgb[i] = 0xff000000 | (e & 7) * 255 / 7 << 16 | (e >> 3 & 7) * 255 / 7 << 8 | (e >> 6 & 7) * 255 / 7;
+		}
 
 		// 画面クリア
 		int p = 256 * 16 + 16;
-		for (int px = colorbank[1] << 3 & 0x38, i = 0; i < 256; p += 256 - 224, i++)
-			for (int j = 0; j < 224; p++, j++)
-				data[p] = px;
+		for (int i = 0; i < 256; p += 256, i++)
+			fill_n(&data[p], 224, colorbank[1] << 3 & 0x38);
 
 		// bg描画
 		if (mode & 0x10) {
@@ -481,7 +437,7 @@ struct TimeTunnel {
 				const int x = (~k >> 2 & 0xf8) + scroll[1] + ram[0x4800 | k & 0x1f] & 0xff;
 				const int y = ((k << 3 & 0xf8) + _scroll & 0xff) + 16;
 				if (x > 8 && x < 240)
-					xfer8x8(layer[1], color, x | y << 8, k);
+					xfer8x8(layer[1].data(), color, x | y << 8, k);
 			}
 		}
 		if (mode & 0x20) {
@@ -491,7 +447,7 @@ struct TimeTunnel {
 				const int x = (~k >> 2 & 0xf8) + scroll[3] + ram[0x4820 | k & 0x1f] & 0xff;
 				const int y = ((k << 3 & 0xf8) + _scroll & 0xff) + 16;
 				if (x > 8 && x < 240)
-					xfer8x8(layer[2], color, x | y << 8, k);
+					xfer8x8(layer[2].data(), color, x | y << 8, k);
 			}
 		}
 		if (mode & 0x40) {
@@ -501,13 +457,13 @@ struct TimeTunnel {
 				const int x = (~k >> 2 & 0xf8) + scroll[5] + ram[0x4840 | k & 0x1f] & 0xff;
 				const int y = ((k << 3 & 0xf8) + _scroll & 0xff) + 16;
 				if (x > 8 && x < 240)
-					xfer8x8(layer[3], color, x | y << 8, k);
+					xfer8x8(layer[3].data(), color, x | y << 8, k);
 			}
 		}
 
 		// obj描画
 		if (mode & 0x80) {
-			memset(layer[0], 0, sizeof(layer[0]));
+			layer[0].fill(0);
 			drawObj(0x497c | mode << 5 & 0x80);
 			for (int k = 0x4900 | mode << 5 & 0x80, i = 0; i < 31; k += 4, i++) {
 				if (i >= 16 && i < 24)
@@ -522,7 +478,7 @@ struct TimeTunnel {
 		// layer合成
 		for (int i = 0; i < 4; i++) {
 			const int index = pri[priority & 0x1f][i];
-			auto *_layer = layer[index];
+			auto& _layer = layer[index];
 			const int table[] = {0x80, 0x10, 0x20, 0x40};
 			if (~mode & table[index])
 				continue;

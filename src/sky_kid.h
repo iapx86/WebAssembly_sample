@@ -7,10 +7,14 @@
 #ifndef SKY_KID_H
 #define SKY_KID_H
 
-#include <cstring>
+#include <algorithm>
+#include <array>
+#include <vector>
 #include "mc6809.h"
 #include "mc6801.h"
 #include "c30.h"
+#include "utils.h"
+using namespace std;
 
 enum {
 	BONUS_1ST_30000_2ND_90000, BONUS_1ST_30000_EVERY_90000, BONUS_1ST_20000_2ND_80000, BONUS_1ST_20000_EVERY_80000,
@@ -50,10 +54,10 @@ struct SkyKid {
 	uint8_t in[8] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 	int select = 0;
 
-	uint8_t fg[0x8000] = {};
-	uint8_t bg[0x8000] = {};
-	uint8_t obj[0x20000] = {};
-	int rgb[0x100] = {};
+	array<uint8_t, 0x8000> fg;
+	array<uint8_t, 0x8000> bg;
+	array<uint8_t, 0x20000> obj;
+	array<int, 0x100> rgb;
 	int priority = 0;
 	int vScroll = 0;
 	int hScroll = 0;
@@ -116,21 +120,21 @@ struct SkyKid {
 			mcu.memorymap[0xf0 + i].base = PRG2I + i * 0x100;
 
 		// Videoの初期化
-		convertRGB();
-		convertFG();
-		convertBG();
-		convertOBJ();
+		fg.fill(3), bg.fill(3), obj.fill(3), fill_n(obj.begin(), 0x10000, 7);
+		convertGFX(&fg[0], &FG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&bg[0], &BG[0], 512, {rseq8(0, 16)}, {seq4(0, 1), seq4(8, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], &OBJ[0], 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0x20004, 0, 4}, 64);
+		convertGFX(&obj[0x8000], &OBJ[0x2000], 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0x10000, 0, 4}, 64);
+		convertGFX(&obj[0x10000], &OBJ[0x6000], 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
+		for (int i = 0; i < 0x100; i++)
+			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8| RED[i] * 255 / 15;
 	}
 
 	SkyKid *execute() {
-		if (fInterruptEnable0)
-			cpu.interrupt();
-		if (fInterruptEnable1)
-			mcu.interrupt();
+		fInterruptEnable0 && cpu.interrupt(), fInterruptEnable1 && mcu.interrupt();
 		for (int i = 0; i < 800; i++)
 			cpu.execute(5), mcu.execute(6);
-		if (ram2[8] & 8)
-			mcu.interrupt(MC6801_OCF);
+		ram2[8] & 8 && mcu.interrupt(MC6801_OCF);
 		for (int i = 0; i < 800; i++)
 			cpu.execute(5), mcu.execute(6);
 		return this;
@@ -243,118 +247,6 @@ struct SkyKid {
 
 	void triggerB(bool fDown) {
 		in[3] = in[3] & ~(1 << 3) | !fDown << 3;
-	}
-
-	void convertRGB() {
-		for (int i = 0; i < 0x100; i++)
-			rgb[i] = (RED[i] & 0xf) * 255 / 15		// Red
-				| (GREEN[i] & 0xf) * 255 / 15 << 8	// Green
-				| (BLUE[i] & 0xf) * 255 / 15 << 16	// Blue
-				| 0xff000000;						// Alpha
-	}
-
-	void convertFG() {
-		for (int p = 0, q = 0, i = 512; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					fg[p++] = FG[q + k + 8] >> j & 1 | FG[q + k + 8] >> (j + 3) & 2;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					fg[p++] = FG[q + k] >> j & 1 | FG[q + k] >> (j + 3) & 2;
-		}
-	}
-
-	void convertBG() {
-		for (int p = 0, q = 0, i = 512; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 14; k >= 0; k -= 2)
-					bg[p++] = BG[q + k] >> j & 1 | BG[q + k] >> (j + 3) & 2;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 14; k >= 0; k -= 2)
-					bg[p++] = BG[q + k + 1] >> j & 1 | BG[q + k + 1] >> (j + 3) & 2;
-		}
-	}
-
-	void convertOBJ() {
-		for (int p = 0, q = 0, i = 128; i != 0; q += 64, --i) {
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 32] >> j & 1 | OBJ[q + k + 32] >> (j + 3) & 2 | OBJ[q + k + 0x4000 + 32] << 2 >> j & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2 | OBJ[q + k + 0x4000] << 2 >> j & 4;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 40] >> j & 1 | OBJ[q + k + 40] >> (j + 3) & 2 | OBJ[q + k + 0x4000 + 40] << 2 >> j & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 8] >> j & 1 | OBJ[q + k + 8] >> (j + 3) & 2 | OBJ[q + k + 0x4000 + 8] << 2 >> j & 4;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 48] >> j & 1 | OBJ[q + k + 48] >> (j + 3) & 2 | OBJ[q + k + 0x4000 + 48] << 2 >> j & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 16] >> j & 1 | OBJ[q + k + 16] >> (j + 3) & 2 | OBJ[q + k + 0x4000 + 16] << 2 >> j & 4;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 56] >> j & 1 | OBJ[q + k + 56] >> (j + 3) & 2 | OBJ[q + k + 0x4000 + 56] << 2 >> j & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 24] >> j & 1 | OBJ[q + k + 24] >> (j + 3) & 2 | OBJ[q + k + 0x4000 + 24] << 2 >> j & 4;
-			}
-		}
-		for (int p = 0x8000, q = 0x2000, i = 128; i != 0; q += 64, --i) {
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 32] >> j & 1 | OBJ[q + k + 32] >> (j + 3) & 2 | OBJ[q + k + 0x2000 + 32] >> (j + 2) & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2 | OBJ[q + k + 0x2000] >> (j + 2) & 4;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 40] >> j & 1 | OBJ[q + k + 40] >> (j + 3) & 2 | OBJ[q + k + 0x2000 + 40] >> (j + 2) & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 8] >> j & 1 | OBJ[q + k + 8] >> (j + 3) & 2 | OBJ[q + k + 0x2000 + 8] >> (j + 2) & 4;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 48] >> j & 1 | OBJ[q + k + 48] >> (j + 3) & 2 | OBJ[q + k + 0x2000 + 48] >> (j + 2) & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 16] >> j & 1 | OBJ[q + k + 16] >> (j + 3) & 2 | OBJ[q + k + 0x2000 + 16] >> (j + 2) & 4;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 56] >> j & 1 | OBJ[q + k + 56] >> (j + 3) & 2 | OBJ[q + k + 0x2000 + 56] >> (j + 2) & 4;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 24] >> j & 1 | OBJ[q + k + 24] >> (j + 3) & 2 | OBJ[q + k + 0x2000 + 24] >> (j + 2) & 4;
-			}
-		}
-		for (int p = 0x10000, q = 0x6000, i = 128; i != 0; q += 64, --i) {
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 32] >> j & 1 | OBJ[q + k + 32] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 40] >> j & 1 | OBJ[q + k + 40] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 8] >> j & 1 | OBJ[q + k + 8] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 48] >> j & 1 | OBJ[q + k + 48] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 16] >> j & 1 | OBJ[q + k + 16] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 56] >> j & 1 | OBJ[q + k + 56] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 24] >> j & 1 | OBJ[q + k + 24] >> (j + 3) & 2;
-			}
-		}
-		memset(obj + 0x18000, 3, 0x8000);
 	}
 
 	void makeBitmap(int *data) {

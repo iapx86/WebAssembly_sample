@@ -7,9 +7,13 @@
 #ifndef CHACKN_POP_H
 #define CHACKN_POP_H
 
+#include <array>
+#include <vector>
 #include "z80.h"
 #include "mc6805.h"
 #include "ay-3-8910.h"
+#include "utils.h"
+using namespace std;
 
 struct ChacknPop {
 	static unsigned char PRG1[], PRG2[], OBJ[], BG[], RGB_L[], RGB_H[];
@@ -44,9 +48,9 @@ struct ChacknPop {
 	int mcu_result = 0;
 	int mcu_flag = 0;
 
-	uint8_t bg[0x10000] = {};
-	uint8_t obj[0x10000] = {};
-	int rgb[0x400] = {};
+	array<uint8_t, 0x10000> bg;
+	array<uint8_t, 0x10000> obj;
+	array<int, 0x400> rgb;
 	int mode = 0;
 
 	Z80 cpu;
@@ -145,15 +149,18 @@ struct ChacknPop {
 		mcu.check_interrupt = [&]() { return mcu.irq && mcu.interrupt(); };
 
 		// Videoの初期化
-		convertRGB();
-		convertBG();
-		convertOBJ();
+		bg.fill(3), obj.fill(3);
+		convertGFX(&bg[0], BG, 1024, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x10000}, 8);
+		convertGFX(&obj[0], OBJ, 256, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x10000}, 32);
+		for (int i = 0; i < 0x400; i++) {
+			const int e = RGB_H[i] << 4 | RGB_L[i];
+			rgb[i] = 0xff000000 | (e >> 6) * 255 / 3 << 16 | (e >> 3 & 7) * 255 / 7 << 8 | (e & 7) * 255 / 7;
+		}
 	}
 
 	ChacknPop *execute() {
-		cpu.interrupt();
 		Cpu *cpus[] = {&cpu, &mcu};
-		Cpu::multiple_execute(2, cpus, 0x2000);
+		cpu.interrupt(), Cpu::multiple_execute(2, cpus, 0x2000);
 		return this;
 	}
 
@@ -251,38 +258,6 @@ struct ChacknPop {
 
 	void triggerB(bool fDown) {
 		in[1] = in[1] & ~(1 << 5) | !fDown << 5;
-	}
-
-	void convertRGB() {
-		for (int i = 0; i < 0x400; i++)
-			rgb[i] = ((RGB_H[i] << 4 & 0xf0 | RGB_L[i] & 0x0f) & 7) * 255 / 7			// Red
-				| ((RGB_H[i] << 4 & 0xf0 | RGB_L[i] & 0x0f) >> 3 & 7) * 255 / 7 << 8	// Green
-				| ((RGB_H[i] << 4 & 0xf0 | RGB_L[i] & 0x0f) >> 6) * 255 / 3 << 16		// Blue
-				| 0xff000000;															// Alpha
-	}
-
-	void convertBG() {
-		for (int p = 0, q = 0, i = 1024; i != 0; q += 8, --i)
-			for (int j = 7; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = BG[q + k + 0x2000] >> j & 1 | BG[q + k] >> j << 1 & 2;
-	}
-
-	void convertOBJ() {
-		for (int p = 0, q = 0, i = 256; i != 0; q += 32, --i) {
-			for (int j = 7; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 0x2000 + 16] >> j & 1 | OBJ[q + k + 16] >> j << 1 & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 0x2000] >> j & 1 | OBJ[q + k] >> j << 1 & 2;
-			}
-			for (int j = 7; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 0x2000 + 24] >> j & 1 | OBJ[q + k + 24] >> j << 1 & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 0x2000 + 8] >> j & 1 | OBJ[q + k + 8] >> j << 1 & 2;
-			}
-		}
 	}
 
 	void makeBitmap(int *data) {

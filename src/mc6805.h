@@ -38,11 +38,11 @@ struct MC6805 : Cpu {
 		return psh16(pc), psh(x), psh(a), psh(ccr), ccr |= 8, pc = read16(0x7fa) & 0x7ff, true;
 	}
 
-	bool interrupt(int vector) {
+	bool interrupt(int intvec) {
 		if (!Cpu::interrupt() || ccr & 8)
 			return false;
 		psh16(pc), psh(x), psh(a), psh(ccr), ccr |= 8;
-		switch (vector) {
+		switch (intvec) {
 		case MC6805_TIMER:
 			return pc = read16(0x7f8) & 0x7ff, true;
 		default:

@@ -7,8 +7,12 @@
 #ifndef ZIG_ZAG_H
 #define ZIG_ZAG_H
 
+#include <array>
+#include <vector>
 #include "z80.h"
 #include "ay-3-8910.h"
+#include "utils.h"
+using namespace std;
 
 enum {
 	BONUS_10000_60000, BONUS_20000_60000, BONUS_30000_60000, BONUS_40000_60000,
@@ -38,7 +42,6 @@ struct ZigZag {
 
 	bool fInterruptEnable = false;
 	int bank = 0x20;
-
 	uint8_t ram[0x900] = {};
 	uint8_t in[3] = {0, 0, 2};
 	struct {
@@ -53,9 +56,9 @@ struct ZigZag {
 	} stars[1024];
 	bool fStarEnable = false;
 	bool fStarMove = false;
-	uint8_t bg[0x4000] = {};
-	uint8_t obj[0x4000] = {};
-	int rgb[0x80] = {};
+	array<uint8_t, 0x4000> bg;
+	array<uint8_t, 0x4000> obj;
+	array<int, 0x80> rgb;
 
 	Z80 cpu;
 
@@ -77,8 +80,7 @@ struct ZigZag {
 							return;
 						if (~addr & 2)
 							return sound0->write(psg.addr, psg.latch);
-						else
-							return void(psg.addr = psg.latch);
+						return void(psg.addr = psg.latch);
 					case 0x0100:
 						return void(psg.latch = addr);
 					}
@@ -116,16 +118,19 @@ struct ZigZag {
 			}
 
 		// Videoの初期化
-		convertRGB();
-		convertBG();
-		convertOBJ();
+		bg.fill(3), obj.fill(3);
+		convertGFX(&bg[0], BG, 256, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x4000}, 8);
+		convertGFX(&obj[0], OBJ, 64, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x4000}, 32);
+		for (int i = 0; i < 0x20; i++)
+			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
+		const int starColors[4] = {0xd0, 0x70, 0x40, 0x00};
+		for (int i = 0; i < 0x40; i++)
+			rgb[0x40 | i] = 0xff000000 | starColors[i >> 4 & 3] << 16 | starColors[i >> 2 & 3] << 8 | starColors[i & 3];
 		initializeStar();
 	}
 
 	ZigZag *execute() {
-		if (fInterruptEnable)
-			cpu.non_maskable_interrupt();
-		cpu.execute(0x1600);
+		fInterruptEnable && cpu.non_maskable_interrupt(), cpu.execute(0x1600);
 		moveStars();
 		return this;
 	}
@@ -210,44 +215,6 @@ struct ZigZag {
 
 	void triggerA(bool fDown) {
 		in[0] = in[0] & ~(1 << 4) | fDown << 4;
-	}
-
-	void convertRGB() {
-		for (int i = 0; i < 0x20; i++)
-			rgb[i] = (RGB[i] & 7) * 255 / 7			// Red
-				| (RGB[i] >> 3 & 7) * 255 / 7 << 8	// Green
-				| (RGB[i] >> 6) * 255 / 3 << 16		// Blue
-				| 0xff000000;						// Alpha
-		const int starColors[4] = {0xd0, 0x70, 0x40, 0x00};
-		for (int i = 0; i < 0x40; i++)
-			rgb[0x40 | i] = starColors[i & 3]	// Red
-				| starColors[i >> 2 & 3] << 8	// Green
-				| starColors[i >> 4 & 3] << 16	// Blue
-				| 0xff000000;					// Alpha
-	}
-
-	void convertBG() {
-		for (int p = 0, q = 0, i = 256; i != 0; q += 8, --i)
-			for (int j = 7; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = BG[q + k + 0x800] >> j & 1 | BG[q + k] >> j << 1 & 2;
-	}
-
-	void convertOBJ() {
-		for (int p = 0, q = 0, i = 64; i != 0; q += 32, --i) {
-			for (int j = 7; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 0x800 + 16] >> j & 1 | OBJ[q + k + 16] >> j << 1 & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 0x800] >> j & 1 | OBJ[q + k] >> j << 1 & 2;
-			}
-			for (int j = 7; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 0x800 + 24] >> j & 1 | OBJ[q + k + 24] >> j << 1 & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 0x800 + 8] >> j & 1 | OBJ[q + k + 8] >> j << 1 & 2;
-			}
-		}
 	}
 
 	void initializeStar() {

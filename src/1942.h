@@ -7,8 +7,12 @@
 #ifndef _1942_H
 #define _1942_H
 
+#include <array>
+#include <vector>
 #include "z80.h"
 #include "ay-3-8910.h"
+#include "utils.h"
+using namespace std;
 
 enum {
 	BONUS_1ST_20000_2ND_80000_EVERY_80000, BONUS_1ST_20000_2ND_100000_EVERY_100000,
@@ -55,13 +59,12 @@ struct _1942 {
 	bool cpu_irq = false;
 	bool cpu_irq2 = false;
 
-	uint8_t fg[0x8000] = {};
-	uint8_t bg[0x20000] = {};
-	uint8_t obj[0x20000] = {};
-	uint8_t fgcolor[0x100] = {};
-	uint8_t bgcolor[0x100] = {};
-	uint8_t objcolor[0x100] = {};
-	int rgb[0x100] = {};
+	array<uint8_t, 0x8000> fg;
+	array<uint8_t, 0x20000> bg;
+	array<uint8_t, 0x20000> obj;
+	array<uint8_t, 0x100> fgcolor;
+	array<uint8_t, 0x100> objcolor;
+	array<int, 0x100> rgb;
 	int dwScroll = 0;
 	int palette = 0;
 	int frame = 0;
@@ -138,18 +141,22 @@ struct _1942 {
 		};
 
 		// Videoの初期化
-		convertRGB();
-		convertFG();
-		convertBG();
-		convertOBJ();
+		fg.fill(3), bg.fill(7), obj.fill(15);
+		convertGFX(&fg[0], FG, 512, {seq8(0, 16)}, {rseq4(8, 1), rseq4(0, 1)}, {4, 0}, 16);
+		convertGFX(&bg[0], BG, 512, {seq16(0, 8)}, {rseq8(128, 1), rseq8(0, 1)}, {0, 0x20000, 0x40000}, 32);
+		convertGFX(&obj[0], OBJ, 512, {seq16(0, 16)}, {rseq4(264, 1), rseq4(256, 1), rseq4(8, 1), rseq4(0, 1)}, {0x40004, 0x40000, 4, 0}, 64);
+		for (int i = 0; i < 256; i++)
+			fgcolor[i] = 0x80 | FGCOLOR[i];
+		for (int i = 0; i < 256; i++)
+			objcolor[i] = 0x40 | OBJCOLOR[i];
+		for (int i = 0; i < 0x100; i++)
+			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
 	_1942 *execute() {
 		Cpu *cpus[] = {&cpu, &cpu2};
 		for (int i = 0; i < 16; i++) {
-			!i && (cpu_irq = true);
-			i == 1 && (cpu_irq2 = true);
-			!(i & 3) && (timer = i >> 2, cpu2.interrupt());
+			!i && (cpu_irq = true), i == 1 && (cpu_irq2 = true), !(i & 3) && (timer = i >> 2, cpu2.interrupt());
 			Cpu::multiple_execute(2, cpus, 800);
 		}
 		return this;
@@ -264,59 +271,6 @@ struct _1942 {
 
 	void triggerY(bool fDown) {
 		!(fTurbo = fDown) && (in[1] |= 1 << 4);
-	}
-
-	void convertRGB() {
-		for (int i = 0; i < 0x100; i++)
-			rgb[i] = (RED[i] & 0xf) * 255 / 15		// Red
-				| (GREEN[i] & 0xf) * 255 / 15 << 8	// Green
-				| (BLUE[i] & 0xf) * 255 / 15 << 16	// Blue
-				| 0xff000000;						// Alpha
-	}
-
-	void convertFG() {
-		for (int i = 0; i < 256; i++)
-			fgcolor[i] = FGCOLOR[i] & 0xf | 0x80;
-		for (int p = 0, q = 0, i = 512; i != 0; q += 16, --i) {
-			for (int j = 0; j < 4; j++)
-				for (int k = 0; k < 16; k += 2)
-					fg[p++] = FG[q + k + 1] >> (j + 4) & 1 | FG[q + k + 1] >> j << 1 & 2;
-			for (int j = 0; j < 4; j++)
-				for (int k = 0; k < 16; k += 2)
-					fg[p++] = FG[q + k] >> (j + 4) & 1 | FG[q + k] >> j << 1 & 2;
-		}
-	}
-
-	void convertBG() {
-		for (int i = 0; i < 256; i++)
-			bgcolor[i] = BGCOLOR[i] & 0xf;
-		for (int p = 0, q = 0, i = 512; i != 0; q += 32, --i) {
-			for (int j = 0; j < 8; j++)
-				for (int k = 0; k < 16; k++)
-					bg[p++] = BG[q + k + 0x8000 + 16] >> j & 1 | BG[q + k + 0x4000 + 16] >> j << 1 & 2 | BG[q + k + 16] >> j << 2 & 4;
-			for (int j = 0; j < 8; j++)
-				for (int k = 0; k < 16; k++)
-					bg[p++] = BG[q + k + 0x8000] >> j & 1 | BG[q + k + 0x4000] >> j << 1 & 2 | BG[q + k] >> j << 2 & 4;
-		}
-	}
-
-	void convertOBJ() {
-		for (int i = 0; i < 256; i++)
-			objcolor[i] = OBJCOLOR[i] & 0xf | 0x40;
-		for (int p = 0, q = 0, i = 512; i != 0; q += 64, --i) {
-			for (int j = 0; j < 4; j++)
-				for (int k = 0; k < 32; k += 2)
-					obj[p++] = OBJ[q + k + 33] >> (j + 4) & 1 | OBJ[q + k + 33] >> j << 1 & 2 | OBJ[q + k + 0x8000 + 33] >> (j + 2) & 4 | OBJ[q + k + 0x8000 + 33] >> j << 3 & 8;
-			for (int j = 0; j < 4; j++)
-				for (int k = 0; k < 32; k += 2)
-					obj[p++] = OBJ[q + k + 32] >> (j + 4) & 1 | OBJ[q + k + 32] >> j << 1 & 2 | OBJ[q + k + 0x8000 + 32] >> (j + 2) & 4 | OBJ[q + k + 0x8000 + 32] >> j << 3 & 8;
-			for (int j = 0; j < 4; j++)
-				for (int k = 0; k < 32; k += 2)
-					obj[p++] = OBJ[q + k + 1] >> (j + 4) & 1 | OBJ[q + k + 1] >> j << 1 & 2 | OBJ[q + k + 0x8000 + 1] >> (j + 2) & 4 | OBJ[q + k + 0x8000 + 1] >> j << 3 & 8;
-			for (int j = 0; j < 4; j++)
-				for (int k = 0; k < 32; k += 2)
-					obj[p++] = OBJ[q + k] >> (j + 4) & 1 | OBJ[q + k] >> j << 1 & 2 | OBJ[q + k + 0x8000] >> (j + 2) & 4 | OBJ[q + k + 0x8000] >> j << 3 & 8;
-		}
 	}
 
 	void makeBitmap(int *data) {
@@ -442,22 +396,22 @@ struct _1942 {
 		case 0:
 			for (i = 16; i != 0; p += 256 - 16, --i)
 				for (j = 16; j != 0; --j)
-					data[p++] = palette | bgcolor[idx | bg[q++]];
+					data[p++] = palette | BGCOLOR[idx | bg[q++]];
 			break;
 		case 1:
 			for (q += 256 - 16, i = 16; i != 0; p += 256 - 16, q -= 32, --i)
 				for (j = 16; j != 0; --j)
-					data[p++] = palette | bgcolor[idx | bg[q++]];
+					data[p++] = palette | BGCOLOR[idx | bg[q++]];
 			break;
 		case 2:
 			for (q += 16, i = 16; i != 0; p += 256 - 16, q += 32, --i)
 				for (j = 16; j != 0; --j)
-					data[p++] = palette | bgcolor[idx | bg[--q]];
+					data[p++] = palette | BGCOLOR[idx | bg[--q]];
 			break;
 		case 3:
 			for (q += 256, i = 16; i != 0; p += 256 - 16, --i)
 				for (j = 16; j != 0; --j)
-					data[p++] = palette | bgcolor[idx | bg[--q]];
+					data[p++] = palette | BGCOLOR[idx | bg[--q]];
 			break;
 		}
 	}

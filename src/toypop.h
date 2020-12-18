@@ -7,11 +7,12 @@
 #ifndef TOYPOP_H
 #define TOYPOP_H
 
-#include <cstring>
+#include <array>
 #include <vector>
 #include "mc6809.h"
 #include "mc68000.h"
 #include "mappy_sound.h"
+#include "utils.h"
 using namespace std;
 
 enum {
@@ -56,9 +57,9 @@ struct Toypop {
 	uint8_t port[0x40] = {};
 	uint8_t in[15] = {};
 
-	uint8_t bg[0x8000] = {};
-	uint8_t obj[0x10000] = {};
-	int rgb[0x100] = {};
+	array<uint8_t, 0x8000> bg;
+	array<uint8_t, 0x10000> obj;
+	array<int, 0x100> rgb;
 	int palette = 0;
 
 	MC6809 cpu, cpu2;
@@ -119,22 +120,18 @@ struct Toypop {
 			cpu3.memorymap[0x3000 + i].write16 = [&](int addr, int data) { fInterruptEnable2 = !(addr & 0x80000); };
 
 		// Videoの初期化
-		convertRGB();
-		convertBG();
-		convertOBJ();
+		bg.fill(3), obj.fill(3);
+		convertGFX(&bg[0], BG, 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], OBJ, 256, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
+		for (int i = 0; i < 0x100; i++)
+			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
 	Toypop *execute() {
-		if (fInterruptEnable)
-			cpu.interrupt();
-		cpu2.interrupt();
-		if (fInterruptEnable2)
-			cpu3.interrupt(6);
-		for (int i = 0; i < 0x100; i++) {
-			Cpu *cpus[] = {&cpu, &cpu2};
-			Cpu::multiple_execute(2, cpus, 32);
-			cpu3.execute(48);
-		}
+		Cpu *cpus[] = {&cpu, &cpu2};
+		fInterruptEnable && cpu.interrupt(), cpu2.interrupt(), fInterruptEnable2 && cpu3.interrupt(6);
+		for (int i = 0; i < 0x100; i++)
+			Cpu::multiple_execute(2, cpus, 32), cpu3.execute(48);
 		return this;
 	}
 
@@ -213,17 +210,17 @@ struct Toypop {
 		in[0] = (fCoin != 0) << 3, in[3] = in[3] & 3 | (fStart1P != 0) << 2 | (fStart2P != 0) << 3;
 		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		if (port[8] == 1)
-			memcpy(port + 4, in, 4);
+			copy_n(in, 4, port + 4);
 		else if (port[8] == 5)
 			port[2] = 0xf, port[6] = 0xc;
 		if (port[0x18] == 1)
-			memcpy(port + 0x10, in + 5, 4);
+			copy_n(in + 5, 4, port + 0x10);
 		else if (port[0x18] == 8)
 			port[0x10] = 6, port[0x11] = 9;
 		if (port[0x28] == 8)
 			port[0x20] = 6, port[0x21] = 9;
 		else if (port[0x28] == 9)
-			memcpy(port + 0x20, vector<uint8_t>{in[10], in[14], in[11], in[11], in[12], in[12], in[13], in[13]}.data(), 8);
+			copy_n(vector<uint8_t>{in[10], in[14], in[11], in[11], in[12], in[12], in[13], in[13]}.data(), 8, port + 0x20);
 		return this;
 	}
 
@@ -257,54 +254,6 @@ struct Toypop {
 
 	void triggerA(bool fDown) {
 		in[3] = in[3] & ~(1 << 0) | fDown << 0;
-	}
-
-	void convertRGB() {
-		for (int i = 0; i < 0x100; i++)
-			rgb[i] = (RED[i] & 0xf) * 255 / 15		// Red
-				| (GREEN[i] & 0xf) * 255 / 15 << 8	// Green
-				| (BLUE[i] & 0xf) * 255 / 15 << 16	// Blue
-				| 0xff000000;						// Alpha
-	}
-
-	void convertBG() {
-		for (int p = 0, q = 0, i = 512; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = BG[q + k + 8] >> j & 1 | BG[q + k + 8] >> (j + 3) & 2;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = BG[q + k] >> j & 1 | BG[q + k] >> (j + 3) & 2;
-		}
-	}
-
-	void convertOBJ() {
-		for (int p = 0, q = 0, i = 256; i != 0; q += 64, --i) {
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 39; k >= 32; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 47; k >= 40; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-				for (int k = 15; k >= 8; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 55; k >= 48; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-				for (int k = 23; k >= 16; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 63; k >= 56; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-				for (int k = 31; k >= 24; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-			}
-		}
 	}
 
 	void makeBitmap(int *data) {

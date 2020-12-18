@@ -7,8 +7,12 @@
 #ifndef PENGO_H
 #define PENGO_H
 
+#include <array>
+#include <vector>
 #include "z80.h"
 #include "pac-man_sound.h"
+#include "utils.h"
+using namespace std;
 
 enum {
 	RANK_EASY, RANK_MEDIUM, RANK_HARD, RANK_HARDEST,
@@ -41,10 +45,9 @@ struct Pengo {
 	uint8_t ram[0x1100] = {};
 	uint8_t in[4] = {0xcc, 0xb0, 0xff, 0xff};
 
-	uint8_t bg[0x8000] = {};
-	uint8_t obj[0x8000] = {};
-	uint8_t color[0x100] = {};
-	int rgb[0x20] = {};
+	array<uint8_t, 0x8000> bg;
+	array<uint8_t, 0x8000> obj;
+	array<int, 0x20> rgb;
 
 	Z80 cpu;
 
@@ -77,16 +80,16 @@ struct Pengo {
 		};
 
 		// Videoの初期化
-		convertRGB();
-		convertBG();
-		convertOBJ();
+		bg.fill(3), obj.fill(3);
+		convertGFX(&bg[0], BG, 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], OBJ, 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(64, 1), seq4(128, 1), seq4(192, 1), seq4(0, 1)}, {0, 4}, 64);
+		for (int i = 0; i < 0x20; i++)
+			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
 	Pengo *execute() {
 		sound0->mute(!fSoundEnable);
-		if (fInterruptEnable)
-			cpu.interrupt();
-		cpu.execute(0x1600);
+		fInterruptEnable && cpu.interrupt(), cpu.execute(0x1600);
 		return this;
 	}
 
@@ -189,56 +192,6 @@ struct Pengo {
 		in[2] = in[2] & ~(1 << 7) | !fDown << 7;
 	}
 
-	void convertRGB() {
-		for (int i = 0; i < 0x20; i++)
-			rgb[i] = (RGB[i] & 7) * 255 / 7			// Red
-				| (RGB[i] >> 3 & 7) * 255 / 7 << 8	// Green
-				| (RGB[i] >> 6) * 255 / 3 << 16		// Blue
-				| 0xff000000;						// Alpha
-	}
-
-	void convertBG() {
-		for (int i = 0; i < 256; i++)
-			color[i] = COLOR[i] & 0xf;
-		for (int p = 0, q = 0, i = 512; i != 0; q += 16, --i) {
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = BG[q + k + 8] >> j & 1 | BG[q + k + 8] >> (j + 3) & 2;
-			for (int j = 3; j >= 0; --j)
-				for (int k = 7; k >= 0; --k)
-					bg[p++] = BG[q + k] >> j & 1 | BG[q + k] >> (j + 3) & 2;
-		}
-	}
-
-	void convertOBJ() {
-		for (int p = 0, q = 0, i = 128; i != 0; q += 64, --i) {
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 40] >> j & 1 | OBJ[q + k + 40] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 8] >> j & 1 | OBJ[q + k + 8] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 48] >> j & 1 | OBJ[q + k + 48] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 16] >> j & 1 | OBJ[q + k + 16] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 56] >> j & 1 | OBJ[q + k + 56] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 24] >> j & 1 | OBJ[q + k + 24] >> (j + 3) & 2;
-			}
-			for (int j = 3; j >= 0; --j) {
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k + 32] >> j & 1 | OBJ[q + k + 32] >> (j + 3) & 2;
-				for (int k = 7; k >= 0; --k)
-					obj[p++] = OBJ[q + k] >> j & 1 | OBJ[q + k] >> (j + 3) & 2;
-			}
-		}
-	}
-
 	void makeBitmap(int *data) {
 		// bg描画
 		int p = 256 * 8 * 4 + 232;
@@ -289,70 +242,70 @@ struct Pengo {
 	void xfer8x8(int *data, int p, int k) {
 		const int q = ram[k] << 6 | ram[0x1047] << 14, idx = ram[k + 0x400] << 2 & 0x7c | ram[0x1046] << 7;
 
-		data[p + 0x000] = color[idx | bg[q | 0x00]];
-		data[p + 0x001] = color[idx | bg[q | 0x01]];
-		data[p + 0x002] = color[idx | bg[q | 0x02]];
-		data[p + 0x003] = color[idx | bg[q | 0x03]];
-		data[p + 0x004] = color[idx | bg[q | 0x04]];
-		data[p + 0x005] = color[idx | bg[q | 0x05]];
-		data[p + 0x006] = color[idx | bg[q | 0x06]];
-		data[p + 0x007] = color[idx | bg[q | 0x07]];
-		data[p + 0x100] = color[idx | bg[q | 0x08]];
-		data[p + 0x101] = color[idx | bg[q | 0x09]];
-		data[p + 0x102] = color[idx | bg[q | 0x0a]];
-		data[p + 0x103] = color[idx | bg[q | 0x0b]];
-		data[p + 0x104] = color[idx | bg[q | 0x0c]];
-		data[p + 0x105] = color[idx | bg[q | 0x0d]];
-		data[p + 0x106] = color[idx | bg[q | 0x0e]];
-		data[p + 0x107] = color[idx | bg[q | 0x0f]];
-		data[p + 0x200] = color[idx | bg[q | 0x10]];
-		data[p + 0x201] = color[idx | bg[q | 0x11]];
-		data[p + 0x202] = color[idx | bg[q | 0x12]];
-		data[p + 0x203] = color[idx | bg[q | 0x13]];
-		data[p + 0x204] = color[idx | bg[q | 0x14]];
-		data[p + 0x205] = color[idx | bg[q | 0x15]];
-		data[p + 0x206] = color[idx | bg[q | 0x16]];
-		data[p + 0x207] = color[idx | bg[q | 0x17]];
-		data[p + 0x300] = color[idx | bg[q | 0x18]];
-		data[p + 0x301] = color[idx | bg[q | 0x19]];
-		data[p + 0x302] = color[idx | bg[q | 0x1a]];
-		data[p + 0x303] = color[idx | bg[q | 0x1b]];
-		data[p + 0x304] = color[idx | bg[q | 0x1c]];
-		data[p + 0x305] = color[idx | bg[q | 0x1d]];
-		data[p + 0x306] = color[idx | bg[q | 0x1e]];
-		data[p + 0x307] = color[idx | bg[q | 0x1f]];
-		data[p + 0x400] = color[idx | bg[q | 0x20]];
-		data[p + 0x401] = color[idx | bg[q | 0x21]];
-		data[p + 0x402] = color[idx | bg[q | 0x22]];
-		data[p + 0x403] = color[idx | bg[q | 0x23]];
-		data[p + 0x404] = color[idx | bg[q | 0x24]];
-		data[p + 0x405] = color[idx | bg[q | 0x25]];
-		data[p + 0x406] = color[idx | bg[q | 0x26]];
-		data[p + 0x407] = color[idx | bg[q | 0x27]];
-		data[p + 0x500] = color[idx | bg[q | 0x28]];
-		data[p + 0x501] = color[idx | bg[q | 0x29]];
-		data[p + 0x502] = color[idx | bg[q | 0x2a]];
-		data[p + 0x503] = color[idx | bg[q | 0x2b]];
-		data[p + 0x504] = color[idx | bg[q | 0x2c]];
-		data[p + 0x505] = color[idx | bg[q | 0x2d]];
-		data[p + 0x506] = color[idx | bg[q | 0x2e]];
-		data[p + 0x507] = color[idx | bg[q | 0x2f]];
-		data[p + 0x600] = color[idx | bg[q | 0x30]];
-		data[p + 0x601] = color[idx | bg[q | 0x31]];
-		data[p + 0x602] = color[idx | bg[q | 0x32]];
-		data[p + 0x603] = color[idx | bg[q | 0x33]];
-		data[p + 0x604] = color[idx | bg[q | 0x34]];
-		data[p + 0x605] = color[idx | bg[q | 0x35]];
-		data[p + 0x606] = color[idx | bg[q | 0x36]];
-		data[p + 0x607] = color[idx | bg[q | 0x37]];
-		data[p + 0x700] = color[idx | bg[q | 0x38]];
-		data[p + 0x701] = color[idx | bg[q | 0x39]];
-		data[p + 0x702] = color[idx | bg[q | 0x3a]];
-		data[p + 0x703] = color[idx | bg[q | 0x3b]];
-		data[p + 0x704] = color[idx | bg[q | 0x3c]];
-		data[p + 0x705] = color[idx | bg[q | 0x3d]];
-		data[p + 0x706] = color[idx | bg[q | 0x3e]];
-		data[p + 0x707] = color[idx | bg[q | 0x3f]];
+		data[p + 0x000] = COLOR[idx | bg[q | 0x00]];
+		data[p + 0x001] = COLOR[idx | bg[q | 0x01]];
+		data[p + 0x002] = COLOR[idx | bg[q | 0x02]];
+		data[p + 0x003] = COLOR[idx | bg[q | 0x03]];
+		data[p + 0x004] = COLOR[idx | bg[q | 0x04]];
+		data[p + 0x005] = COLOR[idx | bg[q | 0x05]];
+		data[p + 0x006] = COLOR[idx | bg[q | 0x06]];
+		data[p + 0x007] = COLOR[idx | bg[q | 0x07]];
+		data[p + 0x100] = COLOR[idx | bg[q | 0x08]];
+		data[p + 0x101] = COLOR[idx | bg[q | 0x09]];
+		data[p + 0x102] = COLOR[idx | bg[q | 0x0a]];
+		data[p + 0x103] = COLOR[idx | bg[q | 0x0b]];
+		data[p + 0x104] = COLOR[idx | bg[q | 0x0c]];
+		data[p + 0x105] = COLOR[idx | bg[q | 0x0d]];
+		data[p + 0x106] = COLOR[idx | bg[q | 0x0e]];
+		data[p + 0x107] = COLOR[idx | bg[q | 0x0f]];
+		data[p + 0x200] = COLOR[idx | bg[q | 0x10]];
+		data[p + 0x201] = COLOR[idx | bg[q | 0x11]];
+		data[p + 0x202] = COLOR[idx | bg[q | 0x12]];
+		data[p + 0x203] = COLOR[idx | bg[q | 0x13]];
+		data[p + 0x204] = COLOR[idx | bg[q | 0x14]];
+		data[p + 0x205] = COLOR[idx | bg[q | 0x15]];
+		data[p + 0x206] = COLOR[idx | bg[q | 0x16]];
+		data[p + 0x207] = COLOR[idx | bg[q | 0x17]];
+		data[p + 0x300] = COLOR[idx | bg[q | 0x18]];
+		data[p + 0x301] = COLOR[idx | bg[q | 0x19]];
+		data[p + 0x302] = COLOR[idx | bg[q | 0x1a]];
+		data[p + 0x303] = COLOR[idx | bg[q | 0x1b]];
+		data[p + 0x304] = COLOR[idx | bg[q | 0x1c]];
+		data[p + 0x305] = COLOR[idx | bg[q | 0x1d]];
+		data[p + 0x306] = COLOR[idx | bg[q | 0x1e]];
+		data[p + 0x307] = COLOR[idx | bg[q | 0x1f]];
+		data[p + 0x400] = COLOR[idx | bg[q | 0x20]];
+		data[p + 0x401] = COLOR[idx | bg[q | 0x21]];
+		data[p + 0x402] = COLOR[idx | bg[q | 0x22]];
+		data[p + 0x403] = COLOR[idx | bg[q | 0x23]];
+		data[p + 0x404] = COLOR[idx | bg[q | 0x24]];
+		data[p + 0x405] = COLOR[idx | bg[q | 0x25]];
+		data[p + 0x406] = COLOR[idx | bg[q | 0x26]];
+		data[p + 0x407] = COLOR[idx | bg[q | 0x27]];
+		data[p + 0x500] = COLOR[idx | bg[q | 0x28]];
+		data[p + 0x501] = COLOR[idx | bg[q | 0x29]];
+		data[p + 0x502] = COLOR[idx | bg[q | 0x2a]];
+		data[p + 0x503] = COLOR[idx | bg[q | 0x2b]];
+		data[p + 0x504] = COLOR[idx | bg[q | 0x2c]];
+		data[p + 0x505] = COLOR[idx | bg[q | 0x2d]];
+		data[p + 0x506] = COLOR[idx | bg[q | 0x2e]];
+		data[p + 0x507] = COLOR[idx | bg[q | 0x2f]];
+		data[p + 0x600] = COLOR[idx | bg[q | 0x30]];
+		data[p + 0x601] = COLOR[idx | bg[q | 0x31]];
+		data[p + 0x602] = COLOR[idx | bg[q | 0x32]];
+		data[p + 0x603] = COLOR[idx | bg[q | 0x33]];
+		data[p + 0x604] = COLOR[idx | bg[q | 0x34]];
+		data[p + 0x605] = COLOR[idx | bg[q | 0x35]];
+		data[p + 0x606] = COLOR[idx | bg[q | 0x36]];
+		data[p + 0x607] = COLOR[idx | bg[q | 0x37]];
+		data[p + 0x700] = COLOR[idx | bg[q | 0x38]];
+		data[p + 0x701] = COLOR[idx | bg[q | 0x39]];
+		data[p + 0x702] = COLOR[idx | bg[q | 0x3a]];
+		data[p + 0x703] = COLOR[idx | bg[q | 0x3b]];
+		data[p + 0x704] = COLOR[idx | bg[q | 0x3c]];
+		data[p + 0x705] = COLOR[idx | bg[q | 0x3d]];
+		data[p + 0x706] = COLOR[idx | bg[q | 0x3e]];
+		data[p + 0x707] = COLOR[idx | bg[q | 0x3f]];
 	}
 
 	void xfer16x16(int *data, int dst, int src) {
@@ -365,18 +318,18 @@ struct Pengo {
 			src = src << 6 & 0x3f00 | ram[0x1047] << 14;
 			for (int i = 16; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]))
+					if ((px = COLOR[idx | obj[src++]]))
 						data[dst] = px;
 		} else {
 			src = src << 6 & 0x3f00 | ram[0x1047] << 14;
 			for (int i = h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]))
+					if ((px = COLOR[idx | obj[src++]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]))
+					if ((px = COLOR[idx | obj[src++]]))
 						data[dst] = px;
 		}
 	}
@@ -391,18 +344,18 @@ struct Pengo {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 256 - 16;
 			for (int i = 16; i != 0; dst += 256 - 16, src -= 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]))
+					if ((px = COLOR[idx | obj[src++]]))
 						data[dst] = px;
 		} else {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 256 - 16;
 			for (int i = h; i != 0; dst += 256 - 16, src -= 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]))
+					if ((px = COLOR[idx | obj[src++]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, src -= 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[src++]]))
+					if ((px = COLOR[idx | obj[src++]]))
 						data[dst] = px;
 		}
 	}
@@ -417,18 +370,18 @@ struct Pengo {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 16;
 			for (int i = 16; i != 0; dst += 256 - 16, src += 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]))
+					if ((px = COLOR[idx | obj[--src]]))
 						data[dst] = px;
 		} else {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 16;
 			for (int i = h; i != 0; dst += 256 - 16, src += 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]))
+					if ((px = COLOR[idx | obj[--src]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, src += 32, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]))
+					if ((px = COLOR[idx | obj[--src]]))
 						data[dst] = px;
 		}
 	}
@@ -443,18 +396,18 @@ struct Pengo {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 256;
 			for (int i = 16; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]))
+					if ((px = COLOR[idx | obj[--src]]))
 						data[dst] = px;
 		} else {
 			src = (src << 6 & 0x3f00 | ram[0x1047] << 14) + 256;
 			for (int i = h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]))
+					if ((px = COLOR[idx | obj[--src]]))
 						data[dst] = px;
 			dst -= 0x10000;
 			for (int i = 16 - h; i != 0; dst += 256 - 16, --i)
 				for (int j = 16; j != 0; dst++, --j)
-					if ((px = color[idx | obj[--src]]))
+					if ((px = COLOR[idx | obj[--src]]))
 						data[dst] = px;
 		}
 	}
