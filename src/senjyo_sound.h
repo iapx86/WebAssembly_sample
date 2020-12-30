@@ -7,6 +7,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <array>
 #include <list>
 #include <mutex>
 #include <utility>
@@ -37,7 +38,7 @@ struct BiquadFilter {
 };
 
 struct SenjyoSound {
-	float snd[0x20] = {};
+	array<float, 0x20> snd;
 	int rate;
 	int sampleRate;
 	int count;
@@ -55,8 +56,8 @@ struct SenjyoSound {
 	} channel;
 	BiquadFilter bq;
 
-	SenjyoSound(uint8_t *SND, int clock, int sampleRate = 48000, int resolution = 1, float gain = 0.7) {
-		for (int i = 0; i < 0x20; i++)
+	SenjyoSound(array<uint8_t, 0x20>& SND, int clock, int sampleRate = 48000, int resolution = 1, float gain = 0.7) {
+		for (int i = 0; i < snd.size(); i++)
 			snd[i] = SND[i] * 2 / (double)0xbf - 1;
 		rate = clock / 16;
 		this->sampleRate = sampleRate;

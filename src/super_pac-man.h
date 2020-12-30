@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <array>
-#include <vector>
 #include "mc6809.h"
 #include "mappy_sound.h"
 #include "utils.h"
@@ -25,7 +24,13 @@ enum {
 };
 
 struct SuperPacMan {
-	static unsigned char SND[], BG[], OBJ[], BGCOLOR[], OBJCOLOR[], RGB[], PRG1[], PRG2[];
+	static array<uint8_t, 0x100> SND;
+	static array<uint8_t, 0x1000> BG;
+	static array<uint8_t, 0x2000> OBJ;
+	static array<uint8_t, 0x100> BGCOLOR, OBJCOLOR;
+	static array<uint8_t, 0x20> RGB;
+	static array<uint8_t, 0x4000> PRG1;
+	static array<uint8_t, 0x1000> PRG2;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 288;
@@ -52,9 +57,9 @@ struct SuperPacMan {
 	bool fInterruptEnable0 = false;
 	bool fInterruptEnable1 = false;
 //	bool fSoundEnable = false;
-	uint8_t ram[0x2000] = {};
-	uint8_t port[0x40] = {};
-	uint8_t in[10] = {};
+	array<uint8_t, 0x2000> ram = {};
+	array<uint8_t, 0x40> port = {};
+	array<uint8_t, 10> in = {};
 	int edge = 0xf;
 
 	array<uint8_t, 0x4000> bg;
@@ -67,7 +72,7 @@ struct SuperPacMan {
 	SuperPacMan() {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x20; i++) {
-			cpu.memorymap[i].base = ram + i * 0x100;
+			cpu.memorymap[i].base = &ram[i << 8];
 			cpu.memorymap[i].write = nullptr;
 		}
 		for (int i = 0; i < 4; i++) {
@@ -103,7 +108,7 @@ struct SuperPacMan {
 			}
 		};
 		for (int i = 0; i < 0x40; i++)
-			cpu.memorymap[0xc0 + i].base = PRG1 + i * 0x100;
+			cpu.memorymap[0xc0 + i].base = &PRG1[i << 8];
 
 		for (int i = 0; i < 4; i++) {
 			cpu2.memorymap[i].read = [&](int addr) { return sound0->read(addr); };
@@ -111,15 +116,15 @@ struct SuperPacMan {
 		}
 		cpu2.memorymap[0x20].write = cpu.memorymap[0x50].write;
 		for (int i = 0; i < 0x10; i++)
-			cpu2.memorymap[0xf0 + i].base = PRG2 + i * 0x100;
+			cpu2.memorymap[0xf0 + i].base = &PRG2[i << 8];
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
-		convertGFX(&bg[0], BG, 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
-		convertGFX(&obj[0], OBJ, 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
-		for (int i = 0; i < 256; i++)
+		convertGFX(&bg[0], &BG[0], 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], &OBJ[0], 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
+		for (int i = 0; i < bgcolor.size(); i++)
 			bgcolor[i] = 0x10 | ~BGCOLOR[i] & 0xf;
-		for (int i = 0; i < 0x20; i++)
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
@@ -249,7 +254,7 @@ struct SuperPacMan {
 		if (fPortTest)
 			return edge = in[3] ^ 0xf, this;
 		if (port[8] == 1)
-			copy_n(in, 4, port);
+			copy_n(&in[0], 4, &port[0]);
 		else if (port[8] == 4) {
 			int credit = port[0] * 10 + port[1];
 			if (fCoin && credit < 150)
@@ -259,13 +264,13 @@ struct SuperPacMan {
 			if (!port[9] && fStart2P && credit > 1)
 				port[3] += 2, credit -= (credit < 150) * 2;
 			port[0] = credit / 10, port[1] = credit % 10;
-			copy_n(vector<uint8_t>{in[1], uint8_t(in[3] << 1 & 0xa | edge & 5), in[2], uint8_t(in[3] & 0xa | edge >> 1 & 5)}.data(), 4, port + 4);
+			copy_n(&array<uint8_t, 4>{in[1], uint8_t(in[3] << 1 & 0xa | edge & 5), in[2], uint8_t(in[3] & 0xa | edge >> 1 & 5)}[0], 4, &port[4]);
 		} else if (port[8] == 8)
 			port[0] = 6, port[1] = 9;
 		if (port[0x18] == 8)
 			port[0x10] = 6, port[0x11] = 9;
 		else if (port[0x18] == 9)
-			copy_n(vector<uint8_t>{in[5], in[9], in[6], in[6], in[7], in[7], in[8], in[8]}.data(), 8, port + 0x10);
+			copy_n(&array<uint8_t, 8>{in[5], in[9], in[6], in[6], in[7], in[7], in[8], in[8]}[0], 8, &port[0x10]);
 		return edge = in[3] ^ 0xf, this;
 	}
 

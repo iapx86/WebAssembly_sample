@@ -10,30 +10,24 @@
 #include "time_tunnel.h"
 using namespace std;
 
-vector<vector<short>> TimeTunnel::pcm;
-int TimeTunnel::pcm_freq;
-unsigned char TimeTunnel::PRG1[0xa000], TimeTunnel::PRG2[0x1000], TimeTunnel::GFX[0x8000], TimeTunnel::PRI[0x100];
-AY_3_8910 *TimeTunnel::sound0, *TimeTunnel::sound1, *TimeTunnel::sound2, *TimeTunnel::sound3;
-SoundEffect *TimeTunnel::sound4;
-
 TimeTunnel *game;
-vector<int> rom_table = {
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	(int)"GFX", (int)strlen("GFX"), (int)game->GFX, (int)sizeof(game->GFX),
-	(int)"PRI", (int)strlen("PRI"), (int)game->PRI, (int)sizeof(game->PRI),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, TimeTunnel::width * TimeTunnel::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 4 * 4 + 1> rom_table = {
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"GFX", (int)strlen("GFX"), (int)game->GFX.data(), (int)game->GFX.size(),
+		(int)"PRI", (int)strlen("PRI"), (int)game->PRI.data(), (int)game->PRI.size(),
+		0
+	};
 	return rom_table.data();
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *init(int rate) {
-	game = new TimeTunnel(48000);
+	game = new TimeTunnel(rate);
 	game->init(rate);
 	return geometry.data();
 }
@@ -100,4 +94,21 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerB(int fDown) {
 	game->triggerB(fDown != 0);
 }
+
+AY_3_8910 *TimeTunnel::sound0, *TimeTunnel::sound1, *TimeTunnel::sound2, *TimeTunnel::sound3;
+SoundEffect *TimeTunnel::sound4;
+
+vector<vector<short>> TimeTunnel::pcm;
+
+array<unsigned char, 0xa000> TimeTunnel::PRG1 = {
+};
+
+array<unsigned char, 0x1000> TimeTunnel::PRG2 = {
+};
+
+array<unsigned char, 0x8000> TimeTunnel::GFX = {
+};
+
+array<unsigned char, 0x100> TimeTunnel::PRI = {
+};
 

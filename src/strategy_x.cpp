@@ -6,28 +6,23 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "strategy_x.h"
 using namespace std;
 
-unsigned char StrategyX::BG[0x1000], StrategyX::RGB[0x20];
-unsigned char StrategyX::PRG1[0x6000], StrategyX::PRG2[0x2000], StrategyX::MAP[0x20];
-AY_3_8910 *StrategyX::sound0, *StrategyX::sound1;
-
 StrategyX *game;
-vector<int> rom_table = {
-	(int)"BG", (int)strlen("BG"), (int)game->BG, (int)sizeof(game->BG),
-	(int)"RGB", (int)strlen("RGB"), (int)game->RGB, (int)sizeof(game->RGB),
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	(int)"MAP", (int)strlen("MAP"), (int)game->MAP, (int)sizeof(game->MAP),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, StrategyX::width * StrategyX::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 5 * 4 + 1> rom_table = {
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"MAP", (int)strlen("MAP"), (int)game->MAP.data(), (int)game->MAP.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -97,4 +92,21 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerB(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerX(int fDown) {
 	game->triggerX(fDown != 0);
 }
+
+AY_3_8910 *StrategyX::sound0, *StrategyX::sound1;
+
+array<unsigned char, 0x1000> StrategyX::BG = {
+};
+
+array<unsigned char, 0x20> StrategyX::RGB = {
+};
+
+array<unsigned char, 0x6000> StrategyX::PRG1 = {
+};
+
+array<unsigned char, 0x2000> StrategyX::PRG2 = {
+};
+
+array<unsigned char, 0x20> StrategyX::MAP = {
+};
 

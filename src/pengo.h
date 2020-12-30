@@ -8,7 +8,6 @@
 #define PENGO_H
 
 #include <array>
-#include <vector>
 #include "z80.h"
 #include "pac-man_sound.h"
 #include "utils.h"
@@ -19,7 +18,12 @@ enum {
 };
 
 struct Pengo {
-	static unsigned char BG[], COLOR[], OBJ[], RGB[], PRG[], SND[];
+	static array<uint8_t, 0x2000> BG;
+	static array<uint8_t, 0x400> COLOR;
+	static array<uint8_t, 0x2000> OBJ;
+	static array<uint8_t, 0x20> RGB;
+	static array<uint8_t, 0x8000> PRG;
+	static array<uint8_t, 0x100> SND;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 288;
@@ -42,8 +46,8 @@ struct Pengo {
 
 	bool fInterruptEnable = false;
 	bool fSoundEnable = false;
-	uint8_t ram[0x1100] = {};
-	uint8_t in[4] = {0xcc, 0xb0, 0xff, 0xff};
+	array<uint8_t, 0x1100> ram = {};
+	array<uint8_t, 4> in = {0xcc, 0xb0, 0xff, 0xff};
 
 	array<uint8_t, 0x8000> bg;
 	array<uint8_t, 0x8000> obj;
@@ -54,9 +58,9 @@ struct Pengo {
 	Pengo() {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x80; i++)
-			cpu.memorymap[i].base = PRG + i * 0x100;
+			cpu.memorymap[i].base = &PRG[i << 8];
 		for (int i = 0; i < 0x10; i++) {
-			cpu.memorymap[0x80 + i].base = ram + i * 0x100;
+			cpu.memorymap[0x80 + i].base = &ram[i << 8];
 			cpu.memorymap[0x80 + i].write = nullptr;
 		}
 		cpu.memorymap[0x90].read = [&](int addr) -> int { return in[addr >> 6 & 3]; };
@@ -81,9 +85,9 @@ struct Pengo {
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
-		convertGFX(&bg[0], BG, 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
-		convertGFX(&obj[0], OBJ, 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(64, 1), seq4(128, 1), seq4(192, 1), seq4(0, 1)}, {0, 4}, 64);
-		for (int i = 0; i < 0x20; i++)
+		convertGFX(&bg[0], &BG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], &OBJ[0], 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(64, 1), seq4(128, 1), seq4(192, 1), seq4(0, 1)}, {0, 4}, 64);
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 

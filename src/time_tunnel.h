@@ -13,13 +13,14 @@
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "sound_effect.h"
-#include "utils.h"
 using namespace std;
 
 struct TimeTunnel {
 	static vector<vector<short>> pcm;
-	static int pcm_freq;
-	static unsigned char PRG1[], PRG2[], GFX[], PRI[];
+	static array<uint8_t, 0xa000> PRG1;
+	static array<uint8_t, 0x1000> PRG2;
+	static array<uint8_t, 0x8000> GFX;
+	static array<uint8_t, 0x100> PRI;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 256;
@@ -43,9 +44,9 @@ struct TimeTunnel {
 	bool fNmiEnable = false;
 	int bank = 0x60;
 
-	uint8_t ram[0x4b00] = {};
-	uint8_t ram2[0x400] = {};
-	uint8_t in[8] = {0xff, 0xff, 0x1c, 0xff, 0xff, 0x0f, 0, 0xf0};
+	array<uint8_t, 0x4b00> ram = {};
+	array<uint8_t, 0x400> ram2 = {};
+	array<uint8_t, 8> in = {0xff, 0xff, 0x1c, 0xff, 0xff, 0x0f, 0, 0xf0};
 	struct {
 		int addr = 0;
 	} psg[4];
@@ -61,13 +62,13 @@ struct TimeTunnel {
 	array<uint8_t, 0x8000> bg;
 	array<uint8_t, 0x8000> obj;
 	array<int, 0x40> rgb;
-	uint8_t pri[32][4] = {};
+	array<array<uint8_t, 4>, 32> pri = {};
 	array<uint8_t, width * height> layer[4];
 	int priority = 0;
-	uint8_t collision[4] = {};
+	array<uint8_t, 4> collision = {};
 	int gfxaddr = 0;
-	uint8_t scroll[6] = {};
-	uint8_t colorbank[2] = {};
+	array<uint8_t, 6> scroll = {};
+	array<uint8_t, 2> colorbank = {};
 	int mode = 0;
 
 	vector<SE> se;
@@ -77,15 +78,15 @@ struct TimeTunnel {
 	TimeTunnel(int rate) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x80; i++)
-			cpu.memorymap[i].base = PRG1 + i * 0x100;
+			cpu.memorymap[i].base = &PRG1[i << 8];
 		for (int i = 0; i < 8; i++) {
-			cpu.memorymap[0x80 + i].base = ram + i * 0x100;
+			cpu.memorymap[0x80 + i].base = &ram[i << 8];
 			cpu.memorymap[0x80 + i].write = nullptr;
 		}
 		for (int i = 0; i < 8; i++)
 			cpu.memorymap[0x88 + i].read = [&](int addr) { return (addr & 1) == 0 ? 0 : 0xff; };
 		for (int i = 0; i < 0x42; i++) {
-			cpu.memorymap[0x90 + i].base = ram + 0x800 + i * 0x100;
+			cpu.memorymap[0x90 + i].base = &ram[8 + i << 8];
 			cpu.memorymap[0x90 + i].write = nullptr;
 		}
 		cpu.memorymap[0xd2].read = [&](int addr) -> int { return ram[0x4a00 | addr & 0x7f]; };
@@ -141,7 +142,7 @@ struct TimeTunnel {
 			case 7:
 				return void(colorbank[addr & 1] = data);
 			case 8:
-				return void(fill_n(collision, sizeof(collision), 0));
+				return collision.fill(0);
 			case 9:
 				return void(gfxaddr = gfxaddr & 0xff00 | data);
 			case 0xa:
@@ -155,16 +156,16 @@ struct TimeTunnel {
 				if (_bank == bank)
 					return;
 				for (int i = 0; i < 0x20; i++)
-					cpu.memorymap[0x60 + i].base = PRG1 + (_bank + i) * 0x100;
+					cpu.memorymap[0x60 + i].base = &PRG1[_bank + i << 8];
 				return void(bank = _bank);
 			}
 		};
 		cpu.memorymap[0xd6].write = [&](int addr, int data) { mode = data; };
 
 		for (int i = 0; i < 0x10; i++)
-			cpu2.memorymap[i].base = PRG2 + i * 0x100;
+			cpu2.memorymap[i].base = &PRG2[i << 8];
 		for (int i = 0; i < 4; i++) {
-			cpu2.memorymap[0x40 + i].base = ram2 + i * 0x100;
+			cpu2.memorymap[0x40 + i].base = &ram2[i << 8];
 			cpu2.memorymap[0x40 + i].write = nullptr;
 		}
 		for (int i = 0; i < 8; i++) {
@@ -238,13 +239,18 @@ struct TimeTunnel {
 		cpu2.set_breakpoint(0x04f3);
 
 		// Videoの初期化
-		convertPRI();
+		for (int i = 0; i < 16; i++)
+			for (int mask = 0, j = 3; j >= 0; mask |= 1 << pri[i][j], --j)
+				pri[i][j] = PRI[i << 4 & 0xf0 | mask] & 3;
+		for (int i = 16; i < 32; i++)
+			for (int mask = 0, j = 3; j >= 0; mask |= 1 << pri[i][j], --j)
+				pri[i][j] = PRI[i << 4 & 0xf0 | mask] >> 2 & 3;
 
 		// 効果音の初期化
 		convertPCM(rate);
 		se.resize(pcm.size());
 		for (int i = 0; i < se.size(); i++)
-			se[i].freq = pcm_freq, se[i].buf = pcm[i];
+			se[i].freq = rate, se[i].buf = pcm[i];
 	}
 
 	TimeTunnel *execute() {
@@ -344,22 +350,12 @@ struct TimeTunnel {
 		in[0] = in[0] & ~(1 << 5) | !fDown << 5;
 	}
 
-	void convertPRI() {
-		for (int i = 0; i < 16; i++)
-			for (int mask = 0, j = 3; j >= 0; mask |= 1 << pri[i][j], --j)
-				pri[i][j] = PRI[i << 4 & 0xf0 | mask] & 3;
-		for (int i = 16; i < 32; i++)
-			for (int mask = 0, j = 3; j >= 0; mask |= 1 << pri[i][j], --j)
-				pri[i][j] = PRI[i << 4 & 0xf0 | mask] >> 2 & 3;
-	}
-
 	static void convertPCM(int rate) {
 		static bool converted = false;
 		const int clock = 3000000;
 
 		if (converted)
 			return;
-		pcm_freq = rate;
 		for (int idx = 1; idx < 16; idx++) {
 			const int desc1 = PRG2[0x05f3 + idx * 2] | PRG2[0x05f3 + idx * 2 + 1] << 8;
 			const int n = PRG2[desc1], w1 = PRG2[desc1 + 1], r1 = PRG2[desc1 + 2], desc2 = PRG2[desc1 + 3] | PRG2[desc1 + 4] << 8;
@@ -414,12 +410,33 @@ struct TimeTunnel {
 
 	void makeBitmap(int *data) {
 		// 画像データ変換
-		bg.fill(7), obj.fill(7);
-		convertGFX(&bg[0], &ram[0x800], 256, {rseq8(0, 8)}, {rseq8(0, 1)}, {0x8000, 0x4000, 0}, 8);
-		convertGFX(&bg[0x4000], &ram[0x2000], 256, {rseq8(0, 8)}, {rseq8(0, 1)}, {0x8000, 0x4000, 0}, 8);
-		convertGFX(&obj[0], &ram[0x800], 64, {rseq8(128, 8), rseq8(0, 8)}, {rseq8(0, 1), rseq8(64, 1)}, {0x8000, 0x4000, 0}, 32);
-		convertGFX(&obj[0x4000], &ram[0x2000], 64, {rseq8(128, 8), rseq8(0, 8)}, {rseq8(0, 1), rseq8(64, 1)}, {0x8000, 0x4000, 0}, 32);
-		for (int k = 0x4a00, i = 0; i < 0x40; k += 2, i++) {
+		auto convertBG = [](uint8_t *dst, uint8_t *src, int n) {
+			for (int i = 0; i < n; src += 8, i++)
+				for (int j = 0; j < 8; j++)
+					for (int k = 7; k >= 0; --k)
+						*dst++ = src[k] >> j & 1 | src[k + 0x800] >> j << 1 & 2 | src[k + 0x1000] >> j << 2 & 4;
+		};
+		convertBG(&bg[0], &ram[0x800], 256);
+		convertBG(&bg[0x4000], &ram[0x2000], 256);
+		auto convertOBJ = [](uint8_t *dst, uint8_t *src, int n) {
+			for (int i = 0; i < n; src += 32, i++) {
+				for (int j = 0; j < 8; j++) {
+					for (int k = 7; k >= 0; --k)
+						*dst++ = src[k + 16] >> j & 1 | src[k + 0x800 + 16] >> j << 1 & 2 | src[k + 0x1000 + 16] >> j << 2 & 4;
+					for (int k = 7; k >= 0; --k)
+						*dst++ = src[k] >> j & 1 | src[k + 0x800] >> j << 1 & 2 | src[k + 0x1000] >> j << 2 & 4;
+				}
+				for (int j = 0; j < 8; j++) {
+					for (int k = 7; k >= 0; --k)
+						*dst++ = src[k + 24] >> j & 1 | src[k + 0x800 + 24] >> j << 1 & 2 | src[k + 0x1000 + 24] >> j << 2 & 4;
+					for (int k = 7; k >= 0; --k)
+						*dst++ = src[k + 8] >> j & 1 | src[k + 0x800 + 8] >> j << 1 & 2 | src[k + 0x1000 + 8] >> j << 2 & 4;
+				}
+			}
+		};
+		convertOBJ(&obj[0], &ram[0x800], 64);
+		convertOBJ(&obj[0x4000], &ram[0x2000], 64);
+		for (int k = 0x4a00, i = 0; i < rgb.size(); k += 2, i++) {
 			const int e = ~(ram[k] << 8 | ram[k + 1]);
 			rgb[i] = 0xff000000 | (e & 7) * 255 / 7 << 16 | (e >> 3 & 7) * 255 / 7 << 8 | (e >> 6 & 7) * 255 / 7;
 		}
@@ -479,8 +496,7 @@ struct TimeTunnel {
 		for (int i = 0; i < 4; i++) {
 			const int index = pri[priority & 0x1f][i];
 			auto& _layer = layer[index];
-			const int table[] = {0x80, 0x10, 0x20, 0x40};
-			if (~mode & table[index])
+			if (~mode & array<int, 4>{0x80, 0x10, 0x20, 0x40}[index])
 				continue;
 			p = 256 * 16 + 16;
 			for (int j = 0; j < 256; p += 256 - 224, j++)

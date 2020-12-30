@@ -6,31 +6,26 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "mappy.h"
 using namespace std;
 
-unsigned char Mappy::SND[0x100], Mappy::BG[0x1000], Mappy::OBJ[0x4000], Mappy::BGCOLOR[0x100];
-unsigned char Mappy::OBJCOLOR[0x100], Mappy::RGB[0x20], Mappy::PRG1[0x6000], Mappy::PRG2[0x2000];
-MappySound *Mappy::sound0;
-
 Mappy *game;
-vector<int> rom_table = {
-	(int)"SND", (int)strlen("SND"), (int)game->SND, (int)sizeof(game->SND),
-	(int)"BG", (int)strlen("BG"), (int)game->BG, (int)sizeof(game->BG),
-	(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ, (int)sizeof(game->OBJ),
-	(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR, (int)sizeof(game->BGCOLOR),
-	(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR, (int)sizeof(game->OBJCOLOR),
-	(int)"RGB", (int)strlen("RGB"), (int)game->RGB, (int)sizeof(game->RGB),
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, Mappy::width * Mappy::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 8 * 4 + 1> rom_table = {
+		(int)"SND", (int)strlen("SND"), (int)game->SND.data(), (int)game->SND.size(),
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
+		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
+		(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR.data(), (int)game->OBJCOLOR.size(),
+		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -87,4 +82,30 @@ extern "C" EMSCRIPTEN_KEEPALIVE void left(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 	game->triggerA(fDown != 0);
 }
+
+MappySound *Mappy::sound0;
+
+array<unsigned char, 0x100> Mappy::SND = {
+};
+
+array<unsigned char, 0x1000> Mappy::BG = {
+};
+
+array<unsigned char, 0x4000> Mappy::OBJ = {
+};
+
+array<unsigned char, 0x100> Mappy::BGCOLOR = {
+};
+
+array<unsigned char, 0x100> Mappy::OBJCOLOR = {
+};
+
+array<unsigned char, 0x20> Mappy::RGB = {
+};
+
+array<unsigned char, 0x6000> Mappy::PRG1 = {
+};
+
+array<unsigned char, 0x2000> Mappy::PRG2 = {
+};
 

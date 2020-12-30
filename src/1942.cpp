@@ -6,34 +6,29 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "1942.h"
 using namespace std;
 
-unsigned char _1942::PRG1[0x18000], _1942::PRG2[0x4000], _1942::FG[0x2000], _1942::BG[0xc000], _1942::OBJ[0x10000];
-unsigned char _1942::RED[0x100], _1942::GREEN[0x100], _1942::BLUE[0x100], _1942::FGCOLOR[0x100], _1942::BGCOLOR[0x100], _1942::OBJCOLOR[0x100];
-AY_3_8910 *_1942::sound0, *_1942::sound1;
-
 _1942 *game;
-vector<int> rom_table = {
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	(int)"FG", (int)strlen("FG"), (int)game->FG, (int)sizeof(game->FG),
-	(int)"BG", (int)strlen("BG"), (int)game->BG, (int)sizeof(game->BG),
-	(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ, (int)sizeof(game->OBJ),
-	(int)"RED", (int)strlen("RED"), (int)game->RED, (int)sizeof(game->RED),
-	(int)"GREEN", (int)strlen("GREEN"), (int)game->GREEN, (int)sizeof(game->GREEN),
-	(int)"BLUE", (int)strlen("BLUE"), (int)game->BLUE, (int)sizeof(game->BLUE),
-	(int)"FGCOLOR", (int)strlen("FGCOLOR"), (int)game->FGCOLOR, (int)sizeof(game->FGCOLOR),
-	(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR, (int)sizeof(game->BGCOLOR),
-	(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR, (int)sizeof(game->OBJCOLOR),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, _1942::width * _1942::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 11 * 4 + 1> rom_table = {
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"FG", (int)strlen("FG"), (int)game->FG.data(), (int)game->FG.size(),
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
+		(int)"RED", (int)strlen("RED"), (int)game->RED.data(), (int)game->RED.size(),
+		(int)"GREEN", (int)strlen("GREEN"), (int)game->GREEN.data(), (int)game->GREEN.size(),
+		(int)"BLUE", (int)strlen("BLUE"), (int)game->BLUE.data(), (int)game->BLUE.size(),
+		(int)"FGCOLOR", (int)strlen("FGCOLOR"), (int)game->FGCOLOR.data(), (int)game->FGCOLOR.size(),
+		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
+		(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR.data(), (int)game->OBJCOLOR.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -103,4 +98,39 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerB(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerY(int fDown) {
 	game->triggerY(fDown != 0);
 }
+
+AY_3_8910 *_1942::sound0, *_1942::sound1;
+
+array<unsigned char, 0x18000> _1942::PRG1 = {
+};
+
+array<unsigned char, 0x4000> _1942::PRG2 = {
+};
+
+array<unsigned char, 0x2000> _1942::FG = {
+};
+
+array<unsigned char, 0xc000> _1942::BG = {
+};
+
+array<unsigned char, 0x10000> _1942::OBJ = {
+};
+
+array<unsigned char, 0x100> _1942::RED = {
+};
+
+array<unsigned char, 0x100> _1942::GREEN = {
+};
+
+array<unsigned char, 0x100> _1942::BLUE = {
+};
+
+array<unsigned char, 0x100> _1942::FGCOLOR = {
+};
+
+array<unsigned char, 0x100> _1942::BGCOLOR = {
+};
+
+array<unsigned char, 0x100> _1942::OBJCOLOR = {
+};
 

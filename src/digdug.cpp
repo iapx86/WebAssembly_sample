@@ -6,35 +6,30 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "digdug.h"
 using namespace std;
 
-unsigned char DigDug::PRG1[0x4000], DigDug::PRG2[0x2000], DigDug::PRG3[0x1000], DigDug::BG2[0x800];
-unsigned char DigDug::MAPDATA[0x1000], DigDug::BG4[0x1000], DigDug::OBJ[0x4000], DigDug::SND[0x100];
-unsigned char DigDug::BGCOLOR[0x100], DigDug::OBJCOLOR[0x100], DigDug::RGB[0x20], DigDug::IO[0x400];
-
 DigDug *game;
-vector<int> rom_table = {
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	(int)"PRG3", (int)strlen("PRG3"), (int)game->PRG3, (int)sizeof(game->PRG3),
-	(int)"BG2", (int)strlen("BG2"), (int)game->BG2, (int)sizeof(game->BG2),
-	(int)"MAPDATA", (int)strlen("MAPDATA"), (int)game->MAPDATA, (int)sizeof(game->MAPDATA),
-	(int)"BG4", (int)strlen("BG4"), (int)game->BG4, (int)sizeof(game->BG4),
-	(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ, (int)sizeof(game->OBJ),
-	(int)"SND", (int)strlen("SND"), (int)game->SND, (int)sizeof(game->SND),
-	(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR, (int)sizeof(game->BGCOLOR),
-	(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR, (int)sizeof(game->OBJCOLOR),
-	(int)"RGB", (int)strlen("RGB"), (int)game->RGB, (int)sizeof(game->RGB),
-	(int)"IO", (int)strlen("IO"), (int)game->IO, (int)sizeof(game->IO),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, DigDug::width * DigDug::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 12 * 4 + 1> rom_table = {
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"PRG3", (int)strlen("PRG3"), (int)game->PRG3.data(), (int)game->PRG3.size(),
+		(int)"BG2", (int)strlen("BG2"), (int)game->BG2.data(), (int)game->BG2.size(),
+		(int)"MAPDATA", (int)strlen("MAPDATA"), (int)game->MAPDATA.data(), (int)game->MAPDATA.size(),
+		(int)"BG4", (int)strlen("BG4"), (int)game->BG4.data(), (int)game->BG4.size(),
+		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
+		(int)"SND", (int)strlen("SND"), (int)game->SND.data(), (int)game->SND.size(),
+		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
+		(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR.data(), (int)game->OBJCOLOR.size(),
+		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
+		(int)"IO", (int)strlen("IO"), (int)game->IO.data(), (int)game->IO.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -102,7 +97,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 
 PacManSound *DigDug::sound0;
 
-unsigned char DigDug::RAM[] = {
+array<unsigned char, 0x2000> DigDug::RAM = {
 	255, 247, 255, 235, 255, 111, 255, 255,  19, 255,  52, 255,  96, 255,  40,
 	255, 255, 255, 255, 231, 255, 255, 255, 127, 221, 255, 249, 255, 156, 255,
 	 18, 255, 255, 127, 255, 255, 255, 255, 255, 255, 103, 255, 173, 255, 203,
@@ -650,5 +645,41 @@ unsigned char DigDug::RAM[] = {
 	 61, 124, 242, 218,  63, 119,  83,  70, 225, 127, 235, 243, 208, 201, 247,
 	 38, 246, 139, 237, 138,  32, 167, 118, 102, 151,  46, 183,  51, 153, 222,
 	 63, 102,
+};
+
+array<unsigned char, 0x4000> DigDug::PRG1 = {
+};
+
+array<unsigned char, 0x2000> DigDug::PRG2 = {
+};
+
+array<unsigned char, 0x1000> DigDug::PRG3 = {
+};
+
+array<unsigned char, 0x800> DigDug::BG2 = {
+};
+
+array<unsigned char, 0x1000> DigDug::MAPDATA = {
+};
+
+array<unsigned char, 0x1000> DigDug::BG4 = {
+};
+
+array<unsigned char, 0x4000> DigDug::OBJ = {
+};
+
+array<unsigned char, 0x100> DigDug::SND = {
+};
+
+array<unsigned char, 0x100> DigDug::BGCOLOR = {
+};
+
+array<unsigned char, 0x100> DigDug::OBJCOLOR = {
+};
+
+array<unsigned char, 0x20> DigDug::RGB = {
+};
+
+array<unsigned char, 0x400> DigDug::IO = {
 };
 

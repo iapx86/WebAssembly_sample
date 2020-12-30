@@ -6,31 +6,26 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "baraduke.h"
 using namespace std;
 
-unsigned char Baraduke::PRG1[0xa000], Baraduke::PRG2[0x4000], Baraduke::PRG2I[0x1000];
-unsigned char Baraduke::FG[0x2000], Baraduke::BG[0xc000], Baraduke::OBJ[0x10000], Baraduke::GREEN[0x800], Baraduke::RED[0x800];
-C30 *Baraduke::sound0;
-
 Baraduke *game;
-vector<int> rom_table = {
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	(int)"PRG2I", (int)strlen("PRG2I"), (int)game->PRG2I, (int)sizeof(game->PRG2I),
-	(int)"FG", (int)strlen("FG"), (int)game->FG, (int)sizeof(game->FG),
-	(int)"BG", (int)strlen("BG"), (int)game->BG, (int)sizeof(game->BG),
-	(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ, (int)sizeof(game->OBJ),
-	(int)"GREEN", (int)strlen("GREEN"), (int)game->GREEN, (int)sizeof(game->GREEN),
-	(int)"RED", (int)strlen("RED"), (int)game->RED, (int)sizeof(game->RED),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, Baraduke::width * Baraduke::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 8 * 4 + 1> rom_table = {
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"PRG2I", (int)strlen("PRG2I"), (int)game->PRG2I.data(), (int)game->PRG2I.size(),
+		(int)"FG", (int)strlen("FG"), (int)game->FG.data(), (int)game->FG.size(),
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
+		(int)"GREEN", (int)strlen("GREEN"), (int)game->GREEN.data(), (int)game->GREEN.size(),
+		(int)"RED", (int)strlen("RED"), (int)game->RED.data(), (int)game->RED.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -95,4 +90,30 @@ extern "C" EMSCRIPTEN_KEEPALIVE void left(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 	game->triggerA(fDown != 0);
 }
+
+C30 *Baraduke::sound0;
+
+array<unsigned char, 0xa000> Baraduke::PRG1 = {
+};
+
+array<unsigned char, 0x4000> Baraduke::PRG2 = {
+};
+
+array<unsigned char, 0x1000> Baraduke::PRG2I = {
+};
+
+array<unsigned char, 0x2000> Baraduke::FG = {
+};
+
+array<unsigned char, 0xc000> Baraduke::BG = {
+};
+
+array<unsigned char, 0x10000> Baraduke::OBJ = {
+};
+
+array<unsigned char, 0x800> Baraduke::GREEN = {
+};
+
+array<unsigned char, 0x800> Baraduke::RED = {
+};
 

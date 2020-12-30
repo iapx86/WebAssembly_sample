@@ -7,6 +7,9 @@
 #ifndef MB8840_H
 #define MB8840_H
 
+#include <array>
+using namespace std;
+
 enum {
 	MB8840_EXTERNAL = 0, MB8840_TIMER, MB8840_SERIAL,
 };
@@ -19,16 +22,16 @@ struct MB8840 {
 	bool zf = false;
 	bool cf = false;
 	bool st = false;
-	unsigned char *m[8] = {};
+	array<unsigned char *, 8> m = {};
 	int o = 0;
 	int p = 0;
 	int r = 0;
 	int k = 0;
 	int t = 0;
 	int sb = 0;
-	unsigned char rom[0x800] = {};
-	unsigned char ram[0x80] = {};
-	unsigned short stack[4] = {};
+	array<unsigned char, 0x800> rom = {};
+	array<unsigned char, 0x80> ram = {};
+	array<unsigned short, 4> stack = {};
 	int sp = 0;
 	int cause = 0; // cause:Ext(IF),Timer(VF),SB(SF)
 	int mask = 0;

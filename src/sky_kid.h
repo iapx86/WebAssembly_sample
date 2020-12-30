@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <array>
-#include <vector>
 #include "mc6809.h"
 #include "mc6801.h"
 #include "c30.h"
@@ -21,7 +20,13 @@ enum {
 };
 
 struct SkyKid {
-	static unsigned char PRG1[], PRG2[], PRG2I[], FG[], BG[], OBJ[], RED[], GREEN[], BLUE[], BGCOLOR[], OBJCOLOR[];
+	static array<uint8_t, 0xc000> PRG1;
+	static array<uint8_t, 0x2000> PRG2;
+	static array<uint8_t, 0x1000> PRG2I;
+	static array<uint8_t, 0x2000> FG, BG;
+	static array<uint8_t, 0x8000> OBJ;
+	static array<uint8_t, 0x100> RED, GREEN, BLUE;
+	static array<uint8_t, 0x200> BGCOLOR, OBJCOLOR;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 288;
@@ -49,9 +54,9 @@ struct SkyKid {
 	bool fInterruptEnable1 = false;
 	int bank = 0x80;
 
-	uint8_t ram[0x3000] = {};
-	uint8_t ram2[0x900] = {};
-	uint8_t in[8] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+	array<uint8_t, 0x3000> ram = {};
+	array<uint8_t, 0x900> ram2 = {};
+	array<uint8_t, 8> in;
 	int select = 0;
 
 	array<uint8_t, 0x8000> fg;
@@ -68,14 +73,16 @@ struct SkyKid {
 
 	SkyKid() {
 		// CPU周りの初期化
+		in.fill(0xff);
+
 		for (int i = 0; i < 0x20; i++)
-			cpu.memorymap[i].base = PRG1 + 0x8000 + i * 0x100;
+			cpu.memorymap[i].base = &PRG1[0x80 + i << 8];
 		for (int i = 0; i < 0x10; i++) {
-			cpu.memorymap[0x20 + i].base = ram + i * 0x100;
+			cpu.memorymap[0x20 + i].base = &ram[i << 8];
 			cpu.memorymap[0x20 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x20; i++) {
-			cpu.memorymap[0x40 + i].base = ram + 0x1000 + i * 0x100;
+			cpu.memorymap[0x40 + i].base = &ram[0x10 + i << 8];
 			cpu.memorymap[0x40 + i].write = nullptr;
 		}
 		cpu.memorymap[0x60].write = [&](int addr, int data) { hScroll = addr & 0xff; };
@@ -88,7 +95,7 @@ struct SkyKid {
 		for (int i = 0; i < 0x10; i++)
 			cpu.memorymap[0x70 + i].write = [&](int addr, int data) { fInterruptEnable0 = !(addr & 0x800); };
 		for (int i = 0; i < 0x80; i++)
-			cpu.memorymap[0x80 + i].base = PRG1 + i * 0x100;
+			cpu.memorymap[0x80 + i].base = &PRG1[i << 8];
 		for (int i = 0; i < 0x10; i++)
 			cpu.memorymap[0x80 + i].write = [&](int addr, int data) { addr & 0x800 ? mcu.disable() : mcu.enable(); };
 		for (int i = 0; i < 0x10; i++)
@@ -97,7 +104,7 @@ struct SkyKid {
 				if (_bank == bank)
 					return;
 				for (int i = 0; i < 0x20; i++)
-					cpu.memorymap[i].base = PRG1 + (_bank + i) * 0x100;
+					cpu.memorymap[i].base = &PRG1[_bank + i << 8];
 				bank = _bank;
 			};
 		cpu.memorymap[0xa0].write = [&](int addr, int data) { !(addr & 0xfe) && (priority = data, fFlip = (addr & 1) != 0); };
@@ -111,22 +118,22 @@ struct SkyKid {
 		for (int i = 0; i < 0x40; i++)
 			mcu.memorymap[0x40 + i].write = [&](int addr, int data) { fInterruptEnable1 = !(addr & 0x2000); };
 		for (int i = 0; i < 0x20; i++)
-			mcu.memorymap[0x80 + i].base = PRG2 + i * 0x100;
+			mcu.memorymap[0x80 + i].base = &PRG2[i << 8];
 		for (int i = 0; i < 8; i++) {
-			mcu.memorymap[0xc0 + i].base = ram2 + 0x100 + i * 0x100;
+			mcu.memorymap[0xc0 + i].base = &ram2[1 + i << 8];
 			mcu.memorymap[0xc0 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x10; i++)
-			mcu.memorymap[0xf0 + i].base = PRG2I + i * 0x100;
+			mcu.memorymap[0xf0 + i].base = &PRG2I[i << 8];
 
 		// Videoの初期化
-		fg.fill(3), bg.fill(3), obj.fill(3), fill_n(obj.begin(), 0x10000, 7);
+		fg.fill(3), bg.fill(3), obj.fill(3), fill_n(&obj[0], 0x10000, 7);
 		convertGFX(&fg[0], &FG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
 		convertGFX(&bg[0], &BG[0], 512, {rseq8(0, 16)}, {seq4(0, 1), seq4(8, 1)}, {0, 4}, 16);
 		convertGFX(&obj[0], &OBJ[0], 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0x20004, 0, 4}, 64);
 		convertGFX(&obj[0x8000], &OBJ[0x2000], 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0x10000, 0, 4}, 64);
 		convertGFX(&obj[0x10000], &OBJ[0x6000], 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
-		for (int i = 0; i < 0x100; i++)
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8| RED[i] * 255 / 15;
 	}
 

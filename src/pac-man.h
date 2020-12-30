@@ -8,7 +8,6 @@
 #define PAC_MAN_H
 
 #include <array>
-#include <vector>
 #include "z80.h"
 #include "pac-man_sound.h"
 #include "utils.h"
@@ -19,7 +18,12 @@ enum {
 };
 
 struct PacMan {
-	static unsigned char BG[], COLOR[], OBJ[], RGB[], PRG[], SND[];
+	static array<uint8_t, 0x1000> BG;
+	static array<uint8_t, 0x100> COLOR;
+	static array<uint8_t, 0x1000> OBJ;
+	static array<uint8_t, 0x20> RGB;
+	static array<uint8_t, 0x4000> PRG;
+	static array<uint8_t, 0x100> SND;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 288;
@@ -42,8 +46,8 @@ struct PacMan {
 
 	bool fInterruptEnable = false;
 	bool fSoundEnable = false;
-	uint8_t ram[0xd00] = {};
-	uint8_t in[4] = {0xff, 0xff, 0xc9, 0x00};
+	array<uint8_t, 0xd00> ram = {};
+	array<uint8_t, 4> in = {0xff, 0xff, 0xc9, 0x00};
 	int intvec = 0;
 
 	array<uint8_t, 0x4000> bg;
@@ -58,14 +62,14 @@ struct PacMan {
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0x3f, 0x80))
-				cpu.memorymap[page].base = PRG + (page & 0x3f) * 0x100;
+				cpu.memorymap[page].base = &PRG[(page & 0x3f) << 8];
 			else if (range(page, 0x40, 0x47, 0xa0)) {
-				cpu.memorymap[page].base = ram + (page & 7) * 0x100;
+				cpu.memorymap[page].base = &ram[(page & 7) << 8];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0x48, 0x48, 0xa3))
 				cpu.memorymap[page].read = [&](int addr) { return 0xbf; };
 			else if (range(page, 0x4c, 0x4f, 0xa0)) {
-				cpu.memorymap[page].base = ram + (8 | page & 3) * 0x100;
+				cpu.memorymap[page].base = &ram[(8 | page & 3) << 8];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0x50, 0x50, 0xaf)) {
 				cpu.memorymap[page].read = [&](int addr) -> int { return in[addr >> 6 & 3]; };
@@ -92,9 +96,9 @@ struct PacMan {
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
-		convertGFX(&bg[0], BG, 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
-		convertGFX(&obj[0], OBJ, 64, {rseq8(256, 8), rseq8(0, 8)}, {seq4(64, 1), seq4(128, 1), seq4(192, 1), seq4(0, 1)}, {0, 4}, 64);
-		for (int i = 0; i < 0x20; i++)
+		convertGFX(&bg[0], &BG[0], 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], &OBJ[0], 64, {rseq8(256, 8), rseq8(0, 8)}, {seq4(64, 1), seq4(128, 1), seq4(192, 1), seq4(0, 1)}, {0, 4}, 64);
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 

@@ -6,6 +6,7 @@
 #define C30_H
 
 #include <algorithm>
+#include <array>
 #include <list>
 #include <mutex>
 #include <utility>
@@ -21,9 +22,9 @@ struct C30 {
 	vector<list<pair<int, int>>> tmpwheel;
 	list<list<pair<int, int>>> wheel;
 	mutex mutex;
-	float snd[0x200] = {};
-	uint8_t ram[0x400] = {};
-	uint8_t reg[0x140] = {};
+	array<float, 0x200> snd = {};
+	array<uint8_t, 0x400> ram = {};
+	array<uint8_t, 0x140> reg = {};
 	struct {
 		uint32_t phase = 0;
 		int ncount = 0;

@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <array>
-#include <vector>
 #include "mc6809.h"
 #include "mc68000.h"
 #include "mappy_sound.h"
@@ -25,7 +24,14 @@ enum {
 };
 
 struct LibbleRabble {
-	static unsigned char PRG1[], PRG2[], PRG3[], BG[], OBJ[], RED[], GREEN[], BLUE[], BGCOLOR[], OBJCOLOR[], SND[];
+	static array<uint8_t, 0x8000> PRG1;
+	static array<uint8_t, 0x2000> PRG2;
+	static array<uint8_t, 0x8000> PRG3;
+	static array<uint8_t, 0x2000> BG;
+	static array<uint8_t, 0x4000> OBJ;
+	static array<uint8_t, 0x100> RED, GREEN, BLUE, BGCOLOR;
+	static array<uint8_t, 0x200> OBJCOLOR;
+	static array<uint8_t, 0x100> SND;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 288;
@@ -52,14 +58,14 @@ struct LibbleRabble {
 
 	bool fInterruptEnable = false;
 	bool fInterruptEnable2 = false;
-	uint8_t ram[0x2000] = {};
-	uint8_t ram2[0x800] = {};
-	uint8_t ram3[0x40000] = {};
-	uint8_t vram[0x10000] = {};
-	uint8_t port[0x40] = {};
-	uint8_t in[15] = {};
+	array<uint8_t, 0x2000> ram = {};
+	array<uint8_t, 0x800> ram2 = {};
+	array<uint8_t, 0x40000> ram3 = {};
+	array<uint8_t, 0x40> port = {};
+	array<uint8_t, 15> in = {};
 	int edge = 0xf;
 
+	array<uint8_t, 0x10000> vram = {};
 	array<uint8_t, 0x8000> bg;
 	array<uint8_t, 0x10000> obj;
 	array<int, 0x100> rgb;
@@ -71,11 +77,11 @@ struct LibbleRabble {
 	LibbleRabble() {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x20; i++) {
-			cpu.memorymap[i].base = ram + i * 0x100;
+			cpu.memorymap[i].base = &ram[i << 8];
 			cpu.memorymap[i].write = nullptr;
 		}
 		for (int i = 0; i < 8; i++) {
-			cpu.memorymap[0x28 + i].base = ram2 + i * 0x100;
+			cpu.memorymap[0x28 + i].base = &ram2[i << 8];
 			cpu.memorymap[0x28 + i].write = nullptr;
 		}
 		for (int i = 0; i < 4; i++) {
@@ -87,7 +93,7 @@ struct LibbleRabble {
 		for (int i = 0; i < 0x10; i++)
 			cpu.memorymap[0x70 + i].write = [&](int addr, int data) { fInterruptEnable = !(addr & 0x800); };
 		for (int i = 0; i < 0x80; i++)
-			cpu.memorymap[0x80 + i].base = PRG1 + i * 0x100;
+			cpu.memorymap[0x80 + i].base = &PRG1[i << 8];
 		for (int i = 0; i < 0x10; i++)
 			cpu.memorymap[0x80 + i].write = [&](int addr, int data) { addr & 0x800 ? cpu3.disable() : cpu3.enable(); };
 		for (int i = 0; i < 0x10; i++)
@@ -99,12 +105,12 @@ struct LibbleRabble {
 			cpu2.memorymap[i].write = [&](int addr, int data) { sound0->write(addr, data); };
 		}
 		for (int i = 0; i < 0x20; i++)
-			cpu2.memorymap[0xe0 + i].base = PRG2 + i * 0x100;
+			cpu2.memorymap[0xe0 + i].base = &PRG2[i << 8];
 
 		for (int i = 0; i < 0x80; i++)
-			cpu3.memorymap[i].base = PRG3 + i * 0x100;
+			cpu3.memorymap[i].base = &PRG3[i << 8];
 		for (int i = 0; i < 0x400; i++) {
-			cpu3.memorymap[0x800 + i].base = ram3 + i * 0x100;
+			cpu3.memorymap[0x800 + i].base = &ram3[i << 8];
 			cpu3.memorymap[0x800 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x10; i++) {
@@ -116,7 +122,7 @@ struct LibbleRabble {
 			cpu3.memorymap[0x1800 + i].write = [&](int addr, int data) { addr = addr << 1 & 0xfffe, vram[addr] = data >> 4, vram[addr | 1] = data & 0xf; };
 		}
 		for (int i = 0; i < 0x500; i++) {
-			cpu3.memorymap[0x1900 + i].base = vram + (i & 0xff) * 0x100;
+			cpu3.memorymap[0x1900 + i].base = &vram[(i & 0xff) << 8];
 			cpu3.memorymap[0x1900 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x1000; i++)
@@ -124,9 +130,9 @@ struct LibbleRabble {
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
-		convertGFX(&bg[0], BG, 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
-		convertGFX(&obj[0], OBJ, 256, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
-		for (int i = 0; i < 0x100; i++)
+		convertGFX(&bg[0], &BG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], &OBJ[0], 256, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
@@ -240,7 +246,7 @@ struct LibbleRabble {
 		fCoin -= fCoin != 0, fStart1P -= fStart1P != 0, fStart2P -= fStart2P != 0;
 		edge &= in[3];
 		if (port[8] == 1)
-			copy_n(in, 4, port + 4);
+			copy_n(&in[0], 4, &port[4]);
 		else if (port[8] == 3) {
 			int credit = port[2] * 10 + port[3];
 			if (fCoin && credit < 150)
@@ -250,17 +256,17 @@ struct LibbleRabble {
 			if (!port[9] && fStart2P && credit > 1)
 				port[1] += 2, credit -= (credit < 150) * 2;
 			port[2] = credit / 10, port[3] = credit % 10;
-			copy_n(vector<uint8_t>{in[1], uint8_t(in[3] << 1 & 0xa | edge & 5), in[2], uint8_t(in[3] & 0xa | edge >> 1 & 5)}.data(), 4, port + 4);
+			copy_n(&array<uint8_t, 4>{in[1], uint8_t(in[3] << 1 & 0xa | edge & 5), in[2], uint8_t(in[3] & 0xa | edge >> 1 & 5)}[0], 4, &port[4]);
 		} else if (port[8] == 5)
-			copy_n(vector<uint8_t>{0, 0xf, 0xd, 9, 1, 0xc, 0xc}.data(), 7, port + 1);
+			copy_n(&array<uint8_t, 7>{0, 0xf, 0xd, 9, 1, 0xc, 0xc}[0], 7, &port[1]);
 		if (port[0x18] == 1)
-			copy_n(in + 5, 4, port + 0x10);
+			copy_n(&in[5], 4, &port[0x10]);
 		else if (port[0x18] == 7)
 			port[0x12] = 0xe;
 		if (port[0x28] == 7)
 			port[0x27] = 6;
 		else if (port[0x28] == 9)
-			copy_n(vector<uint8_t>{in[10], in[14], in[11], in[11], in[12], in[12], in[13], in[13]}.data(), 8, port + 0x20);
+			copy_n(&array<uint8_t, 8>{in[10], in[14], in[11], in[11], in[12], in[12], in[13], in[13]}[0], 8, &port[0x20]);
 		return edge = in[3] ^ 0xf, this;
 	}
 

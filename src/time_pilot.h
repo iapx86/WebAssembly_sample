@@ -10,7 +10,6 @@
 #include <algorithm>
 #include <array>
 #include <list>
-#include <vector>
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "utils.h"
@@ -21,7 +20,12 @@ enum {
 };
 
 struct TimePilot {
-	static unsigned char PRG1[], PRG2[], BG[], OBJ[], RGB_H[], RGB_L[], OBJCOLOR[], BGCOLOR[];
+	static array<uint8_t, 0x2000> BG;
+	static array<uint8_t, 0x4000> OBJ;
+	static array<uint8_t, 0x100> BGCOLOR, OBJCOLOR;
+	static array<uint8_t, 0x20> RGB_H, RGB_L;
+	static array<uint8_t, 0x6000> PRG1;
+	static array<uint8_t, 0x1000> PRG2;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 256;
@@ -46,9 +50,9 @@ struct TimePilot {
 	bool fInterruptEnable = false;
 //	bool fSoundEnable = false;
 
-	uint8_t ram[0x1400] = {};
-	uint8_t in[5] = {0xff, 0xff, 0xff, 0xff, 0x4b};
-	uint8_t ram2[0x400] = {};
+	array<uint8_t, 0x1400> ram = {};
+	array<uint8_t, 5> in = {0xff, 0xff, 0xff, 0xff, 0x4b};
+	array<uint8_t, 0x400> ram2 = {};
 	struct {
 		int addr = 0;
 	} psg[2];
@@ -70,15 +74,15 @@ struct TimePilot {
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0x5f))
-				cpu.memorymap[page].base = PRG1 + (page & 0x7f) * 0x100;
+				cpu.memorymap[page].base = &PRG1[(page & 0x7f) << 8];
 			else if (range(page, 0xa0, 0xaf)) {
-				cpu.memorymap[page].base = ram + (page & 0xf) * 0x100;
+				cpu.memorymap[page].base = &ram[(page & 0xf) << 8];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0xb0, 0xb0, 0x0b)) {
-				cpu.memorymap[page].base = ram + 0x1000;
+				cpu.memorymap[page].base = &ram[0x1000];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0xb4, 0xb4, 0x0b)) {
-				cpu.memorymap[page].base = ram + 0x1100;
+				cpu.memorymap[page].base = &ram[0x1100];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0xc0, 0xc0, 0x0c)) {
 				cpu.memorymap[page].read = [&](int addr) { return vpos; };
@@ -99,9 +103,9 @@ struct TimePilot {
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0x0f))
-				cpu2.memorymap[page].base = PRG2 + (page & 0xf) * 0x100;
+				cpu2.memorymap[page].base = &PRG2[(page & 0xf) << 8];
 			else if (range(page, 0x30, 0x33, 0x0c)) {
-				cpu2.memorymap[page].base = ram2 + (page & 3) * 0x100;
+				cpu2.memorymap[page].base = &ram2[(page & 3) << 8];
 				cpu2.memorymap[page].write = nullptr;
 			} else if (range(page, 0x40, 0x40, 0x0f)) {
 				cpu2.memorymap[page].read = [&](int addr) { return sound0->read(psg[0].addr); };
@@ -116,11 +120,11 @@ struct TimePilot {
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
-		convertGFX(&bg[0], BG, 512, {rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1)}, {4, 0}, 16);
-		convertGFX(&obj[0], OBJ, 256, {rseq8(256, 8), rseq8(0, 8)}, {rseq4(192, 1), rseq4(128, 1), rseq4(64, 1), rseq4(0, 1)}, {4, 0}, 64);
-		for (int i = 0; i < 256; i++)
+		convertGFX(&bg[0], &BG[0], 512, {rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1)}, {4, 0}, 16);
+		convertGFX(&obj[0], &OBJ[0], 256, {rseq8(256, 8), rseq8(0, 8)}, {rseq4(192, 1), rseq4(128, 1), rseq4(64, 1), rseq4(0, 1)}, {4, 0}, 64);
+		for (int i = 0; i < bgcolor.size(); i++)
 			bgcolor[i] = 0x10 | BGCOLOR[i];
-		for (int i = 0; i < 0x20; i++) {
+		for (int i = 0; i < rgb.size(); i++) {
 			const int e = RGB_H[i] << 8 | RGB_L[i];
 			rgb[i] = 0xff000000 | (e >> 11) * 255 / 31 << 16 | (e >> 6 & 31) * 255 / 31 << 8 | (e >> 1 & 31) * 255 / 31;
 		}
@@ -132,14 +136,13 @@ struct TimePilot {
 		for (int i = 0; i < 256; i++) {
 			vpos = i + 144 & 0xff;
 			if (!vpos)
-				copy_n(ram + 0x1000, 0x200, ram + 0x1200);
+				copy_n(&ram[0x1000], 0x200, &ram[0x1200]);
 			vpos == 240 && fInterruptEnable && cpu.non_maskable_interrupt(), cpu.execute(32);
 		}
 		for (count = 0; count < 58; count++) { // 14318181 / 8 / 60 / 512
 			if (command.size() && cpu2.interrupt())
 				sound0->write(0x0e, command.front()), command.pop_front();
-			const int table[] = {0x00, 0x10, 0x20, 0x30, 0x40, 0x90, 0xa0, 0xb0, 0xa0, 0xd0};
-			sound0->write(0x0f, table[timer]);
+			sound0->write(0x0f, array<uint8_t, 10>{0x00, 0x10, 0x20, 0x30, 0x40, 0x90, 0xa0, 0xb0, 0xa0, 0xd0}[timer]);
 			cpu2.execute(73);
 			++timer >= 10 && (timer = 0);
 		}

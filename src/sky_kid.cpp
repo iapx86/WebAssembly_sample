@@ -6,35 +6,29 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "sky_kid.h"
 using namespace std;
 
-unsigned char SkyKid::PRG1[0xc000], SkyKid::PRG2[0x2000], SkyKid::PRG2I[0x1000];
-unsigned char SkyKid::FG[0x2000], SkyKid::BG[0x2000], SkyKid::OBJ[0x8000], SkyKid::RED[0x100];
-unsigned char SkyKid::GREEN[0x100], SkyKid::BLUE[0x100], SkyKid::BGCOLOR[0x200], SkyKid::OBJCOLOR[0x200];
-C30 *SkyKid::sound0;
-
 SkyKid *game;
-vector<int> rom_table = {
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	(int)"PRG2I", (int)strlen("PRG2I"), (int)game->PRG2I, (int)sizeof(game->PRG2I),
-	(int)"FG", (int)strlen("FG"), (int)game->FG, (int)sizeof(game->FG),
-	(int)"BG", (int)strlen("BG"), (int)game->BG, (int)sizeof(game->BG),
-	(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ, (int)sizeof(game->OBJ),
-	(int)"RED", (int)strlen("RED"), (int)game->RED, (int)sizeof(game->RED),
-	(int)"GREEN", (int)strlen("GREEN"), (int)game->GREEN, (int)sizeof(game->GREEN),
-	(int)"BLUE", (int)strlen("BLUE"), (int)game->BLUE, (int)sizeof(game->BLUE),
-	(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR, (int)sizeof(game->BGCOLOR),
-	(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR, (int)sizeof(game->OBJCOLOR),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, SkyKid::width * SkyKid::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 11 * 4 + 1> rom_table = {
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"PRG2I", (int)strlen("PRG2I"), (int)game->PRG2I.data(), (int)game->PRG2I.size(),
+		(int)"FG", (int)strlen("FG"), (int)game->FG.data(), (int)game->FG.size(),
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
+		(int)"RED", (int)strlen("RED"), (int)game->RED.data(), (int)game->RED.size(),
+		(int)"GREEN", (int)strlen("GREEN"), (int)game->GREEN.data(), (int)game->GREEN.size(),
+		(int)"BLUE", (int)strlen("BLUE"), (int)game->BLUE.data(), (int)game->BLUE.size(),
+		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
+		(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR.data(), (int)game->OBJCOLOR.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -103,4 +97,39 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerB(int fDown) {
 	game->triggerB(fDown != 0);
 }
+
+C30 *SkyKid::sound0;
+
+array<unsigned char, 0xc000> SkyKid::PRG1 = {
+};
+
+array<unsigned char, 0x2000> SkyKid::PRG2 = {
+};
+
+array<unsigned char, 0x1000> SkyKid::PRG2I = {
+};
+
+array<unsigned char, 0x2000> SkyKid::FG = {
+};
+
+array<unsigned char, 0x2000> SkyKid::BG = {
+};
+
+array<unsigned char, 0x8000> SkyKid::OBJ = {
+};
+
+array<unsigned char, 0x100> SkyKid::RED = {
+};
+
+array<unsigned char, 0x100> SkyKid::GREEN = {
+};
+
+array<unsigned char, 0x100> SkyKid::BLUE = {
+};
+
+array<unsigned char, 0x200> SkyKid::BGCOLOR = {
+};
+
+array<unsigned char, 0x200> SkyKid::OBJCOLOR = {
+};
 

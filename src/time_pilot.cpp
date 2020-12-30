@@ -6,31 +6,26 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "time_pilot.h"
 using namespace std;
 
-unsigned char TimePilot::PRG1[0x6000], TimePilot::PRG2[0x1000], TimePilot::BG[0x2000], TimePilot::OBJ[0x4000];
-unsigned char TimePilot::RGB_H[0x20], TimePilot::RGB_L[0x20], TimePilot::BGCOLOR[0x100], TimePilot::OBJCOLOR[0x100];
-AY_3_8910 *TimePilot::sound0, *TimePilot::sound1;
-
 TimePilot *game;
-vector<int> rom_table = {
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	(int)"BG", (int)strlen("BG"), (int)game->BG, (int)sizeof(game->BG),
-	(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ, (int)sizeof(game->OBJ),
-	(int)"RGB_H", (int)strlen("RGB_H"), (int)game->RGB_H, (int)sizeof(game->RGB_H),
-	(int)"RGB_L", (int)strlen("RGB_L"), (int)game->RGB_L, (int)sizeof(game->RGB_L),
-	(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR, (int)sizeof(game->BGCOLOR),
-	(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR, (int)sizeof(game->OBJCOLOR),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, TimePilot::width * TimePilot::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 8 * 4 + 1> rom_table = {
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
+		(int)"RGB_H", (int)strlen("RGB_H"), (int)game->RGB_H.data(), (int)game->RGB_H.size(),
+		(int)"RGB_L", (int)strlen("RGB_L"), (int)game->RGB_L.data(), (int)game->RGB_L.size(),
+		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
+		(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR.data(), (int)game->OBJCOLOR.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -92,4 +87,30 @@ extern "C" EMSCRIPTEN_KEEPALIVE void left(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 	game->triggerA(fDown != 0);
 }
+
+AY_3_8910 *TimePilot::sound0, *TimePilot::sound1;
+
+array<unsigned char, 0x2000> TimePilot::BG = {
+};
+
+array<unsigned char, 0x4000> TimePilot::OBJ = {
+};
+
+array<unsigned char, 0x100> TimePilot::BGCOLOR = {
+};
+
+array<unsigned char, 0x100> TimePilot::OBJCOLOR = {
+};
+
+array<unsigned char, 0x20> TimePilot::RGB_H = {
+};
+
+array<unsigned char, 0x20> TimePilot::RGB_L = {
+};
+
+array<unsigned char, 0x6000> TimePilot::PRG1 = {
+};
+
+array<unsigned char, 0x1000> TimePilot::PRG2 = {
+};
 

@@ -18,12 +18,12 @@
 #define rseq16(s, d) rseq8((s) + 8 * (d), d), rseq8(s, d)
 #define rseq32(s, d) rseq16((s) + 16 * (d), d), rseq16(s, d)
 
-inline void convertGFX(unsigned char *dst, unsigned char *src, int n, vector<int> x, vector<int> y, vector<int> z, int d) {
-	for (int p = 0, q = 0, i = 0; i < n; p += x.size() * y.size(), q += d, i++)
-		for (int j = 0; j < x.size(); j++)
-			for (int k = 0; k < y.size(); k++)
+inline void convertGFX(unsigned char *dst, const unsigned char *src, int n, vector<int> x, vector<int> y, vector<int> z, int d) {
+	for (int i = 0; i < n; src += d, i++)
+		for (int j = 0; j < y.size(); j++)
+			for (int k = 0; k < x.size(); dst++, k++)
 				for (int l = 0; l < z.size(); l++)
-					z[l] >= 0 && (dst[p + j + k * y.size()] ^= (~src[q + (x[j] + y[k] + z[l] >> 3)] >> (x[j] + y[k] + z[l] & 7 ^ 7) & 1) << z.size() - l - 1);
+					z[l] >= 0 && (*dst ^= (~src[x[k] + y[j] + z[l] >> 3] >> (x[k] + y[j] + z[l] & 7 ^ 7) & 1) << z.size() - l - 1);
 }
 
 #endif //UTILS_H

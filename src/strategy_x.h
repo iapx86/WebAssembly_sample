@@ -9,14 +9,17 @@
 
 #include <array>
 #include <list>
-#include <vector>
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "utils.h"
 using namespace std;
 
 struct StrategyX {
-	static unsigned char BG[], RGB[], PRG1[], PRG2[], MAP[];
+	static array<uint8_t, 0x1000> BG;
+	static array<uint8_t, 0x20> RGB;
+	static array<uint8_t, 0x6000> PRG1;
+	static array<uint8_t, 0x2000> PRG2;
+	static array<uint8_t, 0x20> MAP;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 256;
@@ -39,10 +42,10 @@ struct StrategyX {
 	bool fInterruptEnable = false;
 //	bool fSoundEnable = false;
 
-	uint8_t ram[0xd00] = {};
-	uint8_t ppi0[4] = {0xff, 0xfc, 0xf1, 0};
-	uint8_t ppi1[4] = {0, 0, 0xfc, 0};
-	uint8_t ram2[0x400] = {};
+	array<uint8_t, 0xd00> ram = {};
+	array<uint8_t, 4> ppi0 = {0xff, 0xfc, 0xf1, 0};
+	array<uint8_t, 4> ppi1 = {0, 0, 0xfc, 0};
+	array<uint8_t, 0x400> ram2 = {};
 	struct {
 		int addr = 0;
 	} psg[2];
@@ -65,15 +68,15 @@ struct StrategyX {
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0x5f))
-				cpu.memorymap[page].base = PRG1 + (page & 0x7f) * 0x100;
+				cpu.memorymap[page].base = &PRG1[(page & 0x7f) << 8];
 			else if (range(page, 0x80, 0x87)) {
-				cpu.memorymap[page].base = ram + (page & 7) * 0x100;
+				cpu.memorymap[page].base = &ram[(page & 7) << 8];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0x88, 0x88)) {
-				cpu.memorymap[page].base = ram + 0xc00;
+				cpu.memorymap[page].base = &ram[0xc00];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0x90, 0x93, 0x04)) {
-				cpu.memorymap[page].base = ram + (8 | page & 3) * 0x100;
+				cpu.memorymap[page].base = &ram [(8 | page & 3) << 8];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0xa0, 0xa0))
 				cpu.memorymap[page].read = [&](int addr) -> int { return ppi0[addr >> 2 & 3]; };
@@ -103,9 +106,9 @@ struct StrategyX {
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0x1f))
-				cpu2.memorymap[page].base = PRG2 + (page & 0x1f) * 0x100;
+				cpu2.memorymap[page].base = &PRG2[(page & 0x1f) << 8];
 			else if (range(page, 0x80, 0x83, 0x0c)) {
-				cpu2.memorymap[page].base = ram2 + (page & 3) * 0x100;
+				cpu2.memorymap[page].base = &ram2[(page & 3) << 8];
 				cpu2.memorymap[page].write = nullptr;
 			}
 		for (int page = 0; page < 0x100; page++) {
@@ -131,9 +134,9 @@ struct StrategyX {
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
-		convertGFX(&bg[0], BG, 256, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x4000}, 8);
-		convertGFX(&obj[0], BG, 64, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x4000}, 32);
-		for (int i = 0; i < 0x20; i++)
+		convertGFX(&bg[0], &BG[0], 256, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x4000}, 8);
+		convertGFX(&obj[0], &BG[0], 64, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x4000}, 32);
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
@@ -144,8 +147,7 @@ struct StrategyX {
 		for (count = 0; count < 116; count++) { // 14318181 / 60 / 2048
 			if (!command.empty() && cpu2.interrupt())
 				sound0->write(0x0e, command.front()), command.pop_front();
-			const int table[] = {0x0e, 0x1e, 0x0e, 0x1e, 0x2e, 0x3e, 0x2e, 0x3e, 0x4e, 0x5e, 0x8e, 0x9e, 0x8e, 0x9e, 0xae, 0xbe, 0xae, 0xbe, 0xce, 0xde};
-			sound0->write(0x0f, table[timer]);
+			sound0->write(0x0f, array<uint8_t, 20>{0x0e, 0x1e, 0x0e, 0x1e, 0x2e, 0x3e, 0x2e, 0x3e, 0x4e, 0x5e, 0x8e, 0x9e, 0x8e, 0x9e, 0xae, 0xbe, 0xae, 0xbe, 0xce, 0xde}[timer]);
 			cpu2.execute(36);
 			++timer >= 20 && (timer = 0);
 		}

@@ -9,14 +9,20 @@
 
 #include <algorithm>
 #include <array>
-#include <vector>
 #include "mc6809.h"
 #include "mappy_sound.h"
 #include "utils.h"
 using namespace std;
 
 struct TheTowerOfDruaga {
-	static unsigned char SND[], BG[], OBJ[], BGCOLOR[], OBJCOLOR[], RGB[], PRG1[], PRG2[];
+	static array<uint8_t, 0x100> SND;
+	static array<uint8_t, 0x1000> BG;
+	static array<uint8_t, 0x4000> OBJ;
+	static array<uint8_t, 0x100> BGCOLOR;
+	static array<uint8_t, 0x400> OBJCOLOR;
+	static array<uint8_t, 0x20> RGB;
+	static array<uint8_t, 0x8000> PRG1;
+	static array<uint8_t, 0x2000> PRG2;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 288;
@@ -40,9 +46,9 @@ struct TheTowerOfDruaga {
 	bool fInterruptEnable0 = false;
 	bool fInterruptEnable1 = false;
 //	bool fSoundEnable = false;
-	uint8_t ram[0x2800] = {};
-	uint8_t port[0x40] = {};
-	uint8_t in[10] = {};
+	array<uint8_t, 0x2800> ram = {};
+	array<uint8_t, 0x40> port = {};
+	array<uint8_t, 10> in = {};
 	int edge1 = 0xf;
 	int edge2 = 0xf;
 
@@ -57,7 +63,7 @@ struct TheTowerOfDruaga {
 	TheTowerOfDruaga() {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x28; i++) {
-			cpu.memorymap[i].base = ram + i * 0x100;
+			cpu.memorymap[i].base = &ram[i << 8];
 			cpu.memorymap[i].write = nullptr;
 		}
 		for (int i = 0; i < 8; i++)
@@ -95,7 +101,7 @@ struct TheTowerOfDruaga {
 			}
 		};
 		for (int i = 0; i < 0x80; i++)
-			cpu.memorymap[0x80 + i].base = PRG1 + i * 0x100;
+			cpu.memorymap[0x80 + i].base = &PRG1[i << 8];
 
 		for (int i = 0; i < 4; i++) {
 			cpu2.memorymap[i].read = [&](int addr) { return sound0->read(addr); };
@@ -103,15 +109,15 @@ struct TheTowerOfDruaga {
 		}
 		cpu2.memorymap[0x20].write = cpu.memorymap[0x50].write;
 		for (int i = 0; i < 0x20; i++)
-			cpu2.memorymap[0xe0 + i].base = PRG2 + i * 0x100;
+			cpu2.memorymap[0xe0 + i].base = &PRG2[i << 8];
 
 		// Videoの初期化
 		obj.fill(15);
-		convertGFX(&bg[0], BG, 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
-		convertGFX(&obj[0], OBJ, 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)},	{0x10000, 0x10004, 0, 4}, 64);
-		for (int i = 0; i < 256; i++)
+		convertGFX(&bg[0], &BG[0], 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], &OBJ[0], 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)},	{0x10000, 0x10004, 0, 4}, 64);
+		for (int i = 0; i < bgcolor.size(); i++)
 			bgcolor[i] = 0x10 | BGCOLOR[i];
-		for (int i = 0; i < 0x20; i++)
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
@@ -171,7 +177,7 @@ struct TheTowerOfDruaga {
 		if (fPortTest)
 			return edge1 = in[3] ^ 0xf, edge2 = in[8] ^ 0xf, this;
 		if (port[8] == 1)
-			copy_n(in, 4, port + 4);
+			copy_n(&in[0], 4, &port[4]);
 		else if (port[8] == 3) {
 			int credit = port[2] * 10 + port[3];
 			if (fCoin && credit < 150)
@@ -181,10 +187,10 @@ struct TheTowerOfDruaga {
 			if (!port[9] && fStart2P && credit > 1)
 				port[1] += 2, credit -= (credit < 150) * 2;
 			port[2] = credit / 10, port[3] = credit % 10;
-			copy_n(vector<uint8_t>{in[1], uint8_t(in[3] << 1 & 0xa | edge1 & 5), in[2], uint8_t(in[3] & 0xa | edge1 >> 1 & 5)}.data(), 4, port + 4);
+			copy_n(&array<uint8_t, 4>{in[1], uint8_t(in[3] << 1 & 0xa | edge1 & 5), in[2], uint8_t(in[3] & 0xa | edge1 >> 1 & 5)}[0], 4, &port[4]);
 		}
 		if (port[0x18] == 4)
-			copy_n(vector<uint8_t>{in[6], uint8_t(in[8] << 1 & 0xa | edge2 & 5), in[7], uint8_t(in[8] & 0xa | edge2 >> 1 & 5)}.data(), 4, port + 0x14);
+			copy_n(&array<uint8_t, 4>{in[6], uint8_t(in[8] << 1 & 0xa | edge2 & 5), in[7], uint8_t(in[8] & 0xa | edge2 >> 1 & 5)}[0], 4, &port[0x14]);
 		return edge1 = in[3] ^ 0xf, edge2 = in[8] ^ 0xf, this;
 	}
 

@@ -6,6 +6,7 @@
 #define K005289_H
 
 #include <algorithm>
+#include <array>
 #include <list>
 #include <mutex>
 #include <utility>
@@ -13,7 +14,7 @@
 using namespace std;
 
 struct K005289 {
-	float snd[0x200] = {};
+	array<float, 0x200> snd;
 	double rate;
 	int sampleRate;
 	int count;
@@ -22,11 +23,11 @@ struct K005289 {
 	vector<list<pair<int, int>>> tmpwheel;
 	list<list<pair<int, int>>> wheel;
 	mutex mutex;
-	uint16_t reg[4] = {};
-	uint32_t phase[2] = {};
+	array<uint16_t, 4> reg = {};
+	array<uint32_t, 2> phase = {};
 
-	K005289(uint8_t *SND, int clock, int sampleRate = 48000, int resolution = 1, float gain = 0.1) {
-		for (int i = 0; i < 0x200; i++)
+	K005289(array<uint8_t, 0x200>& SND, int clock, int sampleRate = 48000, int resolution = 1, float gain = 0.1) {
+		for (int i = 0; i < snd.size(); i++)
 			snd[i] = (SND[i] & 0xf) * 2 / 15.0 - 1;
 		rate = (double)clock / sampleRate * (1 << 27);
 		this->sampleRate = sampleRate;

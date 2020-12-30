@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <array>
-#include <vector>
 #include "mc6809.h"
 #include "mappy_sound.h"
 #include "utils.h"
@@ -20,7 +19,13 @@ enum {
 };
 
 struct Phozon {
-	static unsigned char PRG1[], PRG2[], PRG3[], RED[], BLUE[], GREEN[], SND[], BG[], BGCOLOR[], OBJ[], OBJCOLOR[];
+	static array<uint8_t, 0x8000> PRG1;
+	static array<uint8_t, 0x2000> PRG2, PRG3;
+	static array<uint8_t, 0x100> RED, BLUE, GREEN, SND;
+	static array<uint8_t, 0x2000> BG;
+	static array<uint8_t, 0x100> BGCOLOR;
+	static array<uint8_t, 0x2000> OBJ;
+	static array<uint8_t, 0x100> OBJCOLOR;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 288;
@@ -47,9 +52,9 @@ struct Phozon {
 	bool fInterruptEnable1 = false;
 	bool fInterruptEnable2 = false;
 //	bool fSoundEnable = false;
-	uint8_t ram[0x2800] = {};
-	uint8_t port[0x40] = {};
-	uint8_t in[10] = {};
+	array<uint8_t, 0x2800> ram = {};
+	array<uint8_t, 0x40> port = {};
+	array<uint8_t, 10> in = {};
 	int edge = 0xf;
 
 	array<uint8_t, 0x8000> bg;
@@ -62,7 +67,7 @@ struct Phozon {
 	Phozon() {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x20; i++) {
-			cpu.memorymap[i].base = ram + i * 0x100;
+			cpu.memorymap[i].base = &ram[i << 8];
 			cpu.memorymap[i].write = nullptr;
 		}
 		for (int i = 0; i < 4; i++) {
@@ -106,17 +111,17 @@ struct Phozon {
 			}
 		};
 		for (int i = 0; i < 0x80; i++)
-			cpu.memorymap[0x80 + i].base = PRG1 + i * 0x100;
+			cpu.memorymap[0x80 + i].base = &PRG1[i << 8];
 
 		for (int i = 0; i < 8; i++) {
 			cpu2.memorymap[i].read = [&](int addr) { return sound0->read(addr); };
 			cpu2.memorymap[i].write = [&](int addr, int data) { sound0->write(addr, data); };
 		}
 		for (int i = 0; i < 0x20; i++)
-			cpu2.memorymap[0xe0 + i].base = PRG2 + i * 0x100;
+			cpu2.memorymap[0xe0 + i].base = &PRG2[i << 8];
 
 		for (int i = 0; i < 0x20; i++) {
-			cpu3.memorymap[i].base = ram + i * 0x100;
+			cpu3.memorymap[i].base = &ram[i << 8];
 			cpu3.memorymap[i].write = nullptr;
 		}
 		for (int i = 0; i < 4; i++) {
@@ -124,19 +129,19 @@ struct Phozon {
 			cpu3.memorymap[0x40 + i].write = [&](int addr, int data) { sound0->write(addr, data); };
 		}
 		for (int i = 0; i < 8; i++) {
-			cpu3.memorymap[0xa0 + i].base = ram + 0x2000 + i * 0x100;
+			cpu3.memorymap[0xa0 + i].base = &ram[0x20 + i << 8];
 			cpu3.memorymap[0xa0 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x20; i++)
-			cpu3.memorymap[0xe0 + i].base = PRG3 + i * 0x100;
+			cpu3.memorymap[0xe0 + i].base = &PRG3[i << 8];
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
-		convertGFX(&bg[0], BG, 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
-		convertGFX(&obj[0], OBJ, 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
-		for (int i = 0; i < 256; i++)
+		convertGFX(&bg[0], &BG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], &OBJ[0], 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
+		for (int i = 0; i < objcolor.size(); i++)
 			objcolor[i] = 0x10 | OBJCOLOR[i];
-		for (int i = 0; i < 0x40; i++)
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
@@ -249,7 +254,7 @@ struct Phozon {
 		if (fPortTest)
 			return edge = in[3] ^ 0xf, this;
 		if (port[8] == 1)
-			copy_n(in, 4, port + 4);
+			copy_n(&in[0], 4, &port[4]);
 		else if (port[8] == 3) {
 			int credit = port[2] * 10 + port[3];
 			if (fCoin && credit < 150)
@@ -259,13 +264,13 @@ struct Phozon {
 			if (!port[9] && fStart2P && credit > 1)
 				port[1] += 2, credit -= (credit < 150) * 2;
 			port[2] = credit / 10, port[3] = credit % 10;
-			copy_n(vector<uint8_t>{in[1], uint8_t(in[3] << 1 & 0xa | edge & 5), in[2], uint8_t(in[3] & 0xa | edge >> 1 & 5)}.data(), 4, port + 4);
+			copy_n(&array<uint8_t, 4>{in[1], uint8_t(in[3] << 1 & 0xa | edge & 5), in[2], uint8_t(in[3] & 0xa | edge >> 1 & 5)}[0], 4, &port[4]);
 		} else if (port[8] == 5)
-			copy_n(vector<uint8_t>{0, 2, 3, 4, 5, 6, 0xc, 0xa}.data(), 8, port);
+			copy_n(&array<uint8_t, 8>{0, 2, 3, 4, 5, 6, 0xc, 0xa}[0], 8, &port[0]);
 		if (port[0x18] == 8)
 			port[0x10] = 1, port[0x11] = 0xc;
 		else if (port[0x18] == 9)
-			copy_n(vector<uint8_t>{in[5], in[9], in[6], in[6], in[7], in[7], in[8], in[8]}.data(), 8, port + 0x10);
+			copy_n(&array<uint8_t, 8>{in[5], in[9], in[6], in[6], in[7], in[7], in[8], in[8]}[0], 8, &port[0x10]);
 		return edge = in[3] ^ 0xf, this;
 	}
 

@@ -6,6 +6,7 @@
 #define SN76489_H
 
 #include <algorithm>
+#include <array>
 #include <list>
 #include <mutex>
 #include <vector>
@@ -22,7 +23,7 @@ struct SN76489 {
 	mutex mutex;
 	bool enable = true;
 	int addr = 0;
-	uint16_t reg[8];
+	array<uint16_t, 8> reg;
 	int cycles = 0;
 	struct {
 		int freq = 0;
@@ -39,7 +40,7 @@ struct SN76489 {
 		this->resolution = resolution;
 		this->gain = gain;
 		tmpwheel.resize(resolution);
-		fill_n(reg, sizeof(reg) / sizeof(uint16_t), 0xffff);
+		reg.fill(0xffff);
 	}
 
 	void mute(bool flag) {

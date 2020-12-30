@@ -9,14 +9,16 @@
 
 #include <array>
 #include <list>
-#include <vector>
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "utils.h"
 using namespace std;
 
 struct Frogger {
-	static unsigned char BG[], RGB[], PRG1[], PRG2[];
+	static array<uint8_t, 0x1000> BG;
+	static array<uint8_t, 0x20> RGB;
+	static array<uint8_t, 0x3000> PRG1;
+	static array<uint8_t, 0x1800> PRG2;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 256;
@@ -39,10 +41,10 @@ struct Frogger {
 	bool fInterruptEnable = false;
 //	bool fSoundEnable = false;
 
-	uint8_t ram[0xd00] = {};
-	uint8_t ppi0[4] = {0xff, 0xfc, 0xf1, 0};
-	uint8_t ppi1[4] = {};
-	uint8_t ram2[0x400] = {};
+	array<uint8_t, 0xd00> ram = {};
+	array<uint8_t, 4> ppi0 = {0xff, 0xfc, 0xf1, 0};
+	array<uint8_t, 4> ppi1 = {};
+	array<uint8_t, 0x400> ram2 = {};
 	struct {
 		int addr = 0;
 	} psg;
@@ -62,15 +64,15 @@ struct Frogger {
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0x2f))
-				cpu.memorymap[page].base = PRG1 + (page & 0x3f) * 0x100;
+				cpu.memorymap[page].base = &PRG1[(page & 0x3f) << 8];
 			else if (range(page, 0x80, 0x87)) {
-				cpu.memorymap[page].base = ram + (page & 7) * 0x100;
+				cpu.memorymap[page].base = &ram[(page & 7) << 8];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0xa8, 0xab, 0x04)) {
-				cpu.memorymap[page].base = ram + (8 | page & 3) * 0x100;
+				cpu.memorymap[page].base = &ram[(8 | page & 3) << 8];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0xb0, 0xb0, 0x07)) {
-				cpu.memorymap[page].base = ram + 0xc00;
+				cpu.memorymap[page].base = &ram[0xc00];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0xb8, 0xb8, 0x07))
 				cpu.memorymap[page].write = [&](int addr, int data) {
@@ -99,9 +101,9 @@ struct Frogger {
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0x1f))
-				cpu2.memorymap[page].base = PRG2 + (page & 0x1f) * 0x100;
+				cpu2.memorymap[page].base = &PRG2[(page & 0x1f) << 8];
 			else if (range(page, 0x40, 0x43, 0x1c)) {
-				cpu2.memorymap[page].base = ram2 + (page & 3) * 0x100;
+				cpu2.memorymap[page].base = &ram2[(page & 3) << 8];
 				cpu2.memorymap[page].write = nullptr;
 			}
 		for (int page = 0; page < 0x100; page++) {
@@ -118,9 +120,10 @@ struct Frogger {
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
-		convertGFX(&bg[0], BG, 256, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x4000}, 8);
-		convertGFX(&obj[0], BG, 64, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x4000}, 32);
-		for (int i = 0; i < 0x20; i++)
+		convertGFX(&bg[0], &BG[0], 256, {rseq8(0, 8)}, {seq8(0, 1)}, {0, -1}, 8);
+		convertGFX(&bg[0], &BG[0], 256, {rseq8(0, 8)}, {0, 1, 2, 3, 4, 5, 7, 6}, {0x4000}, 8);
+		convertGFX(&obj[0], &BG[0], 64, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x4000}, 32);
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
@@ -130,8 +133,7 @@ struct Frogger {
 		for (count = 0; count < 116; count++) { // 14318181 / 60 / 2048
 			if (!command.empty() && cpu2.interrupt())
 				sound0->write(0x0e, command.front()), command.pop_front();
-			const int table[] = {0x26, 0x36, 0x26, 0x36, 0x2e, 0x3e, 0x2e, 0x3e, 0x66, 0x76, 0xa6, 0xb6, 0xa6, 0xb6, 0xae, 0xbe, 0xae, 0xbe, 0xe6, 0xf6};
-			sound0->write(0x0f, table[timer]);
+			sound0->write(0x0f, array<uint8_t, 20>{0x26, 0x36, 0x26, 0x36, 0x2e, 0x3e, 0x2e, 0x3e, 0x66, 0x76, 0xa6, 0xb6, 0xa6, 0xb6, 0xae, 0xbe, 0xae, 0xbe, 0xe6, 0xf6}[timer]);
 			cpu2.execute(36);
 			++timer >= 20 && (timer = 0);
 		}
@@ -226,8 +228,6 @@ struct Frogger {
 			return;
 		for (int i = 0; i < 0x800; i++)
 			PRG2[i] = PRG2[i] & 0xfc | PRG2[i] << 1 & 2 | PRG2[i] >> 1 & 1;
-		for (int i = 0x800; i < 0x1000; i++)
-			BG[i] = BG[i] & 0xfc | BG[i] << 1 & 2 | BG[i] >> 1 & 1;
 		decoded = true;
 	}
 

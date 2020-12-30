@@ -6,26 +6,22 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "zigzag.h"
 using namespace std;
 
-unsigned char ZigZag::BG[0x1000], ZigZag::OBJ[0x1000], ZigZag::RGB[0x20], ZigZag::PRG[0x4000];
-AY_3_8910 *ZigZag::sound0;
-
 ZigZag *game;
-vector<int> rom_table = {
-	(int)"BG", (int)strlen("BG"), (int)game->BG, (int)sizeof(game->BG),
-	(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ, (int)sizeof(game->OBJ),
-	(int)"RGB", (int)strlen("RGB"), (int)game->RGB, (int)sizeof(game->RGB),
-	(int)"PRG", (int)strlen("PRG"), (int)game->PRG, (int)sizeof(game->PRG),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, ZigZag::width * ZigZag::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 4 * 4 + 1> rom_table = {
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
+		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
+		(int)"PRG", (int)strlen("PRG"), (int)game->PRG.data(), (int)game->PRG.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -85,4 +81,18 @@ extern "C" EMSCRIPTEN_KEEPALIVE void left(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 	game->triggerA(fDown != 0);
 }
+
+AY_3_8910 *ZigZag::sound0;
+
+array<unsigned char, 0x1000> ZigZag::BG = {
+};
+
+array<unsigned char, 0x1000> ZigZag::OBJ = {
+};
+
+array<unsigned char, 0x20> ZigZag::RGB = {
+};
+
+array<unsigned char, 0x4000> ZigZag::PRG = {
+};
 

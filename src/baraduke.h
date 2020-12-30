@@ -8,7 +8,6 @@
 #define BARADUKE_H
 
 #include <array>
-#include <vector>
 #include "mc6809.h"
 #include "mc6801.h"
 #include "c30.h"
@@ -24,7 +23,13 @@ enum {
 };
 
 struct Baraduke {
-	static unsigned char PRG1[], PRG2[], PRG2I[], FG[], BG[], OBJ[], GREEN[], RED[];
+	static array<uint8_t, 0xa000> PRG1;
+	static array<uint8_t, 0x4000> PRG2;
+	static array<uint8_t, 0x1000> PRG2I;
+	static array<uint8_t, 0x2000> FG;
+	static array<uint8_t, 0xc000> BG;
+	static array<uint8_t, 0x10000> OBJ;
+	static array<uint8_t, 0x800> GREEN, RED;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 288;
@@ -49,9 +54,9 @@ struct Baraduke {
 	bool fSelect = false;
 	bool fContinue = false;
 
-	uint8_t ram[0x4800] = {};
-	uint8_t ram2[0x900] = {};
-	uint8_t in[8] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+	array<uint8_t, 0x4800> ram = {};
+	array<uint8_t, 0x900> ram2 = {};
+	array<uint8_t, 8> in = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 	int select = 0;
 	int timer = 0;
 	int counter = 0;
@@ -62,8 +67,8 @@ struct Baraduke {
 	array<uint8_t, 0x20000> bg;
 	array<uint8_t, 0x20000> obj;
 	array<int, 0x800> rgb;
-	int vScroll[2] = {};
-	int hScroll[2] = {};
+	array<int, 2> vScroll = {};
+	array<int, 2> hScroll = {};
 
 	MC6809 cpu;
 	MC6801 mcu;
@@ -71,7 +76,7 @@ struct Baraduke {
 	Baraduke() {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x40; i++) {
-			cpu.memorymap[i].base = ram + i * 0x100;
+			cpu.memorymap[i].base = &ram[i << 8];
 			cpu.memorymap[i].write = nullptr;
 		}
 		for (int i = 0; i < 4; i++) {
@@ -79,11 +84,11 @@ struct Baraduke {
 			cpu.memorymap[0x40 + i].write = [&](int addr, int data) { sound0->write(addr, data, timer); };
 		}
 		for (int i = 0; i < 8; i++) {
-			cpu.memorymap[0x48 + i].base = ram + 0x4000 + i * 0x100;
+			cpu.memorymap[0x48 + i].base = &ram[0x40 + i << 8];
 			cpu.memorymap[0x48 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0xa0; i++)
-			cpu.memorymap[0x60 + i].base = PRG1 + i * 0x100;
+			cpu.memorymap[0x60 + i].base = &PRG1[i << 8];
 		cpu.memorymap[0xb0].write = [&](int addr, int data) {
 			switch (addr & 0xff) {
 			case 0:
@@ -123,25 +128,25 @@ struct Baraduke {
 			mcu.memorymap[0x10 + i].write = [&](int addr, int data) { sound0->write(addr, data, timer); };
 		}
 		for (int i = 0; i < 0x40; i++)
-			mcu.memorymap[0x80 + i].base = PRG2 + i * 0x100;
+			mcu.memorymap[0x80 + i].base = &PRG2[i << 8];
 		for (int i = 0; i < 8; i++) {
-			mcu.memorymap[0xc0 + i].base = ram2 + 0x100 + i * 0x100;
+			mcu.memorymap[0xc0 + i].base = &ram2[1 + i << 8];
 			mcu.memorymap[0xc0 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x10; i++)
-			mcu.memorymap[0xf0 + i].base = PRG2I + i * 0x100;
+			mcu.memorymap[0xf0 + i].base = &PRG2I[i << 8];
 
 		mcu.check_interrupt = [&]() { return mcu_irq && mcu.interrupt() ? (mcu_irq = false, true) : (ram2[8] & 0x48) == 0x48 && mcu.interrupt(MC6801_OCF); };
 
 		// Videoの初期化
 		fg.fill(3), bg.fill(7), obj.fill(15);
-		convertGFX(&fg[0], FG, 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
-		convertGFX(&bg[0], BG, 512, {rseq8(0, 16)}, {seq4(0, 1), seq4(8, 1)}, {0x40000, 0, 4}, 16);
+		convertGFX(&fg[0], &FG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&bg[0], &BG[0], 512, {rseq8(0, 16)}, {seq4(0, 1), seq4(8, 1)}, {0x40000, 0, 4}, 16);
 		convertGFX(&bg[0x8000], &BG[0x2000], 512, {rseq8(0, 16)}, {seq4(0, 1), seq4(8, 1)}, {0x30004, 0, 4}, 16);
 		convertGFX(&bg[0x10000], &BG[0x4000], 512, {rseq8(0, 16)}, {seq4(0, 1), seq4(8, 1)}, {0x30000, 0, 4}, 16);
 		convertGFX(&bg[0x18000], &BG[0x6000], 512, {rseq8(0, 16)}, {seq4(0, 1), seq4(8, 1)}, {0x20004, 0, 4}, 16);
-		convertGFX(&obj[0], OBJ, 512, {rseq16(0, 64)}, {seq16(0, 4)}, {seq4(0, 1)}, 128);
-		for (int i = 0; i < 0x800; i++)
+		convertGFX(&obj[0], &OBJ[0], 512, {rseq16(0, 64)}, {seq16(0, 4)}, {seq4(0, 1)}, 128);
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | (GREEN[i] >> 4) * 255 / 15 << 16 | (GREEN[i] & 15) * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 

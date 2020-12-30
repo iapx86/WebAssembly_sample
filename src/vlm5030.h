@@ -5,14 +5,16 @@
 #ifndef VLM5030_H
 #define VLM5030_H
 
-#include <algorithm>
 #include <array>
 #include <mutex>
 using namespace std;
 
 struct VLM5030 {
-	static uint8_t table_p[], table_e[];
-	static int16_t table_k0[], table_k1[], table_k2_3[], table_k4_9[];
+	static const array<uint8_t, 32> table_p, table_e;
+	static const array<int16_t, 64> table_k0;
+	static const array<int16_t, 32> table_k1;
+	static const array<int16_t, 16> table_k2_3;
+	static const array<int16_t, 8> table_k4_9;
 
 	uint8_t *base;
 	int size;
@@ -42,9 +44,9 @@ struct VLM5030 {
 	array<int, 10> x = {};
 	float output = 0;
 
-	VLM5030(uint8_t *VLM, int size, int clock, int sampleRate = 48000, float gain = 0.1) {
-		base = VLM;
-		this->size = size;
+	template<class T> VLM5030(T& VLM, int clock, int sampleRate = 48000, float gain = 0.1) {
+		base = VLM.data();
+		size = VLM.size();
 		rate = clock / 440;
 		this->sampleRate = sampleRate;
 		this->gain = gain;
@@ -60,12 +62,9 @@ struct VLM5030 {
 			BSY = 0;
 			offset = 0;
 			icount = scount = pcount = 0;
-			pitch0 = energy0 = 0;
-			k0.fill(0);
-			npitch = nenergy = 0;
-			nk.fill(0);
-			pitch1 = energy1 = 0;
-			k1.fill(0);
+			pitch0 = energy0 = 0, k0.fill(0);
+			npitch = nenergy = 0, nk.fill(0);
+			pitch1 = energy1 = 0, k1.fill(0);
 			pitch = energy = 0;
 			k.fill(0);
 			x.fill(0);
@@ -79,8 +78,7 @@ struct VLM5030 {
 		mutex.lock();
 		offset = data & 0xfe | data << 8 & 0x100;
 		offset = (base[offset] << 8 | base[offset + 1]) & size - 1;
-		const int stable[] = {40, 30, 20, 20, 40, 60, 50, 50};
-		scount = stable[param >> 3 & 7];
+		scount = array<int, 8>{40, 30, 20, 20, 40, 60, 50, 50}[param >> 3 & 7];
 		icount = 4;
 		BSY = 1;
 		mutex.unlock();
@@ -94,18 +92,13 @@ struct VLM5030 {
 				if (!BSY)
 					continue;
 				if (!scount) {
-					const int stable[] = {40, 30, 20, 20, 40, 60, 50, 50};
-					scount = stable[param >> 3 & 7];
+					scount = array<int, 8>{40, 30, 20, 20, 40, 60, 50, 50}[param >> 3 & 7];
 					if (!icount) {
-						pitch0 = npitch;
-						energy0 = nenergy;
-						copy(nk.begin(), nk.end(), k0.begin());
-						npitch = nenergy = 0;
-						nk.fill(0);
+						pitch0 = npitch, energy0 = nenergy, k0 = nk;
+						npitch = nenergy = 0, nk.fill(0);
 						const uint8_t *frame = base + offset;
 						if (~frame[0] & 1) {
-							const int ptable[] = {0, 8, -8, -8};
-							npitch = table_p[frame[0] >> 1 & 0x1f] + ptable[param >> 6 & 3] & 0xff;
+							npitch = table_p[frame[0] >> 1 & 0x1f] + array<int, 4>{0, 8, -8, -8}[param >> 6 & 3] & 0xff;
 							nenergy = table_e[frame[0] >> 6 | frame[1] << 2 & 0x1c];
 							nk[9] = table_k4_9[frame[1] >> 3 & 7];
 							nk[8] = table_k4_9[frame[1] >> 6 | frame[2] << 2 & 4];
@@ -129,12 +122,11 @@ struct VLM5030 {
 							continue;
 						}
 						if (energy0)
-							pitch1 = npitch, energy1 = nenergy, copy(nk.begin(), nk.end(), k1.begin());
+							pitch1 = npitch, energy1 = nenergy, k1 = nk;
 						else
-							pitch1 = pitch0, energy1 = energy0, copy(k0.begin(), k0.end(), k1.begin());
+							pitch1 = pitch0, energy1 = energy0, k1 = k0;
 					}
-					const int itable[] = {1, 2, 4, 4};
-					const int ieffect = (~(icount -= itable[param & 3]) & 3) + 1;
+					const int ieffect = (~(icount -= array<int, 4>{1, 2, 4, 4}[param & 3]) & 3) + 1;
 					pitch = pitch0 > 1 ? pitch0 + ((pitch1 - pitch0) * ieffect >> 2) : 0;
 					energy = energy0 + ((energy1 - energy0) * ieffect >> 2);
 					for (int j = 0; j < 10; j++)

@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <array>
-#include <vector>
 #include "z80.h"
 #include "mb8840.h"
 #include "pac-man_sound.h"
@@ -25,7 +24,16 @@ enum {
 };
 
 struct DigDug {
-	static unsigned char RAM[], PRG1[], PRG2[], PRG3[], BG2[], MAPDATA[], BG4[], OBJ[], SND[], BGCOLOR[], OBJCOLOR[], RGB[], IO[];
+	static array<uint8_t, 0x2000> RAM;
+	static array<uint8_t, 0x4000> PRG1;
+	static array<uint8_t, 0x2000> PRG2;
+	static array<uint8_t, 0x1000> PRG3;
+	static array<uint8_t, 0x800> BG2;
+	static array<uint8_t, 0x1000> MAPDATA, BG4;
+	static array<uint8_t, 0x4000> OBJ;
+	static array<uint8_t, 0x100> SND, BGCOLOR, OBJCOLOR;
+	static array<uint8_t, 0x20> RGB;
+	static array<uint8_t, 0x400> IO;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 288;
@@ -54,12 +62,12 @@ struct DigDug {
 	bool fInterruptEnable1 = false;
 	bool fInterruptEnable2 = false;
 	bool fNmiEnable = false;
-	uint8_t ram[0x2000] = {};
-	uint8_t mmi[0x100] = {};
-	uint8_t mmo[0x100] = {};
+	array<uint8_t, 0x2000> ram = RAM;
+	array<uint8_t, 0x100> mmi;
+	array<uint8_t, 0x100> mmo = {};
 	int count = 0;
 	int dmactrl = 0;
-	uint8_t ioport[0x100] = {};
+	array<uint8_t, 0x100> ioport = {};
 
 	bool fBG2Attribute = true;
 	bool fBG4Disable = true;
@@ -72,13 +80,12 @@ struct DigDug {
 	array<uint8_t, 0x100> objcolor;
 	array<int, 0x20> rgb;
 
-	Z80 cpu[3];
+	array<Z80, 3> cpu;
 	MB8840 mcu;
 
 	DigDug() {
 		// CPU周りの初期化
-		copy_n(RAM, 0x2000, ram);
-		fill_n(mmi, 0x100, 0xff);
+		mmi.fill(0xff);
 
 		auto range = [](int page, int start, int end, int mirror = 0) { return (page & ~mirror) >= start && (page & ~mirror) <= end; };
 		auto interrupt = [](MB8840& _mcu) {
@@ -89,7 +96,7 @@ struct DigDug {
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0x3f))
-				cpu[0].memorymap[page].base = PRG1 + (page & 0x3f) * 0x100;
+				cpu[0].memorymap[page].base = &PRG1[(page & 0x3f) << 8];
 			else if (range(page, 0x68, 0x68))
 				cpu[0].memorymap[page].write = [&](int addr, int data) {
 					switch (addr & 0xf0) {
@@ -133,20 +140,20 @@ struct DigDug {
 							for (mcu.execute(); mcu.pc != 0x182; mcu.execute()) {}
 						return mcu.t = mcu.t + 1 & 0xff, mcu.k |= 8, interrupt(mcu);
 					case 0xd2:
-						return void(copy_n(mmi, 2, ioport));
+						return void(copy_n(&mmi[0], 2, &ioport[0]));
 					}
 				};
 			} else if (range(page, 0x80, 0x87)) {
-				cpu[0].memorymap[page].base = ram + (page & 7) * 0x100;
+				cpu[0].memorymap[page].base = &ram[(page & 7) << 8];
 				cpu[0].memorymap[page].write = nullptr;
 			} else if (range(page, 0x88, 0x8b, 4)) {
-				cpu[0].memorymap[page].base = ram + (8 | page & 3) * 0x100;
+				cpu[0].memorymap[page].base = &ram[(8 | page & 3) << 8];
 				cpu[0].memorymap[page].write = nullptr;
 			} else if (range(page, 0x90, 0x93, 4)) {
-				cpu[0].memorymap[page].base = ram + (0x10 | page & 3) * 0x100;
+				cpu[0].memorymap[page].base = &ram[(0x10 | page & 3) << 8];
 				cpu[0].memorymap[page].write = nullptr;
 			} else if (range(page, 0x98, 0x9b, 4)) {
-				cpu[0].memorymap[page].base = ram + (0x18 | page & 3) * 0x100;
+				cpu[0].memorymap[page].base = &ram[(0x18 | page & 3) << 8];
 				cpu[0].memorymap[page].write = nullptr;
 			} else if (range(page, 0xa0, 0xa0))
 				cpu[0].memorymap[0xa0].write = [&](int addr, int data) {
@@ -170,17 +177,17 @@ struct DigDug {
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0x1f))
-				cpu[1].memorymap[page].base = PRG2 + (page & 0x1f) * 0x100;
+				cpu[1].memorymap[page].base = &PRG2[(page & 0x1f) << 8];
 			else if (range(page, 0x40, 0xff))
 				cpu[1].memorymap[page] = cpu[0].memorymap[page];
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0xf))
-				cpu[2].memorymap[page].base = PRG3 + (page & 0xf) * 0x100;
+				cpu[2].memorymap[page].base = &PRG3[(page & 0xf) << 8];
 			else if (range(page, 0x40, 0xff))
 				cpu[2].memorymap[page] = cpu[0].memorymap[page];
 
-		copy_n(IO, 0x400, mcu.rom);
+		copy_n(&IO[0], IO.size(), &mcu.rom[0]);
 		mcu.r = 0xffff;
 
 		mmi[0] = 0x99; // DIPSW A
@@ -188,12 +195,12 @@ struct DigDug {
 
 		// Videoの初期化
 		bg2.fill(1), bg4.fill(3), obj.fill(3);
-		convertGFX(&bg2[0], BG2, 128, {rseq8(0, 8)}, {rseq8(0, 1)}, {0}, 8);
-		convertGFX(&bg4[0], BG4, 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
-		convertGFX(&obj[0], OBJ, 256, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
-		for (int i = 0; i < 256; i++)
+		convertGFX(&bg2[0], &BG2[0], 128, {rseq8(0, 8)}, {rseq8(0, 1)}, {0}, 8);
+		convertGFX(&bg4[0], &BG4[0], 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], &OBJ[0], 256, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
+		for (int i = 0; i < objcolor.size(); i++)
 			objcolor[i] = 0x10 | OBJCOLOR[i];
-		for (int i = 0; i < 0x20; i++)
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 

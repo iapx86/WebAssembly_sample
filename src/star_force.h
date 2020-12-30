@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <array>
-#include <vector>
 #include "z80.h"
 #include "sn76489.h"
 #include "senjyo_sound.h"
@@ -27,7 +26,13 @@ enum {
 };
 
 struct StarForce {
-	static unsigned char PRG1[], PRG2[], FG[], BG1[], BG2[], BG3[], OBJ[], SND[];
+	static array<uint8_t, 0x8000> PRG1;
+	static array<uint8_t, 0x2000> PRG2;
+	static array<uint8_t, 0x3000> FG;
+	static array<uint8_t, 0x6000> BG1, BG2;
+	static array<uint8_t, 0x3000> BG3;
+	static array<uint8_t, 0xc000> OBJ;
+	static array<uint8_t, 0x20> SND;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 256;
@@ -52,9 +57,9 @@ struct StarForce {
 	int nExtend = EXTEND_50000_200000_500000;
 	int nDifficulty = DIFFICULTY_NORMAL;
 
-	uint8_t ram[0x3c00] = {};
-	uint8_t ram2[0x400] = {};
-	uint8_t in[6] = {0, 0, 0, 0, 0xc0, 0};
+	array<uint8_t, 0x3c00> ram = {};
+	array<uint8_t, 0x400> ram2 = {};
+	array<uint8_t, 6> in = {0, 0, 0, 0, 0xc0, 0};
 	int count = 0;
 	int timer = 0;
 	bool cpu_irq = false;
@@ -81,9 +86,9 @@ struct StarForce {
 	StarForce() {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x80; i++)
-			cpu.memorymap[i].base = PRG1 + i * 0x100;
+			cpu.memorymap[i].base = &PRG1[i << 8];
 		for (int i = 0; i < 0x3c; i++) {
-			cpu.memorymap[0x80 + i].base = ram + i * 0x100;
+			cpu.memorymap[0x80 + i].base = &ram[i << 8];
 			cpu.memorymap[0x80 + i].write = nullptr;
 		}
 		cpu.memorymap[0xd0].read = [&](int addr) -> int { return (addr &= 0xff) < 6 ? in[addr] : 0xff; };
@@ -99,9 +104,9 @@ struct StarForce {
 		cpu.check_interrupt = [&]() { return cpu_irq && cpu.interrupt(); };
 
 		for (int i = 0; i < 0x20; i++)
-			cpu2.memorymap[i].base = PRG2 + i * 0x100;
+			cpu2.memorymap[i].base = &PRG2[i << 8];
 		for (int i = 0; i < 4; i++) {
-			cpu2.memorymap[0x40 + i].base = ram2 + i * 0x100;
+			cpu2.memorymap[0x40 + i].base = &ram2[i << 8];
 			cpu2.memorymap[0x40 + i].write = nullptr;
 		}
 		cpu2.memorymap[0x80].write = [&](int addr, int data) { sound0->write(data, count); };
@@ -137,11 +142,11 @@ struct StarForce {
 
 		// Videoの初期化
 		fg.fill(7), bg1.fill(7), bg2.fill(7), bg3.fill(7), obj.fill(7);
-		convertGFX(&fg[0], FG, 512, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x8000, 0x10000}, 8);
-		convertGFX(&bg1[0], BG1, 256, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x10000, 0x20000}, 32);
-		convertGFX(&bg2[0], BG2, 256, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x10000, 0x20000}, 32);
-		convertGFX(&bg3[0], BG3, 128, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x8000, 0x10000}, 32);
-		convertGFX(&obj[0], OBJ, 512, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x20000, 0x40000}, 32);
+		convertGFX(&fg[0], &FG[0], 512, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x8000, 0x10000}, 8);
+		convertGFX(&bg1[0], &BG1[0], 256, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x10000, 0x20000}, 32);
+		convertGFX(&bg2[0], &BG2[0], 256, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x10000, 0x20000}, 32);
+		convertGFX(&bg3[0], &BG3[0], 128, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x8000, 0x10000}, 32);
+		convertGFX(&obj[0], &OBJ[0], 512, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x20000, 0x40000}, 32);
 	}
 
 	StarForce *execute() {

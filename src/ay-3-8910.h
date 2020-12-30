@@ -6,6 +6,7 @@
 #define AY_3_8910_H
 
 #include <algorithm>
+#include <array>
 #include <list>
 #include <mutex>
 #include <utility>
@@ -21,8 +22,8 @@ struct AY_3_8910 {
 	vector<list<pair<int, int>>> tmpwheel;
 	list<list<pair<int, int>>> wheel;
 	mutex mutex;
-	uint8_t ram[0x10] = {};
-	uint8_t reg[0x10] = {};
+	array<uint8_t, 0x10> ram = {};
+	array<uint8_t, 0x10> reg = {};
 	int cycles = 0;
 	struct {
 		int freq = 0;

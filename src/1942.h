@@ -8,7 +8,6 @@
 #define _1942_H
 
 #include <array>
-#include <vector>
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "utils.h"
@@ -24,7 +23,12 @@ enum {
 };
 
 struct _1942 {
-	static unsigned char PRG1[], PRG2[], FG[], BG[], OBJ[], RED[], GREEN[], BLUE[], FGCOLOR[], BGCOLOR[], OBJCOLOR[];
+	static array<uint8_t, 0x18000> PRG1;
+	static array<uint8_t, 0x4000> PRG2;
+	static array<uint8_t, 0x2000> FG;
+	static array<uint8_t, 0xc000> BG;
+	static array<uint8_t, 0x10000> OBJ;
+	static array<uint8_t, 0x100> RED, GREEN, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 256;
@@ -47,9 +51,9 @@ struct _1942 {
 	int nLife = 3;
 	int nRank = RANK_NORMAL;
 
-	uint8_t ram[0x1d00] = {};
-	uint8_t ram2[0x800] = {};
-	uint8_t in[5] = {0xff, 0xff, 0xff, 0xf7, 0xff};
+	array<uint8_t, 0x1d00> ram = {};
+	array<uint8_t, 0x800> ram2 = {};
+	array<uint8_t, 5> in = {0xff, 0xff, 0xff, 0xf7, 0xff};
 	struct {
 		int addr = 0;
 	} psg[2];
@@ -74,7 +78,7 @@ struct _1942 {
 	_1942() {
 		// CPU周りの初期化
 		for (int i = 0; i < 0xc0; i++)
-			cpu.memorymap[i].base = PRG1 + i * 0x100;
+			cpu.memorymap[i].base = &PRG1[i << 8];
 		cpu.memorymap[0xc0].read = [&](int addr) -> int { return (addr &= 0xff) < 5 ? in[addr] : 0xff; };
 		cpu.memorymap[0xc8].write = [&](int addr, int data) {
 			switch (addr & 0xff) {
@@ -93,18 +97,18 @@ struct _1942 {
 				if (_bank == bank)
 					return;
 				for (int i = 0; i < 0x40; i++)
-					cpu.memorymap[0x80 + i].base = PRG1 + (_bank + i) * 0x100;
+					cpu.memorymap[0x80 + i].base = &PRG1[_bank + i << 8];
 				return void(bank = _bank);
 			}
 		};
-		cpu.memorymap[0xcc].base = ram;
+		cpu.memorymap[0xcc].base = &ram[0];
 		cpu.memorymap[0xcc].write = nullptr;
 		for (int i = 0; i < 0x0c; i++) {
-			cpu.memorymap[0xd0 + i].base = ram + 0x100 + i * 0x100;
+			cpu.memorymap[0xd0 + i].base = &ram[1 + i << 8];
 			cpu.memorymap[0xd0 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x10; i++) {
-			cpu.memorymap[0xe0 + i].base = ram + 0xd00 + i * 0x100;
+			cpu.memorymap[0xe0 + i].base = &ram[0xd + i << 8];
 			cpu.memorymap[0xe0 + i].write = nullptr;
 		}
 
@@ -117,9 +121,9 @@ struct _1942 {
 		};
 
 		for (int i = 0; i < 0x40; i++)
-			cpu2.memorymap[i].base = PRG2 + i * 0x100;
+			cpu2.memorymap[i].base = &PRG2[i << 8];
 		for (int i = 0; i < 8; i++) {
-			cpu2.memorymap[0x40 + i].base = ram2 + i * 0x100;
+			cpu2.memorymap[0x40 + i].base = &ram2[i << 8];
 			cpu2.memorymap[0x40 + i].write = nullptr;
 		}
 		cpu2.memorymap[0x60].read = [&](int addr) { return addr & 0xff ? 0xff : command; };
@@ -142,14 +146,14 @@ struct _1942 {
 
 		// Videoの初期化
 		fg.fill(3), bg.fill(7), obj.fill(15);
-		convertGFX(&fg[0], FG, 512, {seq8(0, 16)}, {rseq4(8, 1), rseq4(0, 1)}, {4, 0}, 16);
-		convertGFX(&bg[0], BG, 512, {seq16(0, 8)}, {rseq8(128, 1), rseq8(0, 1)}, {0, 0x20000, 0x40000}, 32);
-		convertGFX(&obj[0], OBJ, 512, {seq16(0, 16)}, {rseq4(264, 1), rseq4(256, 1), rseq4(8, 1), rseq4(0, 1)}, {0x40004, 0x40000, 4, 0}, 64);
-		for (int i = 0; i < 256; i++)
+		convertGFX(&fg[0], &FG[0], 512, {seq8(0, 16)}, {rseq4(8, 1), rseq4(0, 1)}, {4, 0}, 16);
+		convertGFX(&bg[0], &BG[0], 512, {seq16(0, 8)}, {rseq8(128, 1), rseq8(0, 1)}, {0, 0x20000, 0x40000}, 32);
+		convertGFX(&obj[0], &OBJ[0], 512, {seq16(0, 16)}, {rseq4(264, 1), rseq4(256, 1), rseq4(8, 1), rseq4(0, 1)}, {0x40004, 0x40000, 4, 0}, 64);
+		for (int i = 0; i < fgcolor.size(); i++)
 			fgcolor[i] = 0x80 | FGCOLOR[i];
-		for (int i = 0; i < 256; i++)
+		for (int i = 0; i < objcolor.size(); i++)
 			objcolor[i] = 0x40 | OBJCOLOR[i];
-		for (int i = 0; i < 0x100; i++)
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 

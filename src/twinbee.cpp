@@ -6,27 +6,21 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "twinbee.h"
 using namespace std;
 
-unsigned char TwinBee::PRG1[0x50000], TwinBee::PRG2[0x2000], TwinBee::SND[0x200];
-AY_3_8910 *TwinBee::sound0, *TwinBee::sound1;
-K005289 *TwinBee::sound2;
-VLM5030 *TwinBee::sound3;
-
 TwinBee *game;
-vector<int> rom_table = {
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	(int)"SND", (int)strlen("SND"), (int)game->SND, (int)sizeof(game->SND),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, TwinBee::width * TwinBee::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 3 * 4 + 1> rom_table = {
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"SND", (int)strlen("SND"), (int)game->SND.data(), (int)game->SND.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -100,4 +94,17 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerB(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerY(int fDown) {
 	game->triggerY(fDown != 0);
 }
+
+AY_3_8910 *TwinBee::sound0, *TwinBee::sound1;
+K005289 *TwinBee::sound2;
+VLM5030 *TwinBee::sound3;
+
+array<unsigned char, 0x50000> TwinBee::PRG1 = {
+};
+
+array<unsigned char, 0x2000> TwinBee::PRG2 = {
+};
+
+array<unsigned char, 0x200> TwinBee::SND = {
+};
 

@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <array>
-#include <vector>
 #include "mc6809.h"
 #include "mc6801.h"
 #include "c30.h"
@@ -25,7 +24,12 @@ enum {
 };
 
 struct PacLand {
-	static unsigned char PRG1[], PRG2[], PRG2I[], FG[], BG[], OBJ[], RED[], BLUE[], FGCOLOR[], BGCOLOR[], OBJCOLOR[];
+	static array<uint8_t, 0x18000> PRG1;
+	static array<uint8_t, 0x2000> PRG2;
+	static array<uint8_t, 0x1000> PRG2I;
+	static array<uint8_t, 0x2000> FG, BG;
+	static array<uint8_t, 0x10000> OBJ;
+	static array<uint8_t, 0x400> RED, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 288;
@@ -52,15 +56,15 @@ struct PacLand {
 	bool fInterruptEnable1 = false;
 	int bank = 0x80;
 
-	uint8_t ram[0x3800] = {};
-	uint8_t ram2[0x900] = {};
-	uint8_t in[5] = {0xff, 0xff, 0xff, 0xff, 0xff};
+	array<uint8_t, 0x3800> ram = {};
+	array<uint8_t, 0x900> ram2 = {};
+	array<uint8_t, 5> in = {0xff, 0xff, 0xff, 0xff, 0xff};
 
 	array<uint8_t, 0x8000> fg;
 	array<uint8_t, 0x8000> bg;
 	array<uint8_t, 0x20000> obj;
 	array<int, 0x400> rgb;
-	array<uint8_t, 0x100> opaque[3];
+	array<uint8_t, 0x100> opaque[3] = {};
 	int dwScroll0 = 0;
 	int dwScroll1 = 0;
 	int palette = 0;
@@ -72,7 +76,7 @@ struct PacLand {
 	PacLand() {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x38; i++) {
-			cpu.memorymap[i].base = ram + i * 0x100;
+			cpu.memorymap[i].base = &ram[i << 8];
 			cpu.memorymap[i].write = nullptr;
 		}
 		cpu.memorymap[0x38].write = [&](int addr, int data) { dwScroll0 = data | addr << 8 & 0x100; };
@@ -83,13 +87,13 @@ struct PacLand {
 				return;
 			if (_bank != bank) {
 				for (int i = 0; i < 0x20; i++)
-					cpu.memorymap[0x40 + i].base = PRG1 + (_bank + i) * 0x100;
+					cpu.memorymap[0x40 + i].base = &PRG1[_bank + i << 8];
 				bank = _bank;
 			}
 			palette = data << 5 & 0x300;
 		};
 		for (int i = 0; i < 0x20; i++)
-			cpu.memorymap[0x40 + i].base = PRG1 + 0x8000 + i * 0x100;
+			cpu.memorymap[0x40 + i].base = &PRG1[0x80 + i << 8];
 		for (int i = 0; i < 4; i++) {
 			cpu.memorymap[0x68 + i].read = [&](int addr) { return sound0->read(addr); };
 			cpu.memorymap[0x68 + i].write = [&](int addr, int data) { sound0->write(addr, data); };
@@ -97,13 +101,13 @@ struct PacLand {
 		for (int i = 0; i < 0x10; i++)
 			cpu.memorymap[0x70 + i].write = [&](int addr, int data) { fInterruptEnable0 = !(addr & 0x800); };
 		for (int i = 0; i < 0x80; i++)
-			cpu.memorymap[0x80 + i].base = PRG1 + i * 0x100;
+			cpu.memorymap[0x80 + i].base = &PRG1[i << 8];
 		for (int i = 0; i < 0x10; i++)
 			cpu.memorymap[0x80 + i].write = [&](int addr, int data) { addr & 0x800 ? mcu.disable() : mcu.enable(); };
 		for (int i = 0; i < 0x10; i++)
 			cpu.memorymap[0x90 + i].write = [&](int addr, int data) { fFlip = !(addr & 0x800); };
 
-		mcu.memorymap[0].base = ram2;
+		mcu.memorymap[0].base = &ram2[0];
 		mcu.memorymap[0].read = [&](int addr) -> int { return addr == 2 ? in[4] : ram2[addr]; };
 		mcu.memorymap[0].write = nullptr;
 		for (int i = 0; i < 4; i++) {
@@ -113,21 +117,21 @@ struct PacLand {
 		for (int i = 0; i < 0x40; i++)
 			mcu.memorymap[0x40 + i].write = [&](int addr, int data) { fInterruptEnable1 = !(addr & 0x2000); };
 		for (int i = 0; i < 0x20; i++)
-			mcu.memorymap[0x80 + i].base = PRG2 + i * 0x100;
+			mcu.memorymap[0x80 + i].base = &PRG2[i << 8];
 		for (int i = 0; i < 8; i++) {
-			mcu.memorymap[0xc0 + i].base = ram2 + 0x100 + i * 0x100;
+			mcu.memorymap[0xc0 + i].base = &ram2[1 + i << 8];
 			mcu.memorymap[0xc0 + i].write = nullptr;
 		}
 		mcu.memorymap[0xd0].read = [&](int addr) -> int { return addr & 0xfc ? 0xff : in[addr & 3]; };
 		for (int i = 0; i < 0x10; i++)
-			mcu.memorymap[0xf0 + i].base = PRG2I + i * 0x100;
+			mcu.memorymap[0xf0 + i].base = &PRG2I[i << 8];
 
 		// Videoの初期化
 		fg.fill(3), bg.fill(3), obj.fill(15);
-		convertGFX(&fg[0], FG, 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
-		convertGFX(&bg[0], BG, 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
-		convertGFX(&obj[0], OBJ, 512, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4, 0x40000, 0x40004}, 64);
-		for (int i = 0; i < 0x400; i++)
+		convertGFX(&fg[0], &FG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&bg[0], &BG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
+		convertGFX(&obj[0], &OBJ[0], 512, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4, 0x40000, 0x40004}, 64);
+		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | (RED[i] >> 4) * 255 / 15 << 8 | (RED[i] & 15) * 255 / 15;
 		fill_n(&opaque[0][0], 0x80, 1), fill_n(&opaque[1][0], 0x7f, 1), fill_n(&opaque[1][0x80], 0x7f, 1), fill_n(&opaque[2][0xf0], 0xf, 1);
 	}
@@ -271,7 +275,7 @@ struct PacLand {
 		int k = 0x1100 | (fFlip ? (4 + dwScroll1 >> 2) + 0x30 : (5 + dwScroll1 >> 2) + 4) & 0x7e;
 		for (int i = 0; i < 28; k = k + 54 & 0x7e | k + 0x80 & 0x1f80, p -= 256 * 8 * 37 + 8, i++)
 			for (int j = 0; j < 37; k = k + 2 & 0x7e | k & 0x1f80, p += 256 * 8, j++)
-				xfer8x8(data, BGCOLOR, bg.data(), ram[k + 1] << 1 & 0x7c | ram[k] << 1 & 0x180 | ram[k + 1] << 9 & 0x200, p, k);
+				xfer8x8(data, &BGCOLOR[0], &bg[0], ram[k + 1] << 1 & 0x7c | ram[k] << 1 & 0x180 | ram[k + 1] << 9 & 0x200, p, k);
 
 		// fg描画
 		p = 256 * 8 * 2 + 208 - (fFlip ? 1 + dwScroll0 & 7 : dwScroll0 & 7) * 256;
@@ -279,18 +283,18 @@ struct PacLand {
 		for (int i = 0; i < 24; k = k + 54 & 0x7e | k + 0x80 & 0x1f80, p -= 256 * 8 * 37 + 8, i++)
 			for (int j = 0; j < 37; k = k + 2 & 0x7e | k & 0x1f80, p += 256 * 8, j++)
 				if (~ram[k + 1] & 0x20)
-					xfer8x8(data, FGCOLOR, fg.data(), ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+					xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 232;
 		k = fFlip ? 0x132 : 0x106;
 		for (int i = 0; i < 3; p -= 256 * 8 * 36 + 8, k += 56, i++)
 			for (int j = 0; j < 36; p += 256 * 8, k += 2, j++)
 				if (~ram[k + 1] & 0x20)
-					xfer8x8(data, FGCOLOR, fg.data(), ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+					xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 16;
 		k = fFlip ? 0xeb2 : 0xe86;
 		for (int i = 0; i < 36; p += 256 * 8, k += 2, i++)
 			if (~ram[k + 1] & 0x20)
-				xfer8x8(data, FGCOLOR, fg.data(), ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+				xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 
 		// obj描画
 		drawObj(data, 1);
@@ -301,18 +305,18 @@ struct PacLand {
 		for (int i = 0; i < 24; k = k + 54 & 0x7e | k + 0x80 & 0x1f80, p -= 256 * 8 * 37 + 8, i++)
 			for (int j = 0; j < 37; k = k + 2 & 0x7e | k & 0x1f80, p += 256 * 8, j++)
 				if (ram[k + 1] & 0x20)
-					xfer8x8(data, FGCOLOR, fg.data(), ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+					xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 232;
 		k = fFlip ? 0x132 : 0x106;
 		for (int i = 0; i < 3; p -= 256 * 8 * 36 + 8, k += 56, i++)
 			for (int j = 0; j < 36; p += 256 * 8, k += 2, j++)
 				if (ram[k + 1] & 0x20)
-					xfer8x8(data, FGCOLOR, fg.data(), ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+					xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 16;
 		k = fFlip ? 0xeb2 : 0xe86;
 		for (int i = 0; i < 36; p += 256 * 8, k += 2, i++)
 			if (ram[k + 1] & 0x20)
-				xfer8x8(data, FGCOLOR, fg.data(), ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+				xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 
 		// obj描画
 		drawObj(data, 2);

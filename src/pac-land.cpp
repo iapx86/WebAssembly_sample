@@ -6,35 +6,29 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "pac-land.h"
 using namespace std;
 
-unsigned char PacLand::PRG1[0x18000], PacLand::PRG2[0x2000], PacLand::PRG2I[0x1000];
-unsigned char PacLand::FG[0x2000], PacLand::BG[0x2000], PacLand::OBJ[0x10000], PacLand::RED[0x400];
-unsigned char PacLand::BLUE[0x400], PacLand::FGCOLOR[0x400], PacLand::BGCOLOR[0x400], PacLand::OBJCOLOR[0x400];
-C30 *PacLand::sound0;
-
 PacLand *game;
-vector<int> rom_table = {
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	(int)"PRG2I", (int)strlen("PRG2I"), (int)game->PRG2I, (int)sizeof(game->PRG2I),
-	(int)"FG", (int)strlen("FG"), (int)game->FG, (int)sizeof(game->FG),
-	(int)"BG", (int)strlen("BG"), (int)game->BG, (int)sizeof(game->BG),
-	(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ, (int)sizeof(game->OBJ),
-	(int)"RED", (int)strlen("RED"), (int)game->RED, (int)sizeof(game->RED),
-	(int)"BLUE", (int)strlen("BLUE"), (int)game->BLUE, (int)sizeof(game->BLUE),
-	(int)"FGCOLOR", (int)strlen("FGCOLOR"), (int)game->FGCOLOR, (int)sizeof(game->FGCOLOR),
-	(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR, (int)sizeof(game->BGCOLOR),
-	(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR, (int)sizeof(game->OBJCOLOR),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, PacLand::width * PacLand::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 11 * 4 + 1> rom_table = {
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"PRG2I", (int)strlen("PRG2I"), (int)game->PRG2I.data(), (int)game->PRG2I.size(),
+		(int)"FG", (int)strlen("FG"), (int)game->FG.data(), (int)game->FG.size(),
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
+		(int)"RED", (int)strlen("RED"), (int)game->RED.data(), (int)game->RED.size(),
+		(int)"BLUE", (int)strlen("BLUE"), (int)game->BLUE.data(), (int)game->BLUE.size(),
+		(int)"FGCOLOR", (int)strlen("FGCOLOR"), (int)game->FGCOLOR.data(), (int)game->FGCOLOR.size(),
+		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
+		(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR.data(), (int)game->OBJCOLOR.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -91,4 +85,39 @@ extern "C" EMSCRIPTEN_KEEPALIVE void left(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 	game->triggerA(fDown != 0);
 }
+
+C30 *PacLand::sound0;
+
+array<unsigned char, 0x18000> PacLand::PRG1 = {
+};
+
+array<unsigned char, 0x2000> PacLand::PRG2 = {
+};
+
+array<unsigned char, 0x1000> PacLand::PRG2I = {
+};
+
+array<unsigned char, 0x2000> PacLand::FG = {
+};
+
+array<unsigned char, 0x2000> PacLand::BG = {
+};
+
+array<unsigned char, 0x10000> PacLand::OBJ = {
+};
+
+array<unsigned char, 0x400> PacLand::RED = {
+};
+
+array<unsigned char, 0x400> PacLand::BLUE = {
+};
+
+array<unsigned char, 0x400> PacLand::FGCOLOR = {
+};
+
+array<unsigned char, 0x400> PacLand::BGCOLOR = {
+};
+
+array<unsigned char, 0x400> PacLand::OBJCOLOR = {
+};
 

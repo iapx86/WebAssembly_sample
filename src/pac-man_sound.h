@@ -6,6 +6,7 @@
 #define PAC_MAN_SOUND_H
 
 #include <algorithm>
+#include <array>
 #include <list>
 #include <mutex>
 #include <utility>
@@ -13,7 +14,7 @@
 using namespace std;
 
 struct PacManSound {
-	float snd[0x100] = {};
+	array<float, 0x100> snd;
 	int rate;
 	int sampleRate;
 	int count;
@@ -26,8 +27,8 @@ struct PacManSound {
 	uint8_t reg[0x20] = {};
 	uint32_t phase[3] = {};
 
-	PacManSound(uint8_t *SND, int sampleRate = 48000, int resolution = 1, float gain = 0.1) {
-		for (int i = 0; i < 0x100; i++)
+	PacManSound(array<uint8_t, 0x100>& SND, int sampleRate = 48000, int resolution = 1, float gain = 0.1) {
+		for (int i = 0; i < snd.size(); i++)
 			snd[i] = (SND[i] & 0xf) * 2 / 15.0 - 1;
 		rate = 8192 * 48000 / sampleRate;
 		this->sampleRate = sampleRate;

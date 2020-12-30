@@ -6,29 +6,24 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "chackn_pop.h"
 using namespace std;
 
-unsigned char ChacknPop::BG[0x4000], ChacknPop::OBJ[0x4000], ChacknPop::RGB_L[0x400], ChacknPop::RGB_H[0x400];
-unsigned char ChacknPop::PRG1[0xa000], ChacknPop::PRG2[0x800];
-AY_3_8910 *ChacknPop::sound0, *ChacknPop::sound1;
-
 ChacknPop *game;
-vector<int> rom_table = {
-	(int)"BG", (int)strlen("BG"), (int)game->BG, (int)sizeof(game->BG),
-	(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ, (int)sizeof(game->OBJ),
-	(int)"RGB_L", (int)strlen("RGB_L"), (int)game->RGB_L, (int)sizeof(game->RGB_L),
-	(int)"RGB_H", (int)strlen("RGB_H"), (int)game->RGB_H, (int)sizeof(game->RGB_H),
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, ChacknPop::width * ChacknPop::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 6 * 4 + 1> rom_table = {
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
+		(int)"RGB_L", (int)strlen("RGB_L"), (int)game->RGB_L.data(), (int)game->RGB_L.size(),
+		(int)"RGB_H", (int)strlen("RGB_H"), (int)game->RGB_H.data(), (int)game->RGB_H.size(),
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -94,4 +89,24 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerB(int fDown) {
 	game->triggerB(fDown != 0);
 }
+
+AY_3_8910 *ChacknPop::sound0, *ChacknPop::sound1;
+
+array<unsigned char, 0x4000> ChacknPop::BG = {
+};
+
+array<unsigned char, 0x4000> ChacknPop::OBJ = {
+};
+
+array<unsigned char, 0x400> ChacknPop::RGB_L = {
+};
+
+array<unsigned char, 0x400> ChacknPop::RGB_H = {
+};
+
+array<unsigned char, 0xa000> ChacknPop::PRG1 = {
+};
+
+array<unsigned char, 0x800> ChacknPop::PRG2 = {
+};
 

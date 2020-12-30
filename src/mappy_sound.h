@@ -6,6 +6,7 @@
 #define MAPPY_SOUND_H
 
 #include <algorithm>
+#include <array>
 #include <list>
 #include <mutex>
 #include <utility>
@@ -13,7 +14,7 @@
 using namespace std;
 
 struct MappySound {
-	float snd[0x100] = {};
+	array<float, 0x100> snd;
 	int rate;
 	int sampleRate;
 	int count;
@@ -22,12 +23,12 @@ struct MappySound {
 	vector<list<pair<int, int>>> tmpwheel;
 	list<list<pair<int, int>>> wheel;
 	mutex mutex;
-	uint8_t ram[0x400] = {};
-	uint8_t reg[0x40] = {};
-	uint32_t phase[8] = {};
+	array<uint8_t, 0x400> ram = {};
+	array<uint8_t, 0x40> reg = {};
+	array<uint32_t, 8> phase = {};
 
-	MappySound(uint8_t *SND, int sampleRate = 48000, int resolution = 1, float gain = 0.1) {
-		for (int i = 0; i < 0x100; i++)
+	MappySound(array<uint8_t, 0x100>& SND, int sampleRate = 48000, int resolution = 1, float gain = 0.1) {
+		for (int i = 0; i < snd.size(); i++)
 			snd[i] = (SND[i] & 0xf) * 2 / 15.0 - 1;
 		rate = 2048 * 48000 / sampleRate;
 		this->sampleRate = sampleRate;

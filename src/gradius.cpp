@@ -6,27 +6,21 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "gradius.h"
 using namespace std;
 
-unsigned char Gradius::PRG1[0x50000], Gradius::PRG2[0x2000], Gradius::SND[0x200];
-AY_3_8910 *Gradius::sound0, *Gradius::sound1;
-K005289 *Gradius::sound2;
-VLM5030 *Gradius::sound3;
-
 Gradius *game;
-vector<int> rom_table = {
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	(int)"SND", (int)strlen("SND"), (int)game->SND, (int)sizeof(game->SND),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, Gradius::width * Gradius::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 3 * 4 + 1> rom_table = {
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"SND", (int)strlen("SND"), (int)game->SND.data(), (int)game->SND.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -104,4 +98,17 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerX(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerY(int fDown) {
 	game->triggerY(fDown != 0);
 }
+
+AY_3_8910 *Gradius::sound0, *Gradius::sound1;
+K005289 *Gradius::sound2;
+VLM5030 *Gradius::sound3;
+
+array<unsigned char, 0x50000> Gradius::PRG1 = {
+};
+
+array<unsigned char, 0x2000> Gradius::PRG2 = {
+};
+
+array<unsigned char, 0x200> Gradius::SND = {
+};
 

@@ -10,33 +10,25 @@
 #include "elevator_action.h"
 using namespace std;
 
-vector<int> ElevatorAction::pcmtable = {0xd2d, 0xdca, 0xe09, 0xe6f, 0xe85};
-vector<vector<short>> ElevatorAction::pcm;
-int ElevatorAction::pcm_freq;
-unsigned char ElevatorAction::PRG1[0x8000], ElevatorAction::PRG2[0x2000], ElevatorAction::PRG3[0x800];
-unsigned char ElevatorAction::GFX[0x8000], ElevatorAction::PRI[0x100];
-AY_3_8910 *ElevatorAction::sound0, *ElevatorAction::sound1, *ElevatorAction::sound2, *ElevatorAction::sound3;
-SoundEffect *ElevatorAction::sound4;
-
 ElevatorAction *game;
-vector<int> rom_table = {
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	(int)"PRG3", (int)strlen("PRG3"), (int)game->PRG3, (int)sizeof(game->PRG3),
-	(int)"GFX", (int)strlen("GFX"), (int)game->GFX, (int)sizeof(game->GFX),
-	(int)"PRI", (int)strlen("PRI"), (int)game->PRI, (int)sizeof(game->PRI),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, ElevatorAction::width * ElevatorAction::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 5 * 4 + 1> rom_table = {
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"PRG3", (int)strlen("PRG3"), (int)game->PRG3.data(), (int)game->PRG3.size(),
+		(int)"GFX", (int)strlen("GFX"), (int)game->GFX.data(), (int)game->GFX.size(),
+		(int)"PRI", (int)strlen("PRI"), (int)game->PRI.data(), (int)game->PRI.size(),
+		0
+	};
 	return rom_table.data();
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *init(int rate) {
-	game = new ElevatorAction(48000);
+	game = new ElevatorAction(rate);
 	game->init(rate);
 	return geometry.data();
 }
@@ -103,4 +95,25 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerB(int fDown) {
 	game->triggerB(fDown != 0);
 }
+
+AY_3_8910 *ElevatorAction::sound0, *ElevatorAction::sound1, *ElevatorAction::sound2, *ElevatorAction::sound3;
+SoundEffect *ElevatorAction::sound4;
+
+vector<int> ElevatorAction::pcmtable;
+vector<vector<short>> ElevatorAction::pcm;
+
+array<unsigned char, 0x8000> ElevatorAction::PRG1 = {
+};
+
+array<unsigned char, 0x2000> ElevatorAction::PRG2 = {
+};
+
+array<unsigned char, 0x800> ElevatorAction::PRG3 = {
+};
+
+array<unsigned char, 0x8000> ElevatorAction::GFX = {
+};
+
+array<unsigned char, 0x100> ElevatorAction::PRI = {
+};
 

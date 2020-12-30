@@ -8,6 +8,7 @@
 #define GRADIUS_H
 
 #include <algorithm>
+#include <array>
 #include <list>
 #include "mc68000.h"
 #include "z80.h"
@@ -25,7 +26,9 @@ enum {
 };
 
 struct Gradius {
-	static unsigned char SND[], PRG1[], PRG2[];
+	static array<uint8_t, 0x50000> PRG1;
+	static array<uint8_t, 0x2000> PRG2;
+	static array<uint8_t, 0x200> SND;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 256;
@@ -54,10 +57,10 @@ struct Gradius {
 	bool fInterrupt2Enable = false;
 	bool fInterrupt4Enable = false;
 
-	uint8_t ram[0x49000] = {};
-	uint8_t ram2[0x4000] = {};
-	uint8_t vlm[0x800] = {};
-	uint8_t in[6] = {0xff, 0x53, 0xff, 0xff, 0xff, 0xff};
+	array<uint8_t, 0x49000> ram = {};
+	array<uint8_t, 0x4000> ram2 = {};
+	array<uint8_t, 0x800> vlm;
+	array<uint8_t, 6> in = {0xff, 0x53, 0xff, 0xff, 0xff, 0xff};
 	struct {
 		int addr = 0;
 	} psg[2];
@@ -70,10 +73,10 @@ struct Gradius {
 	int timer = 0;
 	list<int> command;
 
-	uint8_t chr[0x20000] = {};
-	int rgb[0x800] = {};
+	array<uint8_t, 0x20000> chr = {};
+	array<int, 0x800> rgb;
 	int flip = 0;
-	uint8_t intensity[32] = {};
+	array<uint8_t, 32> intensity = {};
 
 	MC68000 cpu;
 	Z80 cpu2;
@@ -81,9 +84,9 @@ struct Gradius {
 	Gradius() {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x100; i++)
-			cpu.memorymap[i].base = PRG1 + i * 0x100;
+			cpu.memorymap[i].base = &PRG1[i << 8];
 		for (int i = 0; i < 0x100; i++) {
-			cpu.memorymap[0x100 + i].base = ram + i * 0x100;
+			cpu.memorymap[0x100 + i].base = &ram[i << 8];
 			cpu.memorymap[0x100 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x80; i++) {
@@ -91,18 +94,18 @@ struct Gradius {
 			cpu.memorymap[0x200 + i].write = [&](int addr, int data) { addr & 1 && (ram2[addr >> 1 & 0x3fff] = data); };
 		}
 		for (int i = 0; i < 0x100; i++) {
-			cpu.memorymap[0x300 + i].base = ram + 0x10000 + i * 0x100;
+			cpu.memorymap[0x300 + i].base = &ram[0x100 + i << 8];
 			cpu.memorymap[0x300 + i].write = [&](int addr, int data) {
 				int offset = addr & 0xffff;
 				ram[0x10000 | offset] = data, chr[offset <<= 1] = data >> 4, chr[1 | offset] = data & 0xf;
 			};
 		}
 		for (int i = 0; i < 0x80; i++) {
-			cpu.memorymap[0x500 + i].base = ram + 0x20000 + i * 0x100;
+			cpu.memorymap[0x500 + i].base = &ram[0x200 + i << 8];
 			cpu.memorymap[0x500 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x10; i++) {
-			cpu.memorymap[0x5a0 + i].base = ram + 0x28000 + i * 0x100;
+			cpu.memorymap[0x5a0 + i].base = &ram[0x280 + i << 8];
 			cpu.memorymap[0x5a0 + i].write = nullptr;
 			cpu.memorymap[0x5a0 + i].write16 = [&](int addr, int data) {
 				const int offset = addr & 0xffe;
@@ -127,20 +130,20 @@ struct Gradius {
 			}
 		};
 		for (int i = 0; i < 0x200; i++) {
-			cpu.memorymap[0x600 + i].base = ram + 0x29000 + i * 0x100;
+			cpu.memorymap[0x600 + i].base = &ram[0x290 + i << 8];
 			cpu.memorymap[0x600 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x400; i++)
-			cpu.memorymap[0x800 + i].base = PRG1 + 0x10000 + i * 0x100;
+			cpu.memorymap[0x800 + i].base = &PRG1[0x100 + i << 8];
 
 		for (int i = 0; i < 0x20; i++)
-			cpu2.memorymap[i].base = PRG2 + i * 0x100;
+			cpu2.memorymap[i].base = &PRG2[i << 8];
 		for (int i = 0; i < 0x40; i++) {
-			cpu2.memorymap[0x40 + i].base = ram2 + i * 0x100;
+			cpu2.memorymap[0x40 + i].base = &ram2[i << 8];
 			cpu2.memorymap[0x40 + i].write = nullptr;
 		}
 		for (int i = 0; i < 8; i++) {
-			cpu2.memorymap[0x80 + i].base = vlm + i * 0x100;
+			cpu2.memorymap[0x80 + i].base = &vlm[i << 8];
 			cpu2.memorymap[0x80 + i].write = nullptr;
 		}
 		for (int i = 0; i < 0x10; i++) {
@@ -187,21 +190,20 @@ struct Gradius {
 		};
 
 		// Videoの初期化
-		for (auto& e : rgb)
-			e = 0xff000000;
+		rgb.fill(0xff000000);
 
 		// 輝度の計算
-		double _intensity[32];
-		const double r[5] = {4700, 2400, 1200, 620, 300};
-		for (int i = 0; i < 32; i++) {
+		array<double, 32> _intensity;
+		const array<double, 5> r = {4700, 2400, 1200, 620, 300};
+		for (int i = 0; i < _intensity.size(); i++) {
 			double rt = 0, v = 0;
-			for (int j = 0; j < 5; j++)
+			for (int j = 0; j < r.size(); j++)
 				if (~i >> j & 1)
 					rt += 1 / r[j], v += 0.05 / r[j];
 			_intensity[i] = ((v + 0.005) / (rt + 0.001) - 0.7) * 255 / 5.0 + 0.4;
 		}
 		const double black = _intensity[0], white = 255 / (_intensity[31] - black);
-		for (int i = 0; i < 32; i++)
+		for (int i = 0; i < intensity.size(); i++)
 			intensity[i] = (_intensity[i] - black) * white + 0.5;
 	}
 
@@ -282,9 +284,9 @@ struct Gradius {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
-			cpu.reset();
 			fInterrupt2Enable = false;
 			fInterrupt4Enable = false;
+			cpu.reset();
 			command.clear();
 			cpu2.reset();
 			timer = 0;
@@ -605,7 +607,7 @@ struct Gradius {
 		sound0 = new AY_3_8910(14318180 / 8, rate, 58, 0.3);
 		sound1 = new AY_3_8910(14318180 / 8, rate, 58, 0.3);
 		sound2 = new K005289(SND, 14318180 / 4, rate, 58, 0.3);
-		sound3 = new VLM5030(vlm, sizeof(vlm), 14318180 / 4, rate, 5);
+		sound3 = new VLM5030(vlm, 14318180 / 4, rate, 5);
 		Z80::init();
 	}
 };

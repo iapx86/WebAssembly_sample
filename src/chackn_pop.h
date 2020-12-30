@@ -8,7 +8,6 @@
 #define CHACKN_POP_H
 
 #include <array>
-#include <vector>
 #include "z80.h"
 #include "mc6805.h"
 #include "ay-3-8910.h"
@@ -16,7 +15,10 @@
 using namespace std;
 
 struct ChacknPop {
-	static unsigned char PRG1[], PRG2[], OBJ[], BG[], RGB_L[], RGB_H[];
+	static array<uint8_t, 0x4000> BG, OBJ;
+	static array<uint8_t, 0x400> RGB_L, RGB_H;
+	static array<uint8_t, 0xa000> PRG1;
+	static array<uint8_t, 0x800> PRG2;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 256;
@@ -37,10 +39,9 @@ struct ChacknPop {
 	int nLife = 3;
 	int nBonus = 20000;
 
-	uint8_t ram[0xd00] = {};
-	uint8_t vram[0x8000] = {};
-	uint8_t ram2[0x80] = {};
-	uint8_t in[6] = {0x7d, 0xff, 0xff, 0xff, 0, 0x4f};
+	array<uint8_t, 0xd00> ram = {};
+	array<uint8_t, 0x80> ram2 = {};
+	array<uint8_t, 6> in = {0x7d, 0xff, 0xff, 0xff, 0, 0x4f};
 	struct {
 		int addr = 0;
 	} psg[2];
@@ -48,6 +49,7 @@ struct ChacknPop {
 	int mcu_result = 0;
 	int mcu_flag = 0;
 
+	array<uint8_t, 0x8000> vram = {};
 	array<uint8_t, 0x10000> bg;
 	array<uint8_t, 0x10000> obj;
 	array<int, 0x400> rgb;
@@ -59,9 +61,9 @@ struct ChacknPop {
 	ChacknPop() {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x80; i++)
-			cpu.memorymap[i].base = PRG1 + i * 0x100;
+			cpu.memorymap[i].base = &PRG1[i << 8];
 		for (int i = 0; i < 8; i++) {
-			cpu.memorymap[0x80 + i].base = ram + i * 0x100;
+			cpu.memorymap[0x80 + i].base = &ram[i << 8];
 			cpu.memorymap[0x80 + i].write = nullptr;
 		}
 		cpu.memorymap[0x88].read = [&](int addr) -> int {
@@ -104,21 +106,21 @@ struct ChacknPop {
 				if ((data ^ mode) & 4) {
 					const int bank = data << 4 & 0x40;
 					for (int i = 0; i < 0x40; i++)
-						cpu.memorymap[0xc0 + i].base = vram + (bank + i) * 0x100;
+						cpu.memorymap[0xc0 + i].base = &vram[bank + i << 8];
 				}
 				return void(mode = data);
 			}
 		};
 		for (int i = 0; i < 4; i++) {
-			cpu.memorymap[0x90 + i].base = ram + 0x800 + i * 0x100;
+			cpu.memorymap[0x90 + i].base = &ram[8 + i << 8];
 			cpu.memorymap[0x90 + i].write = nullptr;
 		}
-		cpu.memorymap[0x98].base = ram + 0xc00;
+		cpu.memorymap[0x98].base = &ram[0xc00];
 		cpu.memorymap[0x98].write = nullptr;
 		for (int i = 0; i < 0x20; i++)
-			cpu.memorymap[0xa0 + i].base = PRG1 + 0x8000 + i * 0x100;
+			cpu.memorymap[0xa0 + i].base = &PRG1[0x80 + i << 8];
 		for (int i = 0; i < 0x40; i++) {
-			cpu.memorymap[0xc0 + i].base = vram + i * 0x100;
+			cpu.memorymap[0xc0 + i].base = &vram[i << 8];
 			cpu.memorymap[0xc0 + i].write = nullptr;
 		}
 
@@ -144,15 +146,15 @@ struct ChacknPop {
 			ram2[addr] = data;
 		};
 		for (int i = 1; i < 8; i++)
-			mcu.memorymap[i].base = PRG2 + i * 0x100;
+			mcu.memorymap[i].base = &PRG2[i << 8];
 
 		mcu.check_interrupt = [&]() { return mcu.irq && mcu.interrupt(); };
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
-		convertGFX(&bg[0], BG, 1024, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x10000}, 8);
-		convertGFX(&obj[0], OBJ, 256, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x10000}, 32);
-		for (int i = 0; i < 0x400; i++) {
+		convertGFX(&bg[0], &BG[0], 1024, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x10000}, 8);
+		convertGFX(&obj[0], &OBJ[0], 256, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x10000}, 32);
+		for (int i = 0; i < rgb.size(); i++) {
 			const int e = RGB_H[i] << 4 | RGB_L[i];
 			rgb[i] = 0xff000000 | (e >> 6) * 255 / 3 << 16 | (e >> 3 & 7) * 255 / 7 << 8 | (e & 7) * 255 / 7;
 		}

@@ -6,26 +6,22 @@
 
 #include <emscripten.h>
 #include <array>
-#include <vector>
 #include "frogger.h"
 using namespace std;
 
-unsigned char Frogger::BG[0x1000], Frogger::RGB[0x20], Frogger::PRG1[0x3000], Frogger::PRG2[0x1800];
-AY_3_8910 *Frogger::sound0;
-
 Frogger *game;
-vector<int> rom_table = {
-	(int)"BG", (int)strlen("BG"), (int)game->BG, (int)sizeof(game->BG),
-	(int)"RGB", (int)strlen("RGB"), (int)game->RGB, (int)sizeof(game->RGB),
-	(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1, (int)sizeof(game->PRG1),
-	(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2, (int)sizeof(game->PRG2),
-	0
-};
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, Frogger::width * Frogger::height> data = {};
 array<float, 512> sample = {};
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
+	static array<int, 4 * 4 + 1> rom_table = {
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
+		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
+		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		0
+	};
 	return rom_table.data();
 }
 
@@ -89,4 +85,18 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 extern "C" EMSCRIPTEN_KEEPALIVE void triggerB(int fDown) {
 	game->triggerB(fDown != 0);
 }
+
+AY_3_8910 *Frogger::sound0;
+
+array<unsigned char, 0x1000> Frogger::BG = {
+};
+
+array<unsigned char, 0x20> Frogger::RGB = {
+};
+
+array<unsigned char, 0x3000> Frogger::PRG1 = {
+};
+
+array<unsigned char, 0x1800> Frogger::PRG2 = {
+};
 

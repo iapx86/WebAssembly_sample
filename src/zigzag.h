@@ -8,7 +8,6 @@
 #define ZIG_ZAG_H
 
 #include <array>
-#include <vector>
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "utils.h"
@@ -19,7 +18,9 @@ enum {
 };
 
 struct ZigZag {
-	static unsigned char BG[], OBJ[], RGB[], PRG[];
+	static array<uint8_t, 0x1000> BG, OBJ;
+	static array<uint8_t, 0x20> RGB;
+	static array<uint8_t, 0x4000> PRG;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 256;
@@ -42,8 +43,8 @@ struct ZigZag {
 
 	bool fInterruptEnable = false;
 	int bank = 0x20;
-	uint8_t ram[0x900] = {};
-	uint8_t in[3] = {0, 0, 2};
+	array<uint8_t, 0x900> ram = {};
+	array<uint8_t, 3> in = {0, 0, 2};
 	struct {
 		int latch = 0;
 		int addr = 0;
@@ -58,7 +59,7 @@ struct ZigZag {
 	bool fStarMove = false;
 	array<uint8_t, 0x4000> bg;
 	array<uint8_t, 0x4000> obj;
-	array<int, 0x80> rgb;
+	array<int, 0x80> rgb = {};
 
 	Z80 cpu;
 
@@ -68,9 +69,9 @@ struct ZigZag {
 
 		for (int page = 0; page < 0x100; page++)
 			if (range(page, 0, 0x3f))
-				cpu.memorymap[page].base = PRG + (page & 0x3f) * 0x100;
+				cpu.memorymap[page].base = &PRG[(page & 0x3f) << 8];
 			else if (range(page, 0x40, 0x43, 0x04)) {
-				cpu.memorymap[page].base = ram + (page & 3) * 0x100;
+				cpu.memorymap[page].base = &ram[(page & 3) << 8];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0x48, 0x48, 0x07))
 				cpu.memorymap[page].write = [&](int addr, int data) {
@@ -86,10 +87,10 @@ struct ZigZag {
 					}
 				};
 			else if (range(page, 0x50, 0x53, 0x04)) {
-				cpu.memorymap[page].base = ram + (4 | page & 3) * 0x100;
+				cpu.memorymap[page].base = &ram[(4 | page & 3) << 8];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0x58, 0x58, 0x07)) {
-				cpu.memorymap[page].base = ram + 0x800;
+				cpu.memorymap[page].base = &ram[0x800];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0x60, 0x60, 0x07))
 				cpu.memorymap[page].read = [&](int addr) -> int { return in[0]; };
@@ -107,8 +108,8 @@ struct ZigZag {
 						if (_bank == bank)
 							return;
 						for (int i = 0; i < 0x10; i++) {
-							cpu.memorymap[0x20 + i].base = PRG + (_bank + i) * 0x100;
-							cpu.memorymap[0x30 + i].base = PRG + ((_bank ^ 0x10) + i) * 0x100;
+							cpu.memorymap[0x20 + i].base = &PRG[_bank + i << 8];
+							cpu.memorymap[0x30 + i].base = &PRG[(_bank ^ 0x10) + i << 8];
 						}
 						return void(bank = _bank);
 					case 4:
@@ -119,8 +120,8 @@ struct ZigZag {
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
-		convertGFX(&bg[0], BG, 256, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x4000}, 8);
-		convertGFX(&obj[0], OBJ, 64, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x4000}, 32);
+		convertGFX(&bg[0], &BG[0], 256, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x4000}, 8);
+		convertGFX(&obj[0], &OBJ[0], 64, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x4000}, 32);
 		for (int i = 0; i < 0x20; i++)
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 		const int starColors[4] = {0xd0, 0x70, 0x40, 0x00};
