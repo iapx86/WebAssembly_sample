@@ -5,14 +5,18 @@
  */
 
 #include <emscripten.h>
+#include <algorithm>
 #include <array>
+#include <list>
+#include <vector>
 #include "chackn_pop.h"
 using namespace std;
 
 ChacknPop *game;
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, ChacknPop::width * ChacknPop::height> data = {};
-array<float, 512> sample = {};
+DoubleTimer audio;
+list<float> samples;
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 	static array<int, 6 * 4 + 1> rom_table = {
@@ -29,25 +33,32 @@ extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *init(int rate) {
 	game = new ChacknPop;
-	game->init(rate);
+	game->init(audio.rate = rate);
+	audio.fn = []() {
+		samples.push_back(game->sound0->output + game->sound1->output);
+		game->sound0->update();
+		game->sound1->update();
+	};
 	return geometry.data();
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE int *render() {
-	game->updateStatus()->updateInput()->execute()->makeBitmap(data.data());
-	return data.data();
+extern "C" EMSCRIPTEN_KEEPALIVE int *render(double timestamp, double rate_correction) {
+	game->updateStatus()->updateInput()->execute(audio, rate_correction)->makeBitmap(::data.data());
+	return ::data.data();
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE void update() {
-	game->sound0->update();
-	game->sound1->update();
-}
-
-extern "C" EMSCRIPTEN_KEEPALIVE float *sound() {
-	sample.fill(0);
-	game->sound0->makeSound(sample.data(), sample.size());
-	game->sound1->makeSound(sample.data(), sample.size());
-	return sample.data();
+extern "C" EMSCRIPTEN_KEEPALIVE void *sound() {
+	static vector<float> buf;
+	static struct {
+		float *addr;
+		int size;
+	} iov;
+	buf.resize(samples.size());
+	copy(samples.begin(), samples.end(), buf.begin());
+	samples.clear();
+	iov.addr = buf.data();
+	iov.size = buf.size();
+	return &iov;
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE void reset() {

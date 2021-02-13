@@ -14,15 +14,16 @@ enum {
 };
 
 struct MC6805 : Cpu {
+	static const unsigned char cc[0x100];
 	int a = 0;
 	int ccr = 0; // ccr:111hinzc
 	int x = 0;
 	int s = 0;
 	bool irq = false;
 
-	MC6805() {}
+	MC6805(int clock = 0) : Cpu(clock) {}
 
-	void reset() {
+	void reset() override {
 		Cpu::reset();
 		a = 0;
 		ccr = 0xe8;
@@ -32,16 +33,16 @@ struct MC6805 : Cpu {
 		irq = false;
 	}
 
-	bool interrupt() {
+	bool interrupt() override {
 		if (!Cpu::interrupt() || ccr & 8)
 			return false;
-		return psh16(pc), psh(x), psh(a), psh(ccr), ccr |= 8, pc = read16(0x7fa) & 0x7ff, true;
+		return cycle -= cc[0x83], psh16(pc), psh(x), psh(a), psh(ccr), ccr |= 8, pc = read16(0x7fa) & 0x7ff, true;
 	}
 
 	bool interrupt(int intvec) {
 		if (!Cpu::interrupt() || ccr & 8)
 			return false;
-		psh16(pc), psh(x), psh(a), psh(ccr), ccr |= 8;
+		cycle -= cc[0x83], psh16(pc), psh(x), psh(a), psh(ccr), ccr |= 8;
 		switch (intvec) {
 		case MC6805_TIMER:
 			return pc = read16(0x7f8) & 0x7ff, true;
@@ -51,10 +52,10 @@ struct MC6805 : Cpu {
 		}
 	}
 
-	void _execute() {
-		int ea;
-
-		switch (fetch()) {
+	void _execute() override {
+		int ea, op = fetch();
+		cycle -= cc[op];
+		switch (op) {
 		case 0x00: // BRSET0
 			return bcc(((ccr = ccr & ~1 | read(fetch()) & 1) & 1) != 0);
 		case 0x01: // BRCLR0
@@ -580,7 +581,7 @@ struct MC6805 : Cpu {
 		h = v >> 8, l = v & 0xff;
 	}
 
-	int fetch() {
+	int fetch() override {
 		Page& page = memorymap[pc >> 8];
 		const int data = !page.fetch ? page.base[pc & 0xff] : page.fetch(pc);
 		return pc = pc + 1 & 0x7ff, data;

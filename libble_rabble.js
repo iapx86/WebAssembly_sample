@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/libble_rabble.wasm.js';
+import {archive} from './dist/libble_rabble.wasm.js';
 
 read('liblrabl.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['5b.rom', '5c.rom'].map(e => zip.decompress(e)));
@@ -21,5 +21,6 @@ read('liblrabl.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const BGCOLOR = zip.decompress('lr1-5.5l');
 	const OBJCOLOR = zip.decompress('lr1-6.2p');
 	const SND = zip.decompress('lr1-4.3d');
+	const bufferSource = new Zlib.Unzip(archive).decompress('libble_rabble.wasm');
 	return init(bufferSource, {PRG1, PRG2, PRG3, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR, SND});
 });

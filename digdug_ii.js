@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/digdug_ii.wasm.js';
+import {archive} from './dist/digdug_ii.wasm.js';
 
 read('digdug2.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['d23_3.1d', 'd23_1.1b'].map(e => zip.decompress(e)));
@@ -16,5 +16,6 @@ read('digdug2.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(
 	const BGCOLOR = zip.decompress('d21-6.4c');
 	const OBJCOLOR = zip.decompress('d21-7.5k');
 	const SND = zip.decompress('d21-3.3m');
+	const bufferSource = new Zlib.Unzip(archive).decompress('digdug_ii.wasm');
 	return init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2});
 });

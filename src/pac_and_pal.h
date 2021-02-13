@@ -54,7 +54,6 @@ struct PacAndPal {
 	bool fPortTest = false;
 	bool fInterruptEnable0 = false;
 	bool fInterruptEnable1 = false;
-//	bool fSoundEnable = false;
 	array<uint8_t, 0x2000> ram = {};
 	array<uint8_t, 0x40> port = {};
 	array<uint8_t, 10> in = {};
@@ -66,7 +65,7 @@ struct PacAndPal {
 
 	MC6809 cpu, cpu2;
 
-	PacAndPal() {
+	PacAndPal() : cpu(18432000 / 12), cpu2(18432000 / 12) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x20; i++) {
 			cpu.memorymap[i].base = &ram[i << 8];
@@ -90,10 +89,10 @@ struct PacAndPal {
 				return void(fInterruptEnable0 = false);
 			case 0x03: // INTERRUPT START
 				return void(fInterruptEnable0 = true);
-//			case 0x06: // SND STOP
-//				return void(fSoundEnable = false);
-//			case 0x07: // SND START
-//				return void(fSoundEnable = true);
+			case 0x06: // SND STOP
+				return sound0->control(false);
+			case 0x07: // SND START
+				return sound0->control(true);
 			case 0x08: // PORT TEST START
 				return void(fPortTest = true);
 			case 0x09: // PORT TEST END
@@ -125,13 +124,15 @@ struct PacAndPal {
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
-	PacAndPal *execute() {
-		Cpu *cpus[] = {&cpu, &cpu2};
-//		sound0->mute(!fSoundEnable);
+	PacAndPal *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
 		fInterruptEnable0 && cpu.interrupt(), fInterruptEnable1 && cpu2.interrupt();
-		Cpu::multiple_execute(2, cpus, 0x2000);
-		if (fInterruptEnable0)
-			Cpu::multiple_execute(2, cpus, 0x2000);
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
+		}
 		return this;
 	}
 
@@ -209,7 +210,6 @@ struct PacAndPal {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
-//			fSoundEnable = false;
 			cpu.reset();
 			cpu2.disable();
 		}
@@ -500,7 +500,7 @@ struct PacAndPal {
 	}
 
 	static void init(int rate) {
-		sound0 = new MappySound(SND, rate);
+		sound0 = new MappySound(SND);
 	}
 };
 

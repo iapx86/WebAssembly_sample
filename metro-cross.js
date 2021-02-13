@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/metro-cross.wasm.js';
+import {archive} from './dist/metro-cross.wasm.js';
 
 read('metrocrs.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['mc1-3.9c', 'mc1-1.9a', 'mc1-2.9b'].map(e => zip.decompress(e)));
@@ -16,5 +16,6 @@ read('metrocrs.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const OBJ = Uint8Array.concat(...['mc1-8.8k', 'mc1-9.8l'].map(e => zip.decompress(e)));
 	const GREEN = zip.decompress('mc1-1.1n');
 	const RED = zip.decompress('mc1-2.2m');
+	const bufferSource = new Zlib.Unzip(archive).decompress('metro-cross.wasm');
 	return init(bufferSource, {PRG1, PRG2, PRG2I, FG, BG, OBJ, GREEN, RED});
 });

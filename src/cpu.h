@@ -43,8 +43,13 @@ struct Cpu {
 	BreakpointHandler breakpoint = nullptr;
 	UndefHandler undef = nullptr;
 	int undefsize = 0;
+	int clock = 0;
+	int frac = 0;
+	int cycle = 0;
 
-	Cpu() {}
+	Cpu(int clock = 0) {
+		this->clock = clock;
+	}
 
 	void set_breakpoint(int addr) {
 		breakpointmap[addr >> 5] |= 1 << (addr & 0x1f);
@@ -62,6 +67,8 @@ struct Cpu {
 	virtual void reset() {
 		fActive = true;
 		fSuspend = false;
+		frac = 0;
+		cycle = 0;
 	}
 
 	void enable() {
@@ -91,27 +98,26 @@ struct Cpu {
 		return true;
 	}
 
-	static void multiple_execute(int n, Cpu **cpu, int count) {
-		for (int i = 0; i < count; i++)
-			for (int j = 0; j < n; j++) {
-				if (!cpu[j]->fActive || cpu[j]->check_interrupt && cpu[j]->check_interrupt() || cpu[j]->fSuspend)
-					continue;
-				if (cpu[j]->breakpoint && cpu[j]->breakpointmap[cpu[j]->pc >> 5] >> (cpu[j]->pc & 0x1f) & 1)
-					cpu[j]->breakpoint(cpu[j]->pc);
-				cpu[j]->_execute();
-			}
-	}
-
-	void execute(int count) {
-		for (int i = 0; i < count; i++) {
-			if (!fActive)
-				break;
-			if (check_interrupt && check_interrupt() || fSuspend)
+	void execute(int rate) {
+		if (!fActive)
+			return;
+		for (cycle += (frac += clock) / rate, frac %= rate; cycle > 0;) {
+			if (check_interrupt && check_interrupt())
 				continue;
-			if (breakpoint && breakpointmap[pc >> 5] >> (pc & 0x1f) & 1)
+			if (fSuspend)
+				return void(cycle = 0);
+			if (breakpoint && breakpointmap[pc >> 5] >> (pc & 31) & 1)
 				breakpoint(pc);
 			_execute();
 		}
+	}
+
+	void execute1() {
+		if (!fActive || check_interrupt && check_interrupt() || fSuspend)
+			return;
+		if (breakpoint && breakpointmap[pc >> 5] >> (pc & 31) & 1)
+			breakpoint(pc);
+		_execute();
 	}
 
 	virtual void _execute() = 0;
@@ -123,7 +129,7 @@ struct Cpu {
 		return pc = pc + 1 & 0xffff, data;
 	}
 
-	int read(int addr) {
+	virtual int read(int addr) {
 		Page& page = memorymap[addr >> 8];
 		return !page.read ? page.base[addr & 0xff] : page.read(addr);
 	}

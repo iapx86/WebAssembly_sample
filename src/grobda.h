@@ -9,10 +9,8 @@
 
 #include <algorithm>
 #include <array>
-#include <vector>
 #include "mc6809.h"
 #include "mappy_sound.h"
-#include "sound_effect.h"
 #include "utils.h"
 using namespace std;
 
@@ -32,7 +30,6 @@ struct Grobda {
 	static array<uint8_t, 0x20> RGB;
 	static array<uint8_t, 0x6000> PRG1;
 	static array<uint8_t, 0x2000> PRG2;
-	static vector<short> GETREADY;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 288;
@@ -43,7 +40,6 @@ struct Grobda {
 	static const bool rotate = false;
 
 	static MappySound *sound0;
-	static SoundEffect *sound1;
 
 	bool fReset = false;
 	bool fTest = false;
@@ -60,7 +56,6 @@ struct Grobda {
 	bool fPortTest = false;
 	bool fInterruptEnable0 = false;
 	bool fInterruptEnable1 = false;
-//	bool fSoundEnable = false;
 	array<uint8_t, 0x2000> ram = {};
 	array<uint8_t, 0x40> port = {};
 	array<uint8_t, 10> in = {0, 0, 0, 0, 0, 0, 6, 3, 0, 0};
@@ -71,11 +66,9 @@ struct Grobda {
 	array<uint8_t, 0x100> bgcolor;
 	array<int, 0x20> rgb;
 
-	vector<SE> se;
-
 	MC6809 cpu, cpu2;
 
-	Grobda() {
+	Grobda() : cpu(18432000 / 12), cpu2(18432000 / 12) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x20; i++) {
 			cpu.memorymap[i].base = &ram[i << 8];
@@ -100,9 +93,9 @@ struct Grobda {
 			case 0x03: // INTERRUPT START
 				return void(fInterruptEnable0 = true);
 			case 0x06: // SND STOP
-				return /* fSoundEnable = false, */ void(se[0].stop = true);
-//			case 0x07: // SND START
-//				return void(fSoundEnable = true);
+				return sound0->control(false);
+			case 0x07: // SND START
+				return sound0->control(true);
 			case 0x08: // PORT TEST START
 				return void(fPortTest = true);
 			case 0x09: // PORT TEST END
@@ -124,9 +117,6 @@ struct Grobda {
 		for (int i = 0; i < 0x20; i++)
 			cpu2.memorymap[0xe0 + i].base = &PRG2[i << 8];
 
-		cpu2.breakpoint = [&](int addr) { addr == 0xea2c && (se[0].start = se[0].stop = true); };
-		cpu2.set_breakpoint(0xea2c); // Get Ready
-
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
 		convertGFX(&bg[0], &BG[0], 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
@@ -135,18 +125,17 @@ struct Grobda {
 			bgcolor[i] = 0x10 | ~BGCOLOR[i] & 0xf;
 		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
-
-		// 効果音の初期化
-		convertGETREADY();
-		se.resize(1);
-		se[0].freq = 14800, se[0].buf = GETREADY;
 	}
 
-	Grobda *execute() {
-		Cpu *cpus[] = {&cpu, &cpu2};
-//		sound0->mute(!fSoundEnable);
+	Grobda *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
 		fInterruptEnable0 && cpu.interrupt(), fInterruptEnable1 && cpu2.interrupt();
-		Cpu::multiple_execute(2, cpus, 0x2000);
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
+		}
 		return this;
 	}
 
@@ -220,8 +209,6 @@ struct Grobda {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
-			se[0].stop = true;
-//			fSoundEnable = false;
 			cpu.reset();
 			cpu2.disable();
 		}
@@ -289,29 +276,6 @@ struct Grobda {
 
 	void triggerB(bool fDown) {
 		in[8] = in[8] & ~(1 << 0) | fDown << 0;
-	}
-
-	static void convertGETREADY() {
-		static bool converted = false;
-		if (converted)
-			return;
-		int k = 0x0a6c;
-		int i = 0;
-		while (PRG2[k]) {
-			if (PRG2[k] == 7) {
-				int m = ((PRG2[k++] & 0xf) - 8) * 3 << 9;
-				for (int j = 0; j < 13; j++)
-					GETREADY[i++] = m;
-			} else {
-				int m = ((PRG2[k] & 0xf) - 8) * 3 << 9;
-				for (int j = 0; j < 4; j++)
-					GETREADY[i++] = m;
-				m = ((PRG2[k++] >> 4) - 8) * 3 << 9;
-				for (int j = 0; j < 3; j++)
-					GETREADY[i++] = m;
-			}
-		}
-		converted = true;
 	}
 
 	void makeBitmap(int *data) {
@@ -553,9 +517,8 @@ struct Grobda {
 					data[dst] = px;
 	}
 
-	void init(int rate) {
-		sound0 = new MappySound(SND, rate);
-		sound1 = new SoundEffect(se, rate);
+	static void init(int rate) {
+		sound0 = new MappySound(SND);
 	}
 };
 

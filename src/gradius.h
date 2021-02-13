@@ -9,12 +9,13 @@
 
 #include <algorithm>
 #include <array>
-#include <list>
+#include <functional>
 #include "mc68000.h"
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "k005289.h"
 #include "vlm5030.h"
+#include "utils.h"
 using namespace std;
 
 enum {
@@ -69,9 +70,8 @@ struct Gradius {
 		int freq1 = 0;
 	} scc;
 	int vlm_latch = 0;
-	int count = 0;
-	int timer = 0;
-	list<int> command;
+	int command = 0;
+	bool cpu2_irq = false;
 
 	array<uint8_t, 0x20000> chr = {};
 	array<int, 0x800> rgb;
@@ -80,8 +80,26 @@ struct Gradius {
 
 	MC68000 cpu;
 	Z80 cpu2;
+	struct {
+		int rate = 256 * 60;
+		int frac = 0;
+		int count = 0;
+		void execute(int rate, function<void(int)> fn) {
+			for (frac += this->rate; frac >= rate; frac -= rate)
+				fn(count = count + 1 & 255);
+		}
+	} scanline;
+	struct {
+		double rate = 14318180.0 / 4096;
+		double frac = 0;
+		int count = 0;
+		void execute(double rate, double rate_correction, function<void(int)> fn) {
+			for (frac += this->rate * rate_correction; frac >= rate; frac -= rate)
+				fn(count = count + 1 & 255);
+		}
+	} timer;
 
-	Gradius() {
+	Gradius() : cpu(18432000 / 2), cpu2(14318180 / 8) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x100; i++)
 			cpu.memorymap[i].base = &PRG1[i << 8];
@@ -113,7 +131,7 @@ struct Gradius {
 				rgb[offset >> 1] = 0xff000000 | intensity[data >> 10 & 31] << 16 | intensity[data >> 5 & 31] << 8 | intensity[data & 31];
 			};
 		}
-		cpu.memorymap[0x5c0].write = [&](int addr, int data) { if (addr == 0x5c001) command.push_back(data); };
+		cpu.memorymap[0x5c0].write = [&](int addr, int data) { addr == 0x5c001 && (command = data); };
 		cpu.memorymap[0x5c4].read = [&](int addr) { return addr >= 0x5c402 && addr < 0x5c408 ? in[addr - 0x5c402 >> 1] : 0xff; };
 		cpu.memorymap[0x5cc].read = [&](int addr) { return addr < 0x5cc06 ? in[addr - 0x5cc00 + 6 >> 1] : 0xff; };
 		cpu.memorymap[0x5d0].read = [&](int addr) { return addr == 0x5d001 ? 0 : 0xff; };
@@ -121,6 +139,8 @@ struct Gradius {
 			switch (addr & 0xff) {
 			case 1:
 				return void(fInterrupt2Enable = (data & 1) != 0);
+			case 4:
+				return void(data & 1 && (cpu2_irq = true));
 			case 5:
 				return void(flip = flip & 2 | data & 1);
 			case 7:
@@ -151,10 +171,9 @@ struct Gradius {
 			cpu2.memorymap[0xc0 + i].write = [&](int addr, int data) { scc.freq1 = ~addr & 0xfff; };
 		}
 		cpu2.memorymap[0xe0].read = [&](int addr) {
-			int data;
 			switch (addr & 0xff) {
 			case 1:
-				return !command.empty() ? (data = command.front(), command.pop_front(), data) : 0xff;
+				return command;
 			case 0x86:
 				return sound0->read(psg[0].addr);
 			}
@@ -165,9 +184,9 @@ struct Gradius {
 			case 0:
 				return void(vlm_latch = data);
 			case 3:
-				return sound2->write(2, scc.freq0, count);
+				return sound2->write(2, scc.freq0);
 			case 4:
-				return sound2->write(3, scc.freq1, count);
+				return sound2->write(3, scc.freq1);
 			case 5:
 				return void(psg[1].addr = data);
 			case 6:
@@ -178,16 +197,18 @@ struct Gradius {
 		};
 		cpu2.memorymap[0xe1].write = [&](int addr, int data) {
 			if (addr == 0xe106 && psg[0].addr != 0xe)
-				sound0->write(psg[0].addr, data, count);
+				sound0->write(psg[0].addr, data);
 		};
 		cpu2.memorymap[0xe2].read = [&](int addr) { return addr == 0xe205 ? sound1->read(psg[1].addr) : 0xff; };
 		cpu2.memorymap[0xe4].write = [&](int addr, int data) {
 			if (addr == 0xe405) {
 				if ((psg[1].addr & 0xe) == 0xe)
-					sound2->write(psg[1].addr & 1, data, count);
-				sound1->write(psg[1].addr, data, count);
+					sound2->write(psg[1].addr & 1, data);
+				sound1->write(psg[1].addr, data);
 			}
 		};
+
+		cpu2.check_interrupt = [&]() { return cpu2_irq && cpu2.interrupt() && (cpu2_irq = false, true); };
 
 		// Videoの初期化
 		rgb.fill(0xff000000);
@@ -207,17 +228,21 @@ struct Gradius {
 			intensity[i] = (_intensity[i] - black) * white + 0.5;
 	}
 
-	Gradius *execute() {
-		for (int vpos = 0; vpos < 256; vpos++) {
-			!vpos && fInterrupt2Enable && cpu.interrupt(2);
-			vpos == 120 && fInterrupt4Enable && cpu.interrupt(4);
-			cpu.execute(64);
-		}
-		for (count = 0; count < 58; count++) { // 14318180 / 4 / 60 / 1024
-			!command.empty() && cpu2.interrupt();
-			sound0->write(0x0e, timer & 0x2f | sound3->BSY << 5 | 0xd0);
-			cpu2.execute(146);
-			timer = timer + 1 & 0xff;
+	Gradius *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			scanline.execute(tick_rate, [&](int cnt) {
+				const int vpos = cnt + 240 & 0xff;
+				vpos == 0 && fInterrupt2Enable && cpu.interrupt(2);
+				vpos == 120 && fInterrupt4Enable && cpu.interrupt(4);
+			});
+			timer.execute(tick_rate, rate_correction, [&](int cnt) { sound0->write(0xe, cnt & 0x2f | sound3->BSY << 5 | 0xd0); });
+			sound0->execute(tick_rate, rate_correction);
+			sound1->execute(tick_rate, rate_correction);
+			sound2->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
 		}
 		cpu2.non_maskable_interrupt();
 		return this;
@@ -287,9 +312,8 @@ struct Gradius {
 			fInterrupt2Enable = false;
 			fInterrupt4Enable = false;
 			cpu.reset();
-			command.clear();
+			cpu2_irq = false;
 			cpu2.reset();
-			timer = 0;
 		}
 		return this;
 	}
@@ -604,10 +628,10 @@ struct Gradius {
 	}
 
 	void init(int rate) {
-		sound0 = new AY_3_8910(14318180 / 8, rate, 58, 0.3);
-		sound1 = new AY_3_8910(14318180 / 8, rate, 58, 0.3);
-		sound2 = new K005289(SND, 14318180 / 4, rate, 58, 0.3);
-		sound3 = new VLM5030(vlm, 14318180 / 4, rate, 5);
+		sound0 = new AY_3_8910(14318180.0 / 8, 0.3);
+		sound1 = new AY_3_8910(14318180.0 / 8, 0.3);
+		sound2 = new K005289(SND, 14318180.0 / 4, 0.3);
+		sound3 = new VLM5030(vlm, 14318180.0 / 4, rate, 5);
 		Z80::init();
 	}
 };

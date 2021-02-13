@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 #include "z80.h"
 #include "mb8840.h"
 #include "pac-man_sound.h"
@@ -61,11 +62,9 @@ struct DigDug {
 	bool fInterruptEnable0 = false;
 	bool fInterruptEnable1 = false;
 	bool fInterruptEnable2 = false;
-	bool fNmiEnable = false;
+	int fNmiEnable = 0;
 	array<uint8_t, 0x2000> ram = RAM;
 	array<uint8_t, 0x100> mmi;
-	array<uint8_t, 0x100> mmo = {};
-	int count = 0;
 	int dmactrl = 0;
 	array<uint8_t, 0x100> ioport = {};
 
@@ -82,9 +81,19 @@ struct DigDug {
 
 	array<Z80, 3> cpu;
 	MB8840 mcu;
+	struct {
+		int rate = 18432000 / 384;
+		int frac = 0;
+		int count = 0;
+		void execute(int rate, function<void(int)> fn) {
+			for (frac += this->rate; frac >= rate; frac -= rate)
+				fn(count = (count + 1) % this->rate);
+		}
+	} timer;
 
 	DigDug() {
 		// CPU周りの初期化
+		cpu[0].clock = cpu[1].clock = cpu[2].clock = 18432000 / 6;
 		mmi.fill(0xff);
 
 		auto range = [](int page, int start, int end, int mirror = 0) { return (page & ~mirror) >= start && (page & ~mirror) <= end; };
@@ -102,7 +111,7 @@ struct DigDug {
 					switch (addr & 0xf0) {
 					case 0x00:
 					case 0x10:
-						return sound0->write(addr, data, count);
+						return sound0->write(addr, data);
 					case 0x20:
 						switch (addr & 0x0f) {
 						case 0:
@@ -110,7 +119,7 @@ struct DigDug {
 						case 1:
 							return void(fInterruptEnable1 = (data & 1) != 0);
 						case 2:
-							return mmo[0x22] && !data && (fInterruptEnable2 = true), void(mmo[0x22] = data);
+							return void(fInterruptEnable2 = !(data & 1));
 						case 3:
 							return data & 1 ? (cpu[1].enable(), cpu[2].enable()) : (cpu[1].disable(), cpu[2].disable());
 						}
@@ -132,7 +141,7 @@ struct DigDug {
 			} else if (range(page, 0x71, 0x71)) {
 				cpu[0].memorymap[page].read = [&](int addr) { return dmactrl; };
 				cpu[0].memorymap[page].write = [&](int addr, int data) {
-					fNmiEnable = (data & 0xe0) != 0;
+					fNmiEnable = 2 << (data >> 5) & ~3;
 					switch (dmactrl = data) {
 					case 0x71:
 					case 0xb1:
@@ -204,13 +213,18 @@ struct DigDug {
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
-	DigDug *execute() {
-		Cpu *cpus[] = {&cpu[0], &cpu[1], &cpu[2]};
+	DigDug *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
 		fInterruptEnable0 && cpu[0].interrupt(), fInterruptEnable1 && cpu[1].interrupt();
-		for (count = 0; count < 2; count++) {
-			fInterruptEnable2 && (fInterruptEnable2 = false, cpu[2].non_maskable_interrupt());
-			for (int i = 128; i != 0; --i)
-				fNmiEnable && cpu[0].non_maskable_interrupt(), Cpu::multiple_execute(3, cpus, 32);
+		for (int i = 0; i < tick_max; i++) {
+			for (int j = 0; j < 3; j++)
+				cpu[j].execute(tick_rate);
+			timer.execute(tick_rate, [&](int cnt) {
+				fNmiEnable && !--fNmiEnable && (fNmiEnable = 2 << (dmactrl >> 5), cpu[0].non_maskable_interrupt());
+				!(cnt % (timer.rate / 120)) && fInterruptEnable2 && cpu[2].non_maskable_interrupt();
+			});
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
 		}
 		return this;
 	}
@@ -295,6 +309,7 @@ struct DigDug {
 		if (fReset) {
 			fReset = false;
 			fInterruptEnable0 = fInterruptEnable1 = fInterruptEnable2 = false;
+			fNmiEnable = 0;
 			cpu[0].reset();
 			cpu[1].disable();
 			cpu[2].disable();
@@ -931,7 +946,7 @@ struct DigDug {
 	}
 
 	static void init(int rate) {
-		sound0 = new PacManSound(SND, rate, 2);
+		sound0 = new PacManSound(SND);
 		Z80::init();
 	}
 };

@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/phozon.wasm.js';
+import {archive} from './dist/phozon.wasm.js';
 
 read('phozon.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['6e.rom', '6h.rom', '6c.rom', '6d.rom'].map(e => zip.decompress(e)));
@@ -19,5 +19,6 @@ read('phozon.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(z
 	const BGCOLOR = zip.decompress('chr.prm');
 	const OBJCOLOR = zip.decompress('sprite.prm');
 	const SND = zip.decompress('sound.prm');
+	const bufferSource = new Zlib.Unzip(archive).decompress('phozon.wasm');
 	return init(bufferSource, {PRG1, PRG2, PRG3, RED, BLUE, GREEN, SND, BG, BGCOLOR, OBJ, OBJCOLOR});
 });

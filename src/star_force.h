@@ -60,8 +60,6 @@ struct StarForce {
 	array<uint8_t, 0x3c00> ram = {};
 	array<uint8_t, 0x400> ram2 = {};
 	array<uint8_t, 6> in = {0, 0, 0, 0, 0xc0, 0};
-	int count = 0;
-	int timer = 0;
 	bool cpu_irq = false;
 	int cpu2_command = 0;
 	struct {
@@ -82,8 +80,9 @@ struct StarForce {
 	array<int, 0x200> rgb;
 
 	Z80 cpu, cpu2;
+	DoubleTimer timer;
 
-	StarForce() {
+	StarForce() : cpu(4000000), cpu2(2000000), timer(2000000 / 2048 / 11) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x80; i++)
 			cpu.memorymap[i].base = &PRG1[i << 8];
@@ -97,7 +96,7 @@ struct StarForce {
 			case 2:
 				return void(cpu_irq = false);
 			case 4:
-				return cpu2_command = data, void(pio.irq = pio.fInterruptEnable);
+				return pio.irq = pio.fInterruptEnable, void(cpu2_command = data);
 			}
 		};
 
@@ -109,10 +108,10 @@ struct StarForce {
 			cpu2.memorymap[0x40 + i].base = &ram2[i << 8];
 			cpu2.memorymap[0x40 + i].write = nullptr;
 		}
-		cpu2.memorymap[0x80].write = [&](int addr, int data) { sound0->write(data, count); };
-		cpu2.memorymap[0x90].write = [&](int addr, int data) { sound1->write(data, count); };
-		cpu2.memorymap[0xa0].write = [&](int addr, int data) { sound2->write(data, count); };
-		cpu2.memorymap[0xd0].write = [&](int addr, int data) { sound3->write(1, data & 15, count); };
+		cpu2.memorymap[0x80].write = [&](int addr, int data) { sound0->write(data); };
+		cpu2.memorymap[0x90].write = [&](int addr, int data) { sound1->write(data); };
+		cpu2.memorymap[0xa0].write = [&](int addr, int data) { sound2->write(data); };
+		cpu2.memorymap[0xd0].write = [&](int addr, int data) { sound3->write(1, data & 15); };
 		for (int i = 0; i < 0x100; i++) {
 			cpu2.iomap[i].read = [&](int addr) { return addr & 0xff ? 0xff : cpu2_command; };
 			cpu2.iomap[i].write = [&](int addr, int data) {
@@ -123,7 +122,7 @@ struct StarForce {
 					return void(data == 0xd7 && (ctc.fInterruptEnable = true));
 				case 0xa:
 					if (ctc.cmd & 4) {
-						sound3->write(0, (data ? data : 256) * (ctc.cmd & 0x20 ? 16 : 1), count);
+						sound3->write(0, (data ? data : 256) * (ctc.cmd & 0x20 ? 16 : 1));
 						ctc.cmd &= ~4;
 					} else if (data & 1)
 						ctc.cmd = data;
@@ -149,13 +148,20 @@ struct StarForce {
 		convertGFX(&obj[0], &OBJ[0], 512, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x20000, 0x40000}, 32);
 	}
 
-	StarForce *execute() {
-		Cpu *cpus[] = {&cpu, &cpu2};
+	StarForce *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
 		cpu_irq = true;
-		for (count = 0; count < 3; count++) {
-			!timer && (ctc.irq = ctc.fInterruptEnable);
-			Cpu::multiple_execute(2, cpus, 0x800);
-			++timer >= 2 && (timer = 0);
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			timer.execute(tick_rate, 1, [&]() {
+				ctc.irq = ctc.fInterruptEnable;
+			});
+			sound0->execute(tick_rate, rate_correction);
+			sound1->execute(tick_rate, rate_correction);
+			sound2->execute(tick_rate, rate_correction);
+			sound3->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
 		}
 		return this;
 	}
@@ -239,14 +245,14 @@ struct StarForce {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
-			cpu.reset();
 			cpu_irq = false;
-			cpu2.reset();
-			timer = 0;
+			cpu.reset();
 			pio.irq = false;
 			pio.fInterruptEnable = false;
 			ctc.irq = false;
 			ctc.fInterruptEnable = false;
+			ctc.cmd = 0;
+			cpu2.reset();
 		}
 		return this;
 	}
@@ -568,10 +574,10 @@ struct StarForce {
 	}
 
 	static void init(int rate) {
-		sound0 = new SN76489(2000000, rate, 3);
-		sound1 = new SN76489(2000000, rate, 3);
-		sound2 = new SN76489(2000000, rate, 3);
-		sound3 = new SenjyoSound(SND, 2000000, rate, 3);
+		sound0 = new SN76489(2000000);
+		sound1 = new SN76489(2000000);
+		sound2 = new SN76489(2000000);
+		sound3 = new SenjyoSound(SND, 2000000, rate);
 		Z80::init();
 	}
 };

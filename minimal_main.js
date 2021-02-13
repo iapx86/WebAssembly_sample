@@ -12,7 +12,7 @@
 })();
 
 export function init(bufferSource, roms) {
-	const importObject = {wasi_snapshot_preview1: {fd_write: () => {}, proc_exit: () => {}, fd_seek: () => {}, fd_close: () => {}}};
+	const importObject = {wasi_snapshot_preview1: {fd_write: () => 0, proc_exit: () => {}, fd_seek: () => 0, fd_close: () => 0}};
 	return WebAssembly.instantiate(bufferSource, importObject).then(({instance}) => {
 		const memory = instance.exports.memory.buffer, view = new DataView(memory);
 		instance.exports._initialize();
@@ -70,12 +70,12 @@ export function init(bufferSource, roms) {
 			}
 		});
 		canvas.addEventListener('click', () => void('coin' in instance.exports && instance.exports.coin()));
-		void function loop() {
-			instance.exports.update();
-			const data = new Uint8ClampedArray(memory, instance.exports.render(), game.width * game.height * 4);
+		requestAnimationFrame(function loop() {
+			const data = new Uint8ClampedArray(memory, instance.exports.render(Date.now(), 1), game.width * game.height * 4);
+			instance.exports.sound();
 			canvas.getContext('2d').putImageData(new ImageData(data, game.width, game.height), -game.xOffset, -game.yOffset);
 			requestAnimationFrame(loop);
-		}();
+		});
 		return instance;
 	});
 }

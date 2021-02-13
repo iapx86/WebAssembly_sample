@@ -63,7 +63,7 @@ struct ZigZag {
 
 	Z80 cpu;
 
-	ZigZag() {
+	ZigZag() : cpu(18432000 / 6) {
 		// CPU周りの初期化
 		auto range = [](int page, int start, int end, int mirror = 0) { return (page & ~mirror) >= start && (page & ~mirror) <= end; };
 
@@ -130,8 +130,14 @@ struct ZigZag {
 		initializeStar();
 	}
 
-	ZigZag *execute() {
-		fInterruptEnable && cpu.non_maskable_interrupt(), cpu.execute(0x1600);
+	ZigZag *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
+		fInterruptEnable && cpu.non_maskable_interrupt();
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
+		}
 		moveStars();
 		return this;
 	}
@@ -430,7 +436,7 @@ struct ZigZag {
 	}
 
 	static void init(int rate) {
-		sound0 = new AY_3_8910(1843200, rate);
+		sound0 = new AY_3_8910(18432000 / 6);
 		Z80::init();
 	}
 };

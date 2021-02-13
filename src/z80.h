@@ -11,6 +11,7 @@
 
 struct Z80 : Cpu {
 	static int fLogic[0x100];
+	static const unsigned char cc_op[0x100], cc_cb[0x100], cc_ed[0x100], cc_xy[0x100], cc_xycb[0x100], cc_ex[0x100];
 	int b = 0;
 	int c = 0;
 	int d = 0;
@@ -38,26 +39,27 @@ struct Z80 : Cpu {
 	int sp = 0;
 	Page iomap[0x100];
 
-	Z80() {}
+	Z80(int clock = 0) : Cpu(clock) {}
 
-	void reset() {
+	void reset() override {
 		Cpu::reset();
 		iff = 0;
 		im = 0;
-		sp = 0;
 		pc = 0;
+		i = 0;
+		r = 0;
 	}
 
-	bool interrupt() {
+	bool interrupt() override {
 		if (!Cpu::interrupt() || iff != 3)
 			return false;
 		iff = 0;
 		switch (im) {
 		case 0:
 		case 1:
-			return rst(0x38), true;
+			return cycle -= cc_op[0xff] + cc_ex[0xff], rst(0x38), true;
 		case 2:
-			return rst(read16(0xff | i << 8)), true;
+			return cycle -= cc_op[0xcd] + cc_ex[0xff], rst(read16(0xff | i << 8)), true;
 		}
 		return true;
 	}
@@ -68,6 +70,7 @@ struct Z80 : Cpu {
 		iff = 0;
 		switch (im) {
 		case 0:
+			cycle -= cc_op[intvec] + cc_ex[0xff];
 			switch (intvec) {
 			case 0xc7: // RST 00h
 				return rst(0x00), true;
@@ -88,9 +91,9 @@ struct Z80 : Cpu {
 			}
 			break;
 		case 1:
-			return rst(0x38), true;
+			return cycle -= cc_op[0xff] + cc_ex[0xff], rst(0x38), true;
 		case 2:
-			return rst(read16(intvec & 0xff | i << 8)), true;
+			return cycle -= cc_op[0xcd] + cc_ex[0xff], rst(read16(intvec & 0xff | i << 8)), true;
 		}
 		return true;
 	}
@@ -98,14 +101,13 @@ struct Z80 : Cpu {
 	bool non_maskable_interrupt() {
 		if (!Cpu::interrupt())
 			return false;
-		return iff &= 2, rst(0x66), true;
+		return cycle -= 11, iff &= 2, rst(0x66), true;
 	}
 
-	void _execute() {
-		int v;
-
-		r = r + 1 & 0x7f;
-		switch (fetch()) {
+	void _execute() override {
+		int v, op = fetchM1();
+		cycle -= cc_op[op], r = r & 0x80 | r + 1 & 0x7f;
+		switch (op) {
 		case 0x00: // NOP
 			return;
 		case 0x01: // LD BC,nn
@@ -121,7 +123,7 @@ struct Z80 : Cpu {
 		case 0x06: // LD B,n
 			return void(b = fetch());
 		case 0x07: // RLCA
-			return f = f & ~0x13 | a >> 7, void(a = a << 1 & 0xff | a >> 7);
+			return f = f & ~0x13 | a >> 7, void(a = a << 1 & 0xfe | a >> 7);
 		case 0x08: // EX AF,AF'
 			return ex(f, a, f_prime, a_prime);
 		case 0x09: // ADD HL,BC
@@ -137,9 +139,9 @@ struct Z80 : Cpu {
 		case 0x0e: // LD C,n
 			return void(c = fetch());
 		case 0x0f: // RRCA
-			return f = f & ~0x13 | a & 1, void(a = a >> 1 | a << 7 & 0x80);
+			return f = f & ~0x13 | a & 1, void(a = a << 7 & 0x80 | a >> 1);
 		case 0x10: // DJNZ e
-			return jr((b = b - 1 & 0xff) != 0);
+			return (b = b - 1 & 0xff) && (cycle -= cc_ex[0x10]), jr(b != 0);
 		case 0x11: // LD DE,nn
 			return split(e, d, fetch16());
 		case 0x12: // LD (DE),A
@@ -153,7 +155,7 @@ struct Z80 : Cpu {
 		case 0x16: // LD D,n
 			return void(d = fetch());
 		case 0x17: // RLA
-			return v = f, f = f & ~0x13 | a >> 7, void(a = a << 1 & 0xff | v & 1);
+			return v = a << 1 | f & 1, f = f & ~0x13 | v >> 8, void(a = v & 0xff);
 		case 0x18: // JR e
 			return jr(true);
 		case 0x19: // ADD HL,DE
@@ -169,9 +171,9 @@ struct Z80 : Cpu {
 		case 0x1e: // LD E,n
 			return void(e = fetch());
 		case 0x1f: // RRA
-			return v = f, f = f & ~0x13 | a & 1, void(a = a >> 1 | v << 7 & 0x80);
+			return v = f << 8 | a, f = f & ~0x13 | v & 1, void(a = v >> 1 & 0xff);
 		case 0x20: // JR NZ,e
-			return jr(!(f & 0x40));
+			return !(f & 0x40) && (cycle -= cc_ex[0x20]), jr(!(f & 0x40));
 		case 0x21: // LD HL,nn
 			return split(l, h, fetch16());
 		case 0x22: // LD (nn),HL
@@ -187,7 +189,7 @@ struct Z80 : Cpu {
 		case 0x27: // DAA
 			return daa();
 		case 0x28: // JR Z,e
-			return jr((f & 0x40) != 0);
+			return f & 0x40 && (cycle -= cc_ex[0x28]), jr((f & 0x40) != 0);
 		case 0x29: // ADD HL,HL
 			return split(l, h, add16(l | h << 8, l | h << 8));
 		case 0x2a: // LD HL,(nn)
@@ -201,9 +203,9 @@ struct Z80 : Cpu {
 		case 0x2e: // LD L,n
 			return void(l = fetch());
 		case 0x2f: // CPL
-			return f |= 0x12, void(a = ~a & 0xff);
+			return f |= 0x12, void(a ^= 0xff);
 		case 0x30: // JR NC,e
-			return jr(!(f & 1));
+			return !(f & 1) && (cycle -= cc_ex[0x30]), jr(!(f & 1));
 		case 0x31: // LD SP,nn
 			return void(sp = fetch16());
 		case 0x32: // LD (nn),A
@@ -219,7 +221,7 @@ struct Z80 : Cpu {
 		case 0x37: // SCF
 			return void(f = f & ~0x12 | 1);
 		case 0x38: // JR C,e
-			return jr((f & 1) != 0);
+			return f & 1 && (cycle -= cc_ex[0x38]), jr((f & 1) != 0);
 		case 0x39: // ADD HL,SP
 			return split(l, h, add16(l | h << 8, sp));
 		case 0x3a: // LD A,(nn)
@@ -491,7 +493,7 @@ struct Z80 : Cpu {
 		case 0xbf: // CP A
 			return void(sub8(a, a));
 		case 0xc0: // RET NZ
-			return ret(!(f & 0x40));
+			return !(f & 0x40) && (cycle -= cc_ex[0xc0]), ret(!(f & 0x40));
 		case 0xc1: // POP BC
 			return split(c, b, pop16());
 		case 0xc2: // JP NZ,nn
@@ -499,7 +501,7 @@ struct Z80 : Cpu {
 		case 0xc3: // JP nn
 			return jp(true);
 		case 0xc4: // CALL NZ,nn
-			return call(!(f & 0x40));
+			return !(f & 0x40) && (cycle -= cc_ex[0xc4]), call(!(f & 0x40));
 		case 0xc5: // PUSH BC
 			return push16(c | b << 8);
 		case 0xc6: // ADD A,n
@@ -507,7 +509,7 @@ struct Z80 : Cpu {
 		case 0xc7: // RST 00h
 			return rst(0x00);
 		case 0xc8: // RET Z
-			return ret((f & 0x40) != 0);
+			return f & 0x40 && (cycle -= cc_ex[0xc8]), ret((f & 0x40) != 0);
 		case 0xc9: // RET
 			return ret(true);
 		case 0xca: // JP Z,nn
@@ -515,7 +517,7 @@ struct Z80 : Cpu {
 		case 0xcb:
 			return execute_cb();
 		case 0xcc: // CALL Z,nn
-			return call((f & 0x40) != 0);
+			return f & 0x40 && (cycle -= cc_ex[0xcc]), call((f & 0x40) != 0);
 		case 0xcd: // CALL nn
 			return call(true);
 		case 0xce: // ADC A,n
@@ -523,7 +525,7 @@ struct Z80 : Cpu {
 		case 0xcf: // RST 08h
 			return rst(0x08);
 		case 0xd0: // RET NC
-			return ret(!(f & 1));
+			return !(f & 1) && (cycle -= cc_ex[0xd0]), ret(!(f & 1));
 		case 0xd1: // POP DE
 			return split(e, d, pop16());
 		case 0xd2: // JP NC,nn
@@ -531,7 +533,7 @@ struct Z80 : Cpu {
 		case 0xd3: // OUT n,A
 			return iowrite(a, fetch(), a);
 		case 0xd4: // CALL NC,nn
-			return call(!(f & 1));
+			return !(f & 1) && (cycle -= cc_ex[0xd4]), call(!(f & 1));
 		case 0xd5: // PUSH DE
 			return push16(e | d << 8);
 		case 0xd6: // SUB n
@@ -539,7 +541,7 @@ struct Z80 : Cpu {
 		case 0xd7: // RST 10h
 			return rst(0x10);
 		case 0xd8: // RET C
-			return ret((f & 1) != 0);
+			return f & 1 && (cycle -= cc_ex[0xd8]), ret((f & 1) != 0);
 		case 0xd9: // EXX
 			return ex(c, b, c_prime, b_prime), ex(e, d, e_prime, d_prime), ex(l, h, l_prime, h_prime);
 		case 0xda: // JP C,nn
@@ -547,7 +549,7 @@ struct Z80 : Cpu {
 		case 0xdb: // IN A,n
 			return void(a = ioread(a, fetch()));
 		case 0xdc: // CALL C,nn
-			return call((f & 1) != 0);
+			return f & 1 && (cycle -= cc_ex[0xdc]), call((f & 1) != 0);
 		case 0xdd:
 			return execute_dd();
 		case 0xde: // SBC A,n
@@ -555,7 +557,7 @@ struct Z80 : Cpu {
 		case 0xdf: // RST 18h
 			return rst(0x18);
 		case 0xe0: // RET PO
-			return ret(!(f & 4));
+			return !(f & 4) && (cycle -= cc_ex[0xe0]), ret(!(f & 4));
 		case 0xe1: // POP HL
 			return split(l, h, pop16());
 		case 0xe2: // JP PO,nn
@@ -563,7 +565,7 @@ struct Z80 : Cpu {
 		case 0xe3: // EX (SP),HL
 			return v = l | h << 8, split(l, h, pop16()), push16(v);
 		case 0xe4: // CALL PO,nn
-			return call(!(f & 4));
+			return !(f & 4) && (cycle -= cc_ex[0xe4]), call(!(f & 4));
 		case 0xe5: // PUSH HL
 			return push16(l | h << 8);
 		case 0xe6: // AND n
@@ -571,7 +573,7 @@ struct Z80 : Cpu {
 		case 0xe7: // RST 20h
 			return rst(0x20);
 		case 0xe8: // RET PE
-			return ret((f & 4) != 0);
+			return f & 4 && (cycle -= cc_ex[0xe8]), ret((f & 4) != 0);
 		case 0xe9: // JP (HL)
 			return void(pc = l | h << 8);
 		case 0xea: // JP PE,nn
@@ -579,7 +581,7 @@ struct Z80 : Cpu {
 		case 0xeb: // EX DE,HL
 			return ex(e, d, l, h);
 		case 0xec: // CALL PE,nn
-			return call((f & 4) != 0);
+			return f & 4 && (cycle -= cc_ex[0xec]), call((f & 4) != 0);
 		case 0xed:
 			return execute_ed();
 		case 0xee: // XOR n
@@ -587,7 +589,7 @@ struct Z80 : Cpu {
 		case 0xef: // RST 28h
 			return rst(0x28);
 		case 0xf0: // RET P
-			return ret(!(f & 0x80));
+			return !(f & 0x80) && (cycle -= cc_ex[0xf0]), ret(!(f & 0x80));
 		case 0xf1: // POP AF
 			return split(f, a, pop16());
 		case 0xf2: // JP P,nn
@@ -595,7 +597,7 @@ struct Z80 : Cpu {
 		case 0xf3: // DI
 			return void(iff = 0);
 		case 0xf4: // CALL P,nn
-			return call(!(f & 0x80));
+			return !(f & 0x80) && (cycle -= cc_ex[0xf4]), call(!(f & 0x80));
 		case 0xf5: // PUSH AF
 			return push16(f | a << 8);
 		case 0xf6: // OR n
@@ -603,7 +605,7 @@ struct Z80 : Cpu {
 		case 0xf7: // RST 30h
 			return rst(0x30);
 		case 0xf8: // RET M
-			return ret((f & 0x80) != 0);
+			return f & 0x80 && (cycle -= cc_ex[0xf8]), ret((f & 0x80) != 0);
 		case 0xf9: // LD SP,HL
 			return void(sp = l | h << 8);
 		case 0xfa: // JP M,nn
@@ -611,10 +613,10 @@ struct Z80 : Cpu {
 		case 0xfb: // EI
 			return void(iff = 3);
 		case 0xfc: // CALL M,nn
-			return call((f & 0x80) != 0);
+			return f & 0x80 && (cycle -= cc_ex[0xfc]), call((f & 0x80) != 0);
 		case 0xfd:
 			return execute_fd();
-		case 0xfe: // CP A,n
+		case 0xfe: // CP n
 			return void(sub8(a, fetch()));
 		case 0xff: // RST 38h
 			return rst(0x38);
@@ -622,9 +624,9 @@ struct Z80 : Cpu {
 	}
 
 	void execute_cb() {
-		int v;
-
-		switch (fetch()) {
+		int v, op = fetchM1();
+		cycle -= cc_cb[op];
+		switch (op) {
 		case 0x00: // RLC B
 			return void(b = rlc8(b));
 		case 0x01: // RLC C
@@ -1130,9 +1132,9 @@ struct Z80 : Cpu {
 	}
 
 	void execute_dd() {
-		int v;
-
-		switch (fetch()) {
+		int v, op = fetchM1();
+		cycle -= cc_xy[op];
+		switch (op) {
 		case 0x09: // ADD IX,BC
 			return split(ixl, ixh, add16(ixl | ixh << 8, c | b << 8));
 		case 0x19: // ADD IX,DE
@@ -1166,7 +1168,7 @@ struct Z80 : Cpu {
 		case 0x35: // DEC (IX+d)
 			return v = disp(ixh, ixl), write(v, dec8(read(v)));
 		case 0x36: // LD (IX+d),n
-			return write(disp(ixh, ixl), fetch());
+			return v = disp(ixh, ixl), write(v, fetch());
 		case 0x39: // ADD IX,SP
 			return split(ixl, ixh, add16(ixl | ixh << 8, sp));
 		case 0x44: // LD B,IXH (undefined operation)
@@ -1286,8 +1288,8 @@ struct Z80 : Cpu {
 		case 0xbe: // CP (IX+d)
 			return void(sub8(a, read(disp(ixh, ixl))));
 		case 0xcb:
-			v = disp(ixh, ixl);
-			switch (fetch()) {
+			v = disp(ixh, ixl), cycle -= cc_xycb[op = fetch()];
+			switch (op) {
 			case 0x06: // RLC (IX+d)
 				return write(v, rlc8(read(v)));
 			case 0x0e: // RRC (IX+d)
@@ -1375,9 +1377,9 @@ struct Z80 : Cpu {
 	}
 
 	void execute_ed() {
-		int v;
-
-		switch (fetch()) {
+		int v, op = fetchM1();
+		cycle -= cc_ed[op];
+		switch (op) {
 		case 0x40: // IN B,(C)
 			return void(f = f & ~0xd6 | fLogic[b = ioread(b, c)]);
 		case 0x41: // OUT (C),B
@@ -1389,7 +1391,7 @@ struct Z80 : Cpu {
 		case 0x44: // NEG
 			return void(a = neg8(a));
 		case 0x45: // RETN
-			return iff = iff & 2 ? 3 : 0, ret(true);
+			return iff = iff & 2 | iff >> 1, ret(true);
 		case 0x46: // IM 0
 			return void(im = 0);
 		case 0x47: // LD I,A
@@ -1405,7 +1407,7 @@ struct Z80 : Cpu {
 		case 0x4d: // RETI
 			return ret(true);
 		case 0x4f: // LD R,A
-			return void(r = a & 0x7f);
+			return void(r = a);
 		case 0x50: // IN D,(C)
 			return void(f = f & ~0xd6 | fLogic[d = ioread(b, c)]);
 		case 0x51: // OUT (C),D
@@ -1475,21 +1477,21 @@ struct Z80 : Cpu {
 		case 0xab: // OUTD
 			return outd();
 		case 0xb0: // LDIR
-			return ldi(), void(f & 4 && (pc = pc - 2 & 0xffff));
+			return ldi(), void(f & 4 && (cycle -= cc_ex[0xb0], pc = pc - 2 & 0xffff));
 		case 0xb1: // CPIR
-			return cpi(), void((f & 0x44) == 4 && (pc = pc - 2 & 0xffff));
+			return cpi(), void((f & 0x44) == 4 && (cycle -= cc_ex[0xb1], pc = pc - 2 & 0xffff));
 		case 0xb2: // INIR
-			return ini(), void(~f & 0x40 && (pc = pc - 2 & 0xffff));
+			return ini(), void(~f & 0x40 && (cycle -= cc_ex[0xb2], pc = pc - 2 & 0xffff));
 		case 0xb3: // OTIR
-			return outi(), void(~f & 0x40 && (pc = pc - 2 & 0xffff));
+			return outi(), void(~f & 0x40 && (cycle -= cc_ex[0xb3], pc = pc - 2 & 0xffff));
 		case 0xb8: // LDDR
-			return ldd(), void(f & 4 && (pc = pc - 2 & 0xffff));
+			return ldd(), void(f & 4 && (cycle -= cc_ex[0xb8], pc = pc - 2 & 0xffff));
 		case 0xb9: // CPDR
-			return cpd(), void((f & 0x44) == 4 && (pc = pc - 2 & 0xffff));
+			return cpd(), void((f & 0x44) == 4 && (cycle -= cc_ex[0xb9], pc = pc - 2 & 0xffff));
 		case 0xba: // INDR
-			return ind(), void(~f & 0x40 && (pc = pc - 2 & 0xffff));
+			return ind(), void(~f & 0x40 && (cycle -= cc_ex[0xba], pc = pc - 2 & 0xffff));
 		case 0xbb: // OTDR
-			return outd(), void(~f & 0x40 && (pc = pc - 2 & 0xffff));
+			return outd(), void(~f & 0x40 && (cycle -= cc_ex[0xbb], pc = pc - 2 & 0xffff));
 		default:
 			undefsize = 2;
 			if (undef)
@@ -1499,9 +1501,9 @@ struct Z80 : Cpu {
 	}
 
 	void execute_fd() {
-		int v;
-
-		switch (fetch()) {
+		int v, op = fetchM1();
+		cycle -= cc_xy[op];
+		switch (op) {
 		case 0x09: // ADD IY,BC
 			return split(iyl, iyh, add16(iyl | iyh << 8, c | b << 8));
 		case 0x19: // ADD IY,DE
@@ -1535,7 +1537,7 @@ struct Z80 : Cpu {
 		case 0x35: // DEC (IY+d)
 			return v = disp(iyh, iyl), write(v, dec8(read(v)));
 		case 0x36: // LD (IY+d),n
-			return write(disp(iyh, iyl), fetch());
+			return v = disp(iyh, iyl), write(v, fetch());
 		case 0x39: // ADD IY,SP
 			return split(iyl, iyh, add16(iyl | iyh << 8, sp));
 		case 0x44: // LD B,IYH (undefined operation)
@@ -1655,8 +1657,8 @@ struct Z80 : Cpu {
 		case 0xbe: // CP (IY+d)
 			return void(sub8(a, read(disp(iyh, iyl))));
 		case 0xcb:
-			v = disp(iyh, iyl);
-			switch (fetch()) {
+			v = disp(iyh, iyl), cycle -= cc_xycb[op = fetch()];
+			switch (op) {
 			case 0x06: // RLC (IY+d)
 				return write(v, rlc8(read(v)));
 			case 0x0e: // RRC (IY+d)
@@ -1860,38 +1862,38 @@ struct Z80 : Cpu {
 	}
 
 	int rlc8(int dst) {
-		const int r = dst << 1 & 0xff | dst >> 7, c = dst >> 7;
-		return f = f & ~0xd7 | fLogic[r] | c, r;
+		const int r = dst << 1 & 0xfe | dst >> 7;
+		return f = f & ~0xd7 | fLogic[r] | dst >> 7, r;
 	}
 
 	int rrc8(int dst) {
-		const int r = dst >> 1 | dst << 7 & 0x80, c = dst & 1;
-		return f = f & ~0xd7 | fLogic[r] | c, r;
+		const int r = dst << 7 & 0x80 | dst >> 1;
+		return f = f & ~0xd7 | fLogic[r] | dst & 1, r;
 	}
 
 	int rl8(int dst) {
-		const int r = dst << 1 & 0xff | f & 1, c = dst >> 7;
-		return f = f & ~0xd7 | fLogic[r] | c, r;
+		const int r = dst << 1 & 0xfe | f & 1;
+		return f = f & ~0xd7 | fLogic[r] | dst >> 7, r;
 	}
 
 	int rr8(int dst) {
-		const int r = dst >> 1 | f << 7 & 0x80, c = dst & 1;
-		return f = f & ~0xd7 | fLogic[r] | c, r;
+		const int r = f << 7 & 0x80 | dst >> 1;
+		return f = f & ~0xd7 | fLogic[r] | dst & 1, r;
 	}
 
 	int sla8(int dst) {
-		const int r = dst << 1 & 0xff, c = dst >> 7;
-		return f = f & ~0xd7 | fLogic[r] | c, r;
+		const int r = dst << 1 & 0xfe;
+		return f = f & ~0xd7 | fLogic[r] | dst >> 7, r;
 	}
 
 	int sra8(int dst) {
-		const int r = dst >> 1 | dst & 0x80, c = dst & 1;
-		return f = f & ~0xd7 | fLogic[r] | c, r;
+		const int r = dst & 0x80 | dst >> 1;
+		return f = f & ~0xd7 | fLogic[r] | dst & 1, r;
 	}
 
 	int srl8(int dst) {
-		const int r = dst >> 1, c = dst & 1;
-		return f = f & ~0xd7 | fLogic[r] | c, r;
+		const int r = dst >> 1;
+		return f = f & ~0xd7 | fLogic[r] | dst & 1, r;
 	}
 
 	void bit8(int src, int dst) {
@@ -1965,6 +1967,13 @@ struct Z80 : Cpu {
 
 	static void split(int& l, int& h, int v) {
 		l = v & 0xff, h = v >> 8;
+	}
+
+	virtual int fetchM1() {
+//		Page& page = memorymap[pc >> 8];
+//		const int data = !page.fetch ? page.base[pc & 0xff] : page.fetch(pc, arg);
+		const int data = memorymap[pc >> 8].base[pc & 0xff];
+		return pc = pc + 1 & 0xffff, data;
 	}
 
 	int fetch16() {

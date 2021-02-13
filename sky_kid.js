@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/sky_kid.wasm.js';
+import {archive} from './dist/sky_kid.wasm.js';
 
 read('skykid.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['sk2_2.6c', 'sk1-1c.6b', 'sk1_3.6d'].map(e => zip.decompress(e)));
@@ -19,5 +19,6 @@ read('skykid.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(z
 	const BLUE = zip.decompress('sk1-3.2r');
 	const BGCOLOR = zip.decompress('sk1-4.5n');
 	const OBJCOLOR = zip.decompress('sk1-5.6n');
+	const bufferSource = new Zlib.Unzip(archive).decompress('sky_kid.wasm');
 	return init(bufferSource, {PRG1, PRG2, PRG2I, FG, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR});
 });

@@ -8,7 +8,7 @@
 #define FROGGER_H
 
 #include <array>
-#include <list>
+#include <functional>
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "utils.h"
@@ -39,7 +39,6 @@ struct Frogger {
 	int nLife = 3;
 
 	bool fInterruptEnable = false;
-//	bool fSoundEnable = false;
 
 	array<uint8_t, 0xd00> ram = {};
 	array<uint8_t, 4> ppi0 = {0xff, 0xfc, 0xf1, 0};
@@ -48,17 +47,24 @@ struct Frogger {
 	struct {
 		int addr = 0;
 	} psg;
-	int count = 0;
-	int timer = 0;
-	list<int> command;
+	bool cpu2_irq = false;
 
 	array<uint8_t, 0x4000> bg;
 	array<uint8_t, 0x4000> obj;
 	array<int, 0x20> rgb;
 
 	Z80 cpu, cpu2;
+	struct {
+		double rate = 14318181.0 / 2048;
+		double frac = 0;
+		int count = 0;
+		void execute(double rate, double rate_correction, function<void(int)> fn) {
+			for (frac += this->rate * rate_correction; frac >= rate; frac -= rate)
+				fn(count = (count + 1) % 20);
+		}
+	} timer;
 
-	Frogger() {
+	Frogger() : cpu(18432000 / 6), cpu2(14318181 / 8) {
 		// CPU周りの初期化
 		auto range = [](int page, int start, int end, int mirror = 0) { return (page & ~mirror) >= start && (page & ~mirror) <= end; };
 
@@ -92,9 +98,10 @@ struct Frogger {
 					if (addr & 0x1000)
 						switch (addr >> 1 & 3) {
 						case 0:
-							return command.push_back(data);
-//						case 1:
-//							return void(fSoundEnable = (data & 0x10) == 0);
+							return ppi1[0] = data, sound0->write(0xe, data);
+						case 1:
+							~data & ppi1[1] & 8 && (cpu2_irq = true), ppi1[1] = data;
+							return sound0->control(!(data & 0x10));
 						}
 				};
 			}
@@ -110,11 +117,13 @@ struct Frogger {
 			cpu2.iomap[page].read = [&](int addr) { return addr & 0x40 ? sound0->read(psg.addr) : 0xff; };
 			cpu2.iomap[page].write = [&](int addr, int data) {
 				if (addr & 0x40)
-					sound0->write(psg.addr, data, count);
+					sound0->write(psg.addr, data);
 				else if (addr & 0x80)
 					psg.addr = data;
 			};
 		}
+
+		cpu2.check_interrupt = [&]() { return cpu2_irq && cpu2.interrupt() && (cpu2_irq = false, true); };
 
 		decodeROM();
 
@@ -127,15 +136,17 @@ struct Frogger {
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
-	Frogger *execute() {
-//		sound0->mute(!fSoundEnable);
-		fInterruptEnable && cpu.non_maskable_interrupt(), cpu.execute(0x2000);
-		for (count = 0; count < 116; count++) { // 14318181 / 60 / 2048
-			if (!command.empty() && cpu2.interrupt())
-				sound0->write(0x0e, command.front()), command.pop_front();
-			sound0->write(0x0f, array<uint8_t, 20>{0x26, 0x36, 0x26, 0x36, 0x2e, 0x3e, 0x2e, 0x3e, 0x66, 0x76, 0xa6, 0xb6, 0xa6, 0xb6, 0xae, 0xbe, 0xae, 0xbe, 0xe6, 0xf6}[timer]);
-			cpu2.execute(36);
-			++timer >= 20 && (timer = 0);
+	Frogger *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
+		fInterruptEnable && cpu.non_maskable_interrupt();
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			timer.execute(tick_rate, rate_correction, [&](int cnt) {
+				sound0->write(0xf, (cnt >= 10) << 7 | array<uint8_t, 10>{0x26, 0x36, 0x26, 0x36, 0x2e, 0x3e, 0x2e, 0x3e, 0x66, 0x76}[cnt % 10]);
+			});
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
 		}
 		return this;
 	}
@@ -169,12 +180,10 @@ struct Frogger {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
-			cpu.reset();
 			fInterruptEnable = false;
-//			fSoundEnable = false;
-			command.clear();
+			cpu.reset();
+			cpu2_irq = false;
 			cpu2.reset();
-			timer = 0;
 		}
 		return this;
 	}
@@ -227,7 +236,7 @@ struct Frogger {
 		if (decoded)
 			return;
 		for (int i = 0; i < 0x800; i++)
-			PRG2[i] = PRG2[i] & 0xfc | PRG2[i] << 1 & 2 | PRG2[i] >> 1 & 1;
+			PRG2[i] = bitswap(PRG2[i], {7, 6, 5, 4, 3, 2, 0, 1});
 		decoded = true;
 	}
 
@@ -404,7 +413,7 @@ struct Frogger {
 	}
 
 	static void init(int rate) {
-		sound0 = new AY_3_8910(14318181 / 8, rate, 116, 0.4);
+		sound0 = new AY_3_8910(14318181.0 / 8, 0.4);
 		Z80::init();
 	}
 };

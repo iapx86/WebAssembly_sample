@@ -42,7 +42,7 @@ struct Vulgus {
 	int fCoin = 0;
 	int fStart1P = 0;
 	int fStart2P = 0;
-	bool fTurbo = 0;
+	bool fTurbo = false;
 	int nBonus = BONUS_20000_60000;
 	int nLife = 3;
 
@@ -53,7 +53,7 @@ struct Vulgus {
 		int addr = 0;
 	} psg[2];
 	int command = 0;
-	int timer = 0;
+	bool cpu_irq = false;
 
 	array<uint8_t, 0x8000> fg;
 	array<uint8_t, 0x20000> bg;
@@ -67,8 +67,9 @@ struct Vulgus {
 	int frame = 0;
 
 	Z80 cpu, cpu2;
+	IntTimer timer;
 
-	Vulgus() {
+	Vulgus() : cpu(12000000 / 4), cpu2(12000000 / 4), timer(8 * 60) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0xa0; i++)
 			cpu.memorymap[i].base = &PRG1[i << 8];
@@ -102,6 +103,8 @@ struct Vulgus {
 			cpu.memorymap[0xd0 + i].write = nullptr;
 		}
 
+		cpu.check_interrupt = [&]() { return cpu_irq && cpu.interrupt(0xd7) && (cpu_irq = false, true); };
+
 		for (int i = 0; i < 0x20; i++)
 			cpu2.memorymap[i].base = &PRG2[i << 8];
 		for (int i = 0; i < 8; i++) {
@@ -114,7 +117,7 @@ struct Vulgus {
 			case 0:
 				return void(psg[0].addr = data);
 			case 1:
-				return sound0->write(psg[0].addr, data, timer);
+				return sound0->write(psg[0].addr, data);
 			}
 		};
 		cpu2.memorymap[0xc0].write = [&](int addr, int data) {
@@ -122,7 +125,7 @@ struct Vulgus {
 			case 0:
 				return void(psg[1].addr = data);
 			case 1:
-				return sound1->write(psg[1].addr, data, timer);
+				return sound1->write(psg[1].addr, data);
 			}
 		};
 
@@ -139,12 +142,18 @@ struct Vulgus {
 			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
-	Vulgus *execute() {
-		Cpu *cpus[] = {&cpu, &cpu2};
-		for (int i = 0; i < 16; i++) {
-			!i && cpu.interrupt(0xd7); // RST 10H
-			~i & 1 && (timer = i >> 1, cpu2.interrupt());
-			Cpu::multiple_execute(2, cpus, 600);
+	Vulgus *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
+		cpu_irq = true;
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			timer.execute(tick_rate, [&]() {
+				cpu2.interrupt();
+			});
+			sound0->execute(tick_rate, rate_correction);
+			sound1->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
 		}
 		return this;
 	}
@@ -204,6 +213,7 @@ struct Vulgus {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
+			cpu_irq = false;
 			cpu.reset();
 			cpu2.disable();
 		}
@@ -413,8 +423,8 @@ struct Vulgus {
 	}
 
 	static void init(int rate) {
-		sound0 = new AY_3_8910(1500000, rate, 8);
-		sound1 = new AY_3_8910(1500000, rate, 8);
+		sound0 = new AY_3_8910(12000000 / 8);
+		sound1 = new AY_3_8910(12000000 / 8);
 		Z80::init();
 	}
 };

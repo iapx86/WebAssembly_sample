@@ -8,7 +8,7 @@
 #define STRATEGY_X_H
 
 #include <array>
-#include <list>
+#include <functional>
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "utils.h"
@@ -40,7 +40,6 @@ struct StrategyX {
 	int nLife = 3;
 
 	bool fInterruptEnable = false;
-//	bool fSoundEnable = false;
 
 	array<uint8_t, 0xd00> ram = {};
 	array<uint8_t, 4> ppi0 = {0xff, 0xfc, 0xf1, 0};
@@ -49,9 +48,7 @@ struct StrategyX {
 	struct {
 		int addr = 0;
 	} psg[2];
-	int count = 0;
-	int timer = 0;
-	list<int> command;
+	bool cpu2_irq = false;
 
 	bool fBackgroundGreen = false;
 	bool fBackgroundBlue = false;
@@ -61,8 +58,17 @@ struct StrategyX {
 	array<int, 0x20> rgb;
 
 	Z80 cpu, cpu2;
+	struct {
+		double rate = 14318000.0 / 2048;
+		double frac = 0;
+		int count = 0;
+		void execute(double rate, double rate_correction, function<void(int)> fn) {
+			for (frac += this->rate * rate_correction; frac >= rate; frac -= rate)
+				fn(count = (count + 1) % 20);
+		}
+	} timer;
 
-	StrategyX() {
+	StrategyX() : cpu(18432000 / 6), cpu2(14318000 / 8) {
 		// CPU周りの初期化
 		auto range = [](int page, int start, int end, int mirror = 0) { return (page & ~mirror) >= start && (page & ~mirror) <= end; };
 
@@ -76,7 +82,7 @@ struct StrategyX {
 				cpu.memorymap[page].base = &ram[0xc00];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0x90, 0x93, 0x04)) {
-				cpu.memorymap[page].base = &ram [(8 | page & 3) << 8];
+				cpu.memorymap[page].base = &ram[(8 | page & 3) << 8];
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0xa0, 0xa0))
 				cpu.memorymap[page].read = [&](int addr) -> int { return ppi0[addr >> 2 & 3]; };
@@ -85,9 +91,10 @@ struct StrategyX {
 				cpu.memorymap[page].write = [&](int addr, int data) {
 					switch (addr >> 2 & 3) {
 					case 0:
-						return command.push_back(data);
-//					case 1:
-//						return void(fSoundEnable = (data & 0x10) == 0);
+						return ppi1[0] = data, sound0->write(0xe, data);
+					case 1:
+						~data & ppi1[1] & 8 && (cpu2_irq = true), ppi1[1] = data;
+						return sound0->control(!(data & 0x10)), sound1->control(!(data & 0x10));
 					}
 				};
 			} else if (range(page, 0xb0, 0xb0))
@@ -124,13 +131,15 @@ struct StrategyX {
 				if (addr & 0x10)
 					psg[1].addr = data;
 				else if (addr & 0x20)
-					sound1->write(psg[1].addr, data, count);
+					sound1->write(psg[1].addr, data);
 				if (addr & 0x40)
 					psg[0].addr = data;
 				else if (addr & 0x80)
-					sound0->write(psg[0].addr, data, count);
+					sound0->write(psg[0].addr, data);
 			};
 		}
+
+		cpu2.check_interrupt = [&]() { return cpu2_irq && cpu2.interrupt() && (cpu2_irq = false, true); };
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
@@ -140,16 +149,18 @@ struct StrategyX {
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
-	StrategyX *execute() {
-//		sound0->mute(!fSoundEnable);
-//		sound1->mute(!fSoundEnable);
-		fInterruptEnable && cpu.non_maskable_interrupt(), cpu.execute(0x2000);
-		for (count = 0; count < 116; count++) { // 14318181 / 60 / 2048
-			if (!command.empty() && cpu2.interrupt())
-				sound0->write(0x0e, command.front()), command.pop_front();
-			sound0->write(0x0f, array<uint8_t, 20>{0x0e, 0x1e, 0x0e, 0x1e, 0x2e, 0x3e, 0x2e, 0x3e, 0x4e, 0x5e, 0x8e, 0x9e, 0x8e, 0x9e, 0xae, 0xbe, 0xae, 0xbe, 0xce, 0xde}[timer]);
-			cpu2.execute(36);
-			++timer >= 20 && (timer = 0);
+	StrategyX *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
+		fInterruptEnable && cpu.non_maskable_interrupt();
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			timer.execute(tick_rate, rate_correction, [&](int cnt) {
+				sound0->write(0xf, (cnt >= 10) << 7 | array<uint8_t, 10>{0x0e, 0x1e, 0x0e, 0x1e, 0x2e, 0x3e, 0x2e, 0x3e, 0x4e, 0x5e}[cnt % 10]);
+			});
+			sound0->execute(tick_rate, rate_correction);
+			sound1->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
 		}
 		return this;
 	}
@@ -183,12 +194,10 @@ struct StrategyX {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
-			cpu.reset();
 			fInterruptEnable = false;
-//			fSoundEnable = false;
-			command.clear();
+			cpu.reset();
+			cpu2_irq = false;
 			cpu2.reset();
-			timer = 0;
 		}
 		return this;
 	}
@@ -421,8 +430,8 @@ struct StrategyX {
 	}
 
 	static void init(int rate) {
-		sound0 = new AY_3_8910(14318181 / 8, rate, 116, 0.2);
-		sound1 = new AY_3_8910(14318181 / 8, rate, 116, 0.2);
+		sound0 = new AY_3_8910(14318181.0 / 8, 0.2);
+		sound1 = new AY_3_8910(14318181.0 / 8, 0.2);
 		Z80::init();
 	}
 };

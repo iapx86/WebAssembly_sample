@@ -14,30 +14,31 @@ enum {
 };
 
 struct MC6801 : Cpu {
+	static const unsigned char cc[0x100];
 	int a = 0;
 	int b = 0;
 	int ccr = 0; // ccr:11hinzvc
 	int x = 0;
 	int s = 0;
 
-	MC6801() {}
+	MC6801(int clock = 0) : Cpu(clock) {}
 
-	void reset() {
+	void reset() override {
 		Cpu::reset();
 		ccr = 0xd0;
 		pc = read16(0xfffe);
 	}
 
-	bool interrupt() {
+	bool interrupt() override {
 		if (!Cpu::interrupt() || ccr & 0x10)
 			return false;
-		return psh16(pc), psh16(x), psh(a), psh(b), psh(ccr), ccr |= 0x10, pc = read16(0xfff8), true;
+		return cycle -= cc[0x3f], psh16(pc), psh16(x), psh(a), psh(b), psh(ccr), ccr |= 0x10, pc = read16(0xfff8), true;
 	}
 
 	bool interrupt(int cause) {
 		if (!Cpu::interrupt() || ccr & 0x10)
 			return false;
-		psh16(pc), psh16(x), psh(a), psh(b), psh(ccr), ccr |= 0x10;
+		cycle -= cc[0x3f], psh16(pc), psh16(x), psh(a), psh(b), psh(ccr), ccr |= 0x10;
 		switch (cause) {
 		default:
 			return pc = read16(0xfff8), true;
@@ -55,13 +56,13 @@ struct MC6801 : Cpu {
 	int non_maskable_interrupt() {
 		if (!Cpu::interrupt())
 			return false;
-		return psh16(pc), psh16(x), psh(a), psh(b), psh(ccr), ccr |= 0x10, pc = read16(0xfffc), true;
+		return cycle -= cc[0x3f], psh16(pc), psh16(x), psh(a), psh(b), psh(ccr), ccr |= 0x10, pc = read16(0xfffc), true;
 	}
 
-	void _execute() {
-		int v, ea;
-
-		switch (fetch()) {
+	void _execute() override {
+		int v, ea, op = fetch();
+		cycle -= cc[op];
+		switch (op) {
 		case 0x01: // NOP
 			return;
 		case 0x04: // LSRD

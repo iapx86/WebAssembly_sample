@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/vulgus.wasm.js';
+import {archive} from './dist/vulgus.wasm.js';
 
 read('vulgus.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['vulgus.002', 'vulgus.003', 'vulgus.004', 'vulgus.005', '1-8n.bin'].map(e => zip.decompress(e)));
@@ -19,5 +19,6 @@ read('vulgus.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(z
 	const FGCOLOR = zip.decompress('d1.bin');
 	const BGCOLOR = zip.decompress('c9.bin');
 	const OBJCOLOR = zip.decompress('j2.bin');
+	const bufferSource = new Zlib.Unzip(archive).decompress('vulgus.wasm');
 	return init(bufferSource, {PRG1, PRG2, FG, BG, OBJ, RED, GREEN, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR});
 });

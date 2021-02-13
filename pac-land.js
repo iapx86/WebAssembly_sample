@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/pac-land.wasm.js';
+import {archive} from './dist/pac-land.wasm.js';
 
 read('pacland.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	let PRG1 = Uint8Array.concat(...['paclandj/pl6_01.8b', 'paclandj/pl6_02.8d', 'pl1_3.8e'].map(e => zip.decompress(e)));
@@ -21,5 +21,6 @@ read('pacland.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(
 	const FGCOLOR = zip.decompress('pl1-5.5t');
 	const BGCOLOR = zip.decompress('pl1-4.4n');
 	const OBJCOLOR = zip.decompress('pl1-3.6l');
+	const bufferSource = new Zlib.Unzip(archive).decompress('pac-land.wasm');
 	return init(bufferSource, {PRG1, PRG2, PRG2I, FG, BG, OBJ, RED, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR});
 });

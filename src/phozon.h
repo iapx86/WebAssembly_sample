@@ -51,7 +51,6 @@ struct Phozon {
 	bool fInterruptEnable0 = false;
 	bool fInterruptEnable1 = false;
 	bool fInterruptEnable2 = false;
-//	bool fSoundEnable = false;
 	array<uint8_t, 0x2800> ram = {};
 	array<uint8_t, 0x40> port = {};
 	array<uint8_t, 10> in = {};
@@ -64,7 +63,7 @@ struct Phozon {
 
 	MC6809 cpu, cpu2, cpu3;
 
-	Phozon() {
+	Phozon() : cpu(18432000 / 12), cpu2(18432000 / 12), cpu3(18432000 / 12) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x20; i++) {
 			cpu.memorymap[i].base = &ram[i << 8];
@@ -92,10 +91,10 @@ struct Phozon {
 				return void(fInterruptEnable0 = false);
 			case 0x05: // INTERRUPT START
 				return void(fInterruptEnable0 = true);
-//			case 0x06: // SND STOP
-//				return void(fSoundEnable = false);
-//			case 0x07: // SND START
-//				return void(fSoundEnable = true);
+			case 0x06: // SND STOP
+				return sound0->control(false);
+			case 0x07: // SND START
+				return sound0->control(true);
 			case 0x08: // PORT TEST START
 				return void(fPortTest = true);
 			case 0x09: // PORT TEST END
@@ -145,11 +144,16 @@ struct Phozon {
 			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
-	Phozon *execute() {
-		Cpu *cpus[] = {&cpu, &cpu2, &cpu3};
-//		sound0->mute(!fSoundEnable);
+	Phozon *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
 		fInterruptEnable0 && cpu.interrupt(), fInterruptEnable1 && cpu2.interrupt(), fInterruptEnable2 && cpu3.interrupt();
-		Cpu::multiple_execute(3, cpus, 0x2000);
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			cpu3.execute(tick_rate);
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
+		}
 		return this;
 	}
 
@@ -239,7 +243,6 @@ struct Phozon {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
-//			fSoundEnable = false;
 			cpu.reset();
 			cpu2.disable();
 			cpu3.disable();
@@ -616,7 +619,7 @@ struct Phozon {
 	}
 
 	static void init(int rate) {
-		sound0 = new MappySound(SND, rate);
+		sound0 = new MappySound(SND);
 	}
 };
 

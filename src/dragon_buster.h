@@ -52,6 +52,8 @@ struct DragonBuster {
 	array<uint8_t, 0x900> ram2 = {};
 	array<uint8_t, 8> in;
 	int select = 0;
+	bool cpu_irq = false;
+	bool mcu_irq = false;
 
 	array<uint8_t, 0x8000> fg;
 	array<uint8_t, 0x8000> bg;
@@ -64,8 +66,9 @@ struct DragonBuster {
 
 	MC6809 cpu;
 	MC6801 mcu;
+	IntTimer timer;
 
-	DragonBuster() {
+	DragonBuster() : cpu(49152000 / 32), mcu(49152000 / 8 / 4), timer(60) {
 		// CPU周りの初期化
 		in.fill(0xff);
 
@@ -103,7 +106,18 @@ struct DragonBuster {
 			};
 		cpu.memorymap[0xa0].write = [&](int addr, int data) { !(addr & 0xfe) && (priority = data, fFlip = (addr & 1) != 0); };
 
-		mcu.memorymap[0].read = [&](int addr) -> int { return addr == 2 ? in[select] : ram2[addr]; };
+		cpu.check_interrupt = [&]() { return cpu_irq && cpu.interrupt() && (cpu_irq = false, true); };
+
+		mcu.memorymap[0].read = [&](int addr) -> int {
+			int data;
+			switch (addr) {
+			case 2:
+				return in[select];
+			case 8:
+				return data = ram2[8], ram2[8] &= ~0xe0, data;
+			}
+			return ram2[addr];
+		};
 		mcu.memorymap[0].write = [&](int addr, int data) { addr == 2 && (data & 0xe0) == 0x60 && (select = data & 7), ram2[addr] = data; };
 		for (int i = 0; i < 4; i++) {
 			mcu.memorymap[0x10 + i].read = [&](int addr) { return sound0->read(addr); };
@@ -120,6 +134,8 @@ struct DragonBuster {
 		for (int i = 0; i < 0x10; i++)
 			mcu.memorymap[0xf0 + i].base = &PRG2I[i << 8];
 
+		mcu.check_interrupt = [&]() { return mcu_irq && mcu.interrupt() ? (mcu_irq = false, true) : (ram2[8] & 0x48) == 0x48 && mcu.interrupt(MC6801_OCF); };
+
 		// Videoの初期化
 		fg.fill(3), bg.fill(3), obj.fill(3), fill_n(&obj[0], 0x10000, 7);
 		convertGFX(&fg[0], &FG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
@@ -131,13 +147,18 @@ struct DragonBuster {
 			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8| RED[i] * 255 / 15;
 	}
 
-	DragonBuster *execute() {
-		fInterruptEnable0 && cpu.interrupt(), fInterruptEnable1 && mcu.interrupt();
-		for (int i = 0; i < 800; i++)
-			cpu.execute(5), mcu.execute(6);
-		ram2[8] & 8 && mcu.interrupt(MC6801_OCF);
-		for (int i = 0; i < 800; i++)
-			cpu.execute(5), mcu.execute(6);
+	DragonBuster *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
+		cpu_irq = fInterruptEnable0, mcu_irq = fInterruptEnable1;
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			mcu.execute(tick_rate);
+			timer.execute(tick_rate, [&]() {
+				ram2[8] |= ram2[8] << 3 & 0x40;
+			});
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
+		}
 		return this;
 	}
 
@@ -173,6 +194,7 @@ struct DragonBuster {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
+			cpu_irq = mcu_irq = false;
 			cpu.reset();
 			mcu.disable();
 		}
@@ -632,7 +654,7 @@ struct DragonBuster {
 	}
 
 	static void init(int rate) {
-		sound0 = new C30(49152000 / 2048, rate);
+		sound0 = new C30(49152000 / 1024);
 	}
 };
 

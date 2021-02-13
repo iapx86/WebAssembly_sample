@@ -5,8 +5,8 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/digdug.wasm.js';
-let PRG1, PRG2, PRG3, BG2, MAPDATA, BG4, OBJ, SND, BGCOLOR, OBJCOLOR, RGB, IO;
+import {archive} from './dist/digdug.wasm.js';
+let bufferSource, PRG1, PRG2, PRG3, BG2, MAPDATA, BG4, OBJ, SND, BGCOLOR, OBJCOLOR, RGB, IO;
 
 read('digdug.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	PRG1 = Uint8Array.concat(...['dd1a.1', 'dd1a.2', 'dd1a.3', 'dd1a.4'].map(e => zip.decompress(e)));
@@ -22,5 +22,6 @@ read('digdug.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(z
 	SND = zip.decompress('136007.110');
 }).then(() =>read('namco51.zip')).then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	IO = zip.decompress('51xx.bin');
+	bufferSource = new Zlib.Unzip(archive).decompress('digdug.wasm');
 	return init(bufferSource, {PRG1, PRG2, PRG3, BG2, MAPDATA, BG4, OBJ, SND, BGCOLOR, OBJCOLOR, RGB, IO});
 });

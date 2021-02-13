@@ -8,10 +8,6 @@
 #include <cmath>
 #include <algorithm>
 #include <array>
-#include <list>
-#include <mutex>
-#include <utility>
-#include <vector>
 using namespace std;
 
 struct BiquadFilter {
@@ -38,73 +34,37 @@ struct BiquadFilter {
 };
 
 struct SenjyoSound {
-	array<float, 0x20> snd;
-	int rate;
-	int sampleRate;
-	int count;
-	int resolution;
-	float gain;
-	vector<list<pair<int, int>>> tmpwheel;
-	list<list<pair<int, int>>> wheel;
-	mutex mutex;
-	int cycles = 0;
+	const uint8_t *snd;
+	double rate;
+	double gain;
+	double output = 0;
+	double frac = 0;
 	struct {
-		float vol = 0;
+		double vol = 0;
 		int freq = 256;
 		int count = 256;
 		int phase = 0;
 	} channel;
 	BiquadFilter bq;
 
-	SenjyoSound(array<uint8_t, 0x20>& SND, int clock, int sampleRate = 48000, int resolution = 1, float gain = 0.7) {
-		for (int i = 0; i < snd.size(); i++)
-			snd[i] = SND[i] * 2 / (double)0xbf - 1;
+	SenjyoSound(const array<uint8_t, 0x20>& SND, double clock, int sampleRate = 48000, double gain = 0.7) {
+		snd = SND.data();
 		rate = clock / 16;
-		this->sampleRate = sampleRate;
-		count = sampleRate - 1;
-		this->resolution = resolution;
 		this->gain = gain;
-		tmpwheel.resize(resolution);
 		bq.bandpass(200, 5, sampleRate);
 	}
 
-	void write(int addr, int data, int timer = 0) {
-		tmpwheel[timer].push_back({addr, data});
+	void write(int addr, int data) {
+		addr ? (channel.vol = data / 15.0) : (channel.count = channel.freq = data);
+	}
+
+	void execute(double rate, double rate_correction) {
+		for (frac += this->rate * rate_correction; frac >= rate; frac -= rate)
+			--channel.count <= 0 && (channel.count = channel.freq, channel.phase = channel.phase + 1 & 15);
 	}
 
 	void update() {
-		mutex.lock();
-		if (wheel.size() > resolution) {
-			while (!wheel.empty())
-				for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { regwrite(e); }), wheel.pop_front();
-			count = sampleRate - 1;
-		}
-		wheel.insert(wheel.end(), tmpwheel.begin(), tmpwheel.end());
-		mutex.unlock();
-		for_each(tmpwheel.begin(), tmpwheel.end(), [](list<pair<int, int>>& e) { e.clear(); });
-	}
-
-	void makeSound(float *data, uint32_t length) {
-		for (int i = 0; i < length; i++) {
-			for (count += 60 * resolution; count >= sampleRate; count -= sampleRate)
-				if (!wheel.empty()) {
-					mutex.lock();
-					for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { regwrite(e); }), wheel.pop_front();
-					mutex.unlock();
-				}
-			data[i] += bq.filter(snd[channel.phase] * channel.vol * gain);
-			for (cycles += rate; cycles >= sampleRate; cycles -= sampleRate)
-				if (--channel.count <= 0)
-					channel.count = channel.freq, channel.phase = channel.phase + 1 & 15;
-		}
-	}
-
-	void regwrite(pair<int, int>& e) {
-		int addr = e.first, data = e.second;
-		if (addr)
-			channel.vol = data / 15.0;
-		else
-			channel.count = channel.freq = data;
+		output = bq.filter((snd[channel.phase] * 2 / (double)0xbf - 1) * channel.vol) * gain;
 	}
 };
 

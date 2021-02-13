@@ -5,68 +5,37 @@
 #ifndef K005289_H
 #define K005289_H
 
-#include <algorithm>
 #include <array>
-#include <list>
-#include <mutex>
-#include <utility>
-#include <vector>
 using namespace std;
 
 struct K005289 {
-	array<float, 0x200> snd;
-	double rate;
-	int sampleRate;
-	int count;
-	int resolution;
-	float gain;
-	vector<list<pair<int, int>>> tmpwheel;
-	list<list<pair<int, int>>> wheel;
-	mutex mutex;
-	array<uint16_t, 4> reg = {};
-	array<uint32_t, 2> phase = {};
+	const uint8_t *snd;
+	double clock;
+	double gain;
+	double output = 0;
+	array<uint16_t, 8> reg = {};
+	double frac = 0;
 
-	K005289(array<uint8_t, 0x200>& SND, int clock, int sampleRate = 48000, int resolution = 1, float gain = 0.1) {
-		for (int i = 0; i < snd.size(); i++)
-			snd[i] = (SND[i] & 0xf) * 2 / 15.0 - 1;
-		rate = (double)clock / sampleRate * (1 << 27);
-		this->sampleRate = sampleRate;
-		count = sampleRate - 1;
-		this->resolution = resolution;
+	K005289(const array<uint8_t, 0x200>& SND, double clock, double gain = 0.1) {
+		snd = SND.data();
+		this->clock = clock;
 		this->gain = gain;
-		tmpwheel.resize(resolution);
 	}
 
-	void write(int addr, int data, int timer = 0) {
-		tmpwheel[timer].push_back({addr, data});
+	void write(int addr, int data) {
+		reg[addr] = data;
+	}
+
+	void execute(double rate, double rate_correction = 1) {
+		for (frac += clock * rate_correction; frac >= rate; frac -= rate)
+			for (int i = 0; i < 2; i++)
+				++reg[i + 4] >= reg[i + 2] && (++reg[i + 6], reg[i + 4] = 0);
 	}
 
 	void update() {
-		mutex.lock();
-		if (wheel.size() > resolution) {
-			while (!wheel.empty())
-				for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { reg[e.first] = e.second; }), wheel.pop_front();
-			count = sampleRate - 1;
-		}
-		wheel.insert(wheel.end(), tmpwheel.begin(), tmpwheel.end());
-		mutex.unlock();
-		for_each(tmpwheel.begin(), tmpwheel.end(), [](list<pair<int, int>>& e) { e.clear(); });
-	}
-
-	void makeSound(float *data, uint32_t length) {
-		for (int i = 0; i < length; i++) {
-			for (count += 60 * resolution; count >= sampleRate; count -= sampleRate)
-				if (!wheel.empty()) {
-					mutex.lock();
-					for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { reg[e.first] = e.second; }), wheel.pop_front();
-					mutex.unlock();
-				}
-			for (int j = 0; j < 2; j++)
-				if (reg[j + 2]) {
-					data[i] += snd[j << 8 | reg[j] & 0xe0 | phase[j] >> 27] * (reg[j] & 0xf) / 15 * gain;
-					phase[j] += (uint32_t)(rate / reg[j + 2]);
-				}
-		}
+		output = 0;
+		for (int i = 0; i < 2; i++)
+			output += (snd[i << 8 | reg[i] & 0xe0 | reg[i + 6] & 0x1f] * 2 / 15.0 - 1) * (reg[i] & 15) / 15.0 * gain;
 	}
 };
 

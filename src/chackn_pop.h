@@ -58,7 +58,7 @@ struct ChacknPop {
 	Z80 cpu;
 	MC6805 mcu;
 
-	ChacknPop() {
+	ChacknPop() : cpu(18000000 / 6), mcu(18000000 / 6 / 4) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x80; i++)
 			cpu.memorymap[i].base = &PRG1[i << 8];
@@ -160,9 +160,16 @@ struct ChacknPop {
 		}
 	}
 
-	ChacknPop *execute() {
-		Cpu *cpus[] = {&cpu, &mcu};
-		cpu.interrupt(), Cpu::multiple_execute(2, cpus, 0x2000);
+	ChacknPop *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
+		cpu.interrupt();
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			mcu.execute(tick_rate);
+			sound0->execute(tick_rate, rate_correction);
+			sound1->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
+		}
 		return this;
 	}
 
@@ -458,8 +465,8 @@ struct ChacknPop {
 	}
 
 	static void init(int rate) {
-		sound0 = new AY_3_8910(1500000, rate);
-		sound1 = new AY_3_8910(1500000, rate);
+		sound0 = new AY_3_8910(18000000 / 12);
+		sound1 = new AY_3_8910(18000000 / 12);
 		Z80::init();
 	}
 };

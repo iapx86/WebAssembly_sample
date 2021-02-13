@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/star_force.wasm.js';
+import {archive} from './dist/star_force.wasm.js';
 
 read('starforc.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['3.3p', '2.3mn'].map(e => zip.decompress(e)));
@@ -16,5 +16,6 @@ read('starforc.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const BG3 = Uint8Array.concat(...['18.10pq', '17.9pq', '16.8pq'].map(e => zip.decompress(e)));
 	const OBJ = Uint8Array.concat(...['6.10lm', '5.9lm', '4.8lm'].map(e => zip.decompress(e)));
 	const SND = zip.decompress('07b.bin');
+	const bufferSource = new Zlib.Unzip(archive).decompress('star_force.wasm');
 	return init(bufferSource, {PRG1, PRG2, FG, BG1, BG2, BG3, OBJ, SND});
 });

@@ -5,7 +5,9 @@
  */
 
 #include <emscripten.h>
+#include <algorithm>
 #include <array>
+#include <list>
 #include <vector>
 #include "elevator_action.h"
 using namespace std;
@@ -13,7 +15,8 @@ using namespace std;
 ElevatorAction *game;
 array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
 array<int, ElevatorAction::width * ElevatorAction::height> data = {};
-array<float, 512> sample = {};
+DoubleTimer audio;
+list<float> samples;
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 	static array<int, 5 * 4 + 1> rom_table = {
@@ -28,32 +31,36 @@ extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *init(int rate) {
-	game = new ElevatorAction(rate);
-	game->init(rate);
+	game = new ElevatorAction();
+	game->init(audio.rate = rate);
+	audio.fn = []() {
+		samples.push_back(game->sound0->output + game->sound1->output + game->sound2->output + game->sound3->output + game->sound4->output);
+		game->sound0->update();
+		game->sound1->update();
+		game->sound2->update();
+		game->sound3->update();
+		game->sound4->update();
+	};
 	return geometry.data();
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE int *render() {
-	game->updateStatus()->updateInput()->execute()->makeBitmap(data.data());
-	return data.data();
+extern "C" EMSCRIPTEN_KEEPALIVE int *render(double timestamp, double rate_correction) {
+	game->updateStatus()->updateInput()->execute(audio, rate_correction)->makeBitmap(::data.data());
+	return ::data.data();
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE void update() {
-	game->sound0->update();
-	game->sound1->update();
-	game->sound2->update();
-	game->sound3->update();
-	game->sound4->update();
-}
-
-extern "C" EMSCRIPTEN_KEEPALIVE float *sound() {
-	sample.fill(0);
-	game->sound0->makeSound(sample.data(), sample.size());
-	game->sound1->makeSound(sample.data(), sample.size());
-	game->sound2->makeSound(sample.data(), sample.size());
-	game->sound3->makeSound(sample.data(), sample.size());
-	game->sound4->makeSound(sample.data(), sample.size());
-	return sample.data();
+extern "C" EMSCRIPTEN_KEEPALIVE void *sound() {
+	static vector<float> buf;
+	static struct {
+		float *addr = nullptr;
+		int size = 0;
+	} iov;
+	buf.resize(samples.size());
+	copy(samples.begin(), samples.end(), buf.begin());
+	samples.clear();
+	iov.addr = buf.data();
+	iov.size = buf.size();
+	return &iov;
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE void reset() {
@@ -97,10 +104,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerB(int fDown) {
 }
 
 AY_3_8910 *ElevatorAction::sound0, *ElevatorAction::sound1, *ElevatorAction::sound2, *ElevatorAction::sound3;
-SoundEffect *ElevatorAction::sound4;
-
-vector<int> ElevatorAction::pcmtable;
-vector<vector<short>> ElevatorAction::pcm;
+Dac1Ch *ElevatorAction::sound4;
 
 array<unsigned char, 0x8000> ElevatorAction::PRG1 = {
 };

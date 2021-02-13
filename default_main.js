@@ -14,6 +14,22 @@ iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAC4jAAAuIwF4pT92AAAAfklE
 iQEgOlcY4HaAt1oAQAIs+zLEofRmiEMBzhAH+TYkgL9i7/2zrwozAGAA1IrTU6gECOYUDGAAA4ydA9uTsHIUS16gmlGaG+7acVkeOAkk6YlIiWQtoXRuLPfP\
 aAbAA72UT2ikWgrdAAAAAElFTkSuQmCC\
 ';
+const stream_out = `
+registerProcessor('StreamOut', class extends AudioWorkletProcessor {
+	samples = [];
+	constructor (options) {
+		super(options);
+		this.port.onmessage = ({data: {samples}}) => { samples && (this.samples = this.samples.concat(samples)); };
+		this.port.start();
+	}
+	process (inputs, outputs) {
+		const buffer = outputs[0][0].fill(0), length = buffer.length;
+		this.samples.length >= length && buffer.set(this.samples.splice(0, length));
+		this.samples.length >= sampleRate / 60 * 2 && this.samples.every(e => !e) && this.samples.splice(0);
+		return true;
+	}
+});
+`;
 const vsSource = `
 	attribute vec4 aVertexPosition;
 	attribute vec2 aTextureCoord;
@@ -32,8 +48,9 @@ const fsSource = `
 `;
 const game = {cxScreen: 0, cyScreen: 0, width: 1, height: 1, xOffset: 0, yOffset: 0, rotate: false};
 const cxScreen = canvas.width, cyScreen = canvas.height;
-const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
-let source, scriptNode, button, state = '';
+const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl"), timestamps = [], samples = [];
+let source, worklet, scriptNode, button, state = '', toggle = 0;
+const addStreamOut = !audioCtx ? 0 : audioCtx.audioWorklet ? audioCtx.audioWorklet.addModule('data:text/javascript,' + stream_out) : new Promise((resolve, reject) => reject());
 let instance, memory, view;
 
 (window.onresize = () => {
@@ -69,12 +86,26 @@ function initShaderProgram(gl, vsSource, fsSource) {
 	return shaderProgram;
 }
 
+const env = ['TZ=JST-9'];
+
+function environ_sizes_get(environ_count, environ_buf_size) {
+	view.setUint32(environ_count, env.length, true), view.setUint32(environ_buf_size, env.reduce((a, b) => a + b.length + 1, 0) + 1, true);
+	return 0;
+}
+
+function environ_get(environ, environ_buf) {
+	let str = '';
+	for (let i = 0; i < env.length; i++)
+		view.setUint32(environ + i * 4, environ_buf + str.length, true), str += env[i] + '\0';
+	str += '\0', new Uint8Array(memory, environ_buf, str.length).set(Array.from(str, c => c.charCodeAt(0)));
+	return 0;
+}
+
 function fd_write(fd, iovs, iovsLen, nwritten) {
 	let str = '';
 	for (let p = iovs, i = 0; i < iovsLen; p += 8, i++)
 		str += String.fromCharCode(...new Uint8Array(memory, view.getUint32(p, true), view.getUint32(p + 4, true)));
-	view.setUint32(nwritten, str.length, true);
-	console.log(str);
+	view.setUint32(nwritten, str.length, true), console.log(str);
 	return 0;
 }
 
@@ -83,7 +114,7 @@ function proc_exit(rval) {
 }
 
 export function init(bufferSource, roms) {
-	const importObject = {wasi_snapshot_preview1: {fd_write, proc_exit, fd_seek: () => {}, fd_close: () => {}}};
+	const importObject = {wasi_snapshot_preview1: {environ_sizes_get, environ_get, fd_write, proc_exit, fd_seek: () => 0, fd_close: () => 0}};
 	return WebAssembly.instantiate(bufferSource, importObject).then(result => {
 		instance = result.instance, memory = instance.exports.memory.buffer, view = new DataView(memory);
 		instance.exports._initialize();
@@ -94,12 +125,6 @@ export function init(bufferSource, roms) {
 		const g = new Int32Array(memory, instance.exports.init(audioCtx.sampleRate), 7 * 4);
 		Object.assign(game, {cxScreen: g[0], cyScreen: g[1], width: g[2], height: g[3], xOffset: g[4], yOffset: g[5], rotate: g[6] !== 0});
 		const positions = new Float32Array(game.rotate ? [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0] : [-1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, -1.0]);
-		const textureCoordinates = new Float32Array([
-			game.xOffset / game.width, game.yOffset / game.height,
-			game.xOffset / game.width, (game.yOffset + game.cyScreen) / game.height,
-			(game.xOffset + game.cxScreen) / game.width, game.yOffset / game.height,
-			(game.xOffset + game.cxScreen) / game.width, (game.yOffset + game.cyScreen) / game.height
-		]);
 		const program = initShaderProgram(gl, vsSource, fsSource);
 		const aVertexPositionHandle = gl.getAttribLocation(program, 'aVertexPosition');
 		const aTextureCoordHandle = gl.getAttribLocation(program, 'aTextureCoord');
@@ -109,42 +134,29 @@ export function init(bufferSource, roms) {
 		const texture = gl.createTexture();
 		gl.bindTexture(gl.TEXTURE_2D, texture);
 		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, game.width, game.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(game.width * game.height * 4));
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 		gl.useProgram(program);
 		gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 		gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
 		gl.vertexAttribPointer(aVertexPositionHandle, 2, gl.FLOAT, false, 0, 0);
 		gl.enableVertexAttribArray(aVertexPositionHandle);
-		gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer);
-		gl.bufferData(gl.ARRAY_BUFFER, textureCoordinates, gl.STATIC_DRAW);
-		gl.vertexAttribPointer(aTextureCoordHandle, 2, gl.FLOAT, false, 0, 0);
-		gl.enableVertexAttribArray(aTextureCoordHandle);
-		source = audioCtx.createBufferSource(), scriptNode = audioCtx.createScriptProcessor(512, 1, 1);
-		scriptNode.onaudioprocess = ({outputBuffer}) => outputBuffer.getChannelData(0).set(new Float32Array(memory, instance.exports.sound(), 512));
-		source.connect(scriptNode).connect(audioCtx.destination);
-		source.start();
+		source = audioCtx.createBufferSource();
+		addStreamOut.then(() => {
+			worklet = new AudioWorkletNode(audioCtx, 'StreamOut'), worklet.port.start(), source.connect(worklet).connect(audioCtx.destination), source.start();
+		}).catch(() => {
+			scriptNode = audioCtx.createScriptProcessor(1024, 1, 1);
+			scriptNode.onaudioprocess = ({outputBuffer}) => {
+				const buffer = outputBuffer.getChannelData(0).fill(0), length = buffer.length;
+				samples.length >= length && buffer.set(samples.splice(0, length)), samples.length >= length && samples.every(e => !e) && samples.splice(0);
+			};
+			source.connect(scriptNode).connect(audioCtx.destination), source.start();
+		});
 		button = new Image();
-		(button.update = () => {
-			button.src = audioCtx.state === 'suspended' ? volume0 : volume1;
-			button.alt = 'audio state: ' + audioCtx.state;
-		})();
+		(button.update = () => { button.src = audioCtx.state === 'suspended' ? volume0 : volume1, button.alt = 'audio state: ' + audioCtx.state; })();
 		audioCtx.onstatechange = button.update;
 		document.body.appendChild(button);
-		button.addEventListener('click', () => {
-			if (audioCtx.state === 'suspended')
-				audioCtx.resume().catch();
-			else if (audioCtx.state === 'running')
-				audioCtx.suspend().catch();
-		});
-		window.addEventListener('blur', () => {
-			state = audioCtx.state;
-			audioCtx.suspend().catch();
-		});
-		window.addEventListener('focus', () => {
-			if (state === 'running')
-				audioCtx.resume().catch();
-		});
+		button.addEventListener('click', () => { audioCtx.state === 'suspended' ? audioCtx.resume().catch() : audioCtx.state === 'running' && audioCtx.suspend().catch(); });
+		window.addEventListener('blur', () => { state = audioCtx.state, audioCtx.suspend().catch(); });
+		window.addEventListener('focus', () => { state === 'running' && audioCtx.resume().catch(), timestamps.splice(0); });
 		document.addEventListener('keydown', e => {
 			if (e.repeat)
 				return;
@@ -164,11 +176,7 @@ export function init(bufferSource, roms) {
 			case 'Digit2':
 				return void('start2P' in instance.exports && instance.exports.start2P());
 			case 'KeyM': // MUTE
-				if (audioCtx.state === 'suspended')
-					audioCtx.resume().catch();
-				else if (audioCtx.state === 'running')
-					audioCtx.suspend().catch();
-				return;
+				return void(audioCtx.state === 'suspended' ? audioCtx.resume().catch() : audioCtx.state === 'running' && audioCtx.suspend().catch());
 			case 'KeyR':
 				return void('reset' in instance.exports && instance.exports.reset());
 			case 'KeyT':
@@ -198,14 +206,30 @@ export function init(bufferSource, roms) {
 			}
 		});
 		canvas.addEventListener('click', () => void('coin' in instance.exports && instance.exports.coin()));
-		void function loop() {
-			instance.exports.update();
+		requestAnimationFrame(function loop(timestamp) {
+			const textureCoordinates = new Float32Array([
+				game.xOffset / game.width, game.yOffset / game.height,
+				game.xOffset / game.width, (game.yOffset + game.cyScreen) / game.height,
+				(game.xOffset + game.cxScreen) / game.width, game.yOffset / game.height,
+				(game.xOffset + game.cxScreen) / game.width, (game.yOffset + game.cyScreen) / game.height
+			]);
+			for (!(toggle ^= 1) && timestamps.shift(), timestamps.push(timestamp); timestamps.length > 4096; timestamps.shift()) {}
+			const rate_correction = timestamps.length > 1 ? Math.max(0.8, Math.min(1.25, (timestamp - timestamps[0]) / (timestamps.length - 1) * 0.06)) : 1;
 			updateGamepad(instance.exports);
-			const data = new Uint8Array(memory, instance.exports.render() + game.yOffset * game.width * 4, game.width * game.cyScreen * 4);
+			const data = new Uint8Array(memory, instance.exports.render(Date.now(), rate_correction) + game.yOffset * game.width * 4, game.width * game.cyScreen * 4);
+			const iov = instance.exports.sound(), buf = new Float32Array(memory, view.getUint32(iov, true), view.getUint32(iov + 4, true));
+			Object.assign(game, {cxScreen: g[0], cyScreen: g[1], width: g[2], height: g[3], xOffset: g[4], yOffset: g[5], rotate: g[6] !== 0});
+			audioCtx.state === 'running' ? samples.push(...buf) : samples.splice(0), worklet && samples.length && (worklet.port.postMessage({samples}), samples.splice(0));
 			gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, game.yOffset, game.width, game.cyScreen, gl.RGBA, gl.UNSIGNED_BYTE, data);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, game.cxScreen <= 384 && game.cyScreen <= 384 ? gl.NEAREST : gl.LINEAR);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, game.cxScreen <= 384 && game.cyScreen <= 384 ? gl.NEAREST : gl.LINEAR);
+			gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer);
+			gl.bufferData(gl.ARRAY_BUFFER, textureCoordinates, gl.STATIC_DRAW);
+			gl.vertexAttribPointer(aTextureCoordHandle, 2, gl.FLOAT, false, 0, 0);
+			gl.enableVertexAttribArray(aTextureCoordHandle);
 			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 			requestAnimationFrame(loop);
-		}();
+		});
 		return instance;
 	});
 }

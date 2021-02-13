@@ -58,8 +58,6 @@ struct Baraduke {
 	array<uint8_t, 0x900> ram2 = {};
 	array<uint8_t, 8> in = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 	int select = 0;
-	int timer = 0;
-	int counter = 0;
 	bool cpu_irq = false;
 	bool mcu_irq = false;
 
@@ -72,8 +70,9 @@ struct Baraduke {
 
 	MC6809 cpu;
 	MC6801 mcu;
+	IntTimer timer;
 
-	Baraduke() {
+	Baraduke() : cpu(49152000 / 32), mcu(49152000 / 8 / 4), timer(60) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x40; i++) {
 			cpu.memorymap[i].base = &ram[i << 8];
@@ -81,7 +80,7 @@ struct Baraduke {
 		}
 		for (int i = 0; i < 4; i++) {
 			cpu.memorymap[0x40 + i].read = [&](int addr) { return sound0->read(addr); };
-			cpu.memorymap[0x40 + i].write = [&](int addr, int data) { sound0->write(addr, data, timer); };
+			cpu.memorymap[0x40 + i].write = [&](int addr, int data) { sound0->write(addr, data); };
 		}
 		for (int i = 0; i < 8; i++) {
 			cpu.memorymap[0x48 + i].base = &ram[0x40 + i << 8];
@@ -106,7 +105,7 @@ struct Baraduke {
 			}
 		};
 
-		cpu.check_interrupt = [&]() { return cpu_irq && cpu.interrupt() ? (cpu_irq = false, true) : false; };
+		cpu.check_interrupt = [&]() { return cpu_irq && cpu.interrupt() && (cpu_irq = false, true); };
 
 		mcu.memorymap[0].read = [&](int addr) -> int {
 			int data;
@@ -118,14 +117,10 @@ struct Baraduke {
 			}
 			return ram2[addr];
 		};
-		mcu.memorymap[0].write = [&](int addr, int data) {
-			if (addr == 2 && (data & 0xe0) == 0x60)
-				select = data & 7;
-			ram2[addr] = data;
-		};
+		mcu.memorymap[0].write = [&](int addr, int data) { addr == 2 && (data & 0xe0) == 0x60 && (select = data & 7), ram2[addr] = data; };
 		for (int i = 0; i < 4; i++) {
 			mcu.memorymap[0x10 + i].read = [&](int addr) { return sound0->read(addr); };
-			mcu.memorymap[0x10 + i].write = [&](int addr, int data) { sound0->write(addr, data, timer); };
+			mcu.memorymap[0x10 + i].write = [&](int addr, int data) { sound0->write(addr, data); };
 		}
 		for (int i = 0; i < 0x40; i++)
 			mcu.memorymap[0x80 + i].base = &PRG2[i << 8];
@@ -150,20 +145,17 @@ struct Baraduke {
 			rgb[i] = 0xff000000 | (GREEN[i] >> 4) * 255 / 15 << 16 | (GREEN[i] & 15) * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
-	Baraduke *execute() {
+	Baraduke *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
 		cpu_irq = mcu_irq = true;
-		for (timer = 0; timer < 200; timer++) {
-			sound0->ram[0x105] = counter >> 15;
-			for (int i = 0; i < 4; i++)
-				cpu.execute(5), mcu.execute(6);
-			counter += sound0->ram[0x103] | sound0->ram[0x102] << 8 | sound0->ram[0x101] << 16 & 0xf0000;
-		}
-		ram2[8] |= ram2[8] << 3 & 0x40;
-		for (timer = 200; timer < 400; timer++) {
-			sound0->ram[0x105] = counter >> 15;
-			for (int i = 0; i < 4; i++)
-				cpu.execute(5), mcu.execute(6);
-			counter += sound0->ram[0x103] | sound0->ram[0x102] << 8 | sound0->ram[0x101] << 16 & 0xf0000;
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			mcu.execute(tick_rate);
+			timer.execute(tick_rate, [&]() {
+				ram2[8] |= ram2[8] << 3 & 0x40;
+			});
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
 		}
 		return this;
 	}
@@ -242,7 +234,6 @@ struct Baraduke {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
-			counter = 0;
 			cpu_irq = mcu_irq = false;
 			cpu.reset();
 			mcu.reset();
@@ -687,7 +678,7 @@ struct Baraduke {
 	}
 
 	static void init(int rate) {
-		sound0 = new C30(49152000 / 2048, rate, 400);
+		sound0 = new C30(49152000 / 1024);
 	}
 };
 

@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/toypop.wasm.js';
+import {archive} from './dist/toypop.wasm.js';
 
 read('toypop.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['tp1-2.5b', 'tp1-1.5c'].map(e => zip.decompress(e)));
@@ -21,5 +21,6 @@ read('toypop.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(z
 	const BGCOLOR = zip.decompress('tp1-4.5l');
 	const OBJCOLOR = zip.decompress('tp1-5.2p');
 	const SND = zip.decompress('tp1-6.3d');
+	const bufferSource = new Zlib.Unzip(archive).decompress('toypop.wasm');
 	return init(bufferSource, {PRG1, PRG2, PRG3, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR, SND});
 });

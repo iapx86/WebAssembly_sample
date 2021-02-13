@@ -45,7 +45,6 @@ struct PacMan {
 	int nBonus = BONUS_10000;
 
 	bool fInterruptEnable = false;
-	bool fSoundEnable = false;
 	array<uint8_t, 0xd00> ram = {};
 	array<uint8_t, 4> in = {0xff, 0xff, 0xc9, 0x00};
 	int intvec = 0;
@@ -56,7 +55,7 @@ struct PacMan {
 
 	Z80 cpu;
 
-	PacMan() {
+	PacMan() : cpu(18432000 / 6) {
 		// CPU周りの初期化
 		auto range = [](int page, int start, int end, int mirror = 0) { return (page & ~mirror) >= start && (page & ~mirror) <= end; };
 
@@ -80,7 +79,7 @@ struct PacMan {
 						case 0:
 							return void(fInterruptEnable = (data & 1) != 0);
 						case 1:
-							return void(fSoundEnable = (data & 1) != 0);
+							return sound0->control(data & 1);
 						}
 						return;
 					case 4:
@@ -102,11 +101,14 @@ struct PacMan {
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
-	PacMan *execute() {
-		sound0->mute(!fSoundEnable);
-		fInterruptEnable && cpu.interrupt(intvec), cpu.execute(0x2000);
-		if (cpu.fActive && !cpu.fSuspend && cpu.iff == 3)
-			cpu.execute(0x1400);
+	PacMan *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
+		fInterruptEnable && cpu.interrupt(intvec);
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
+		}
 		return this;
 	}
 
@@ -423,7 +425,7 @@ struct PacMan {
 	}
 
 	static void init(int rate) {
-		sound0 = new PacManSound(SND, rate);
+		sound0 = new PacManSound(SND);
 		Z80::init();
 	}
 };

@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './main.js';
-import {bufferSource} from './dist/chackn_pop.wasm.js';
+import {archive} from './dist/chackn_pop.wasm.js';
 
 read('chaknpop.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['ao4_01.ic28', 'ao4_02.ic27', 'ao4_03.ic26', 'ao4_04.ic25', 'ao4_05.ic3'].map(e => zip.decompress(e)));
@@ -14,6 +14,7 @@ read('chaknpop.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const BG = Uint8Array.concat(...['ao4_09.ic98', 'ao4_10.ic97'].map(e => zip.decompress(e)));
 	const RGB_L = zip.decompress('ao4-11.ic96');
 	const RGB_H = zip.decompress('ao4-12.ic95');
+	const bufferSource = new Zlib.Unzip(archive).decompress('chackn_pop.wasm');
 	return init(bufferSource, {PRG1, PRG2, OBJ, BG, RGB_L, RGB_H});
 }).then(instance => {
 	document.addEventListener('keydown', e => {

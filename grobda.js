@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/grobda.wasm.js';
+import {archive} from './dist/grobda.wasm.js';
 
 read('grobda.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['gr2-3.1d', 'gr2-2.1c', 'gr2-1.1b'].map(e => zip.decompress(e)));
@@ -16,5 +16,6 @@ read('grobda.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(z
 	const BGCOLOR = zip.decompress('gr1-5.4e');
 	const OBJCOLOR = zip.decompress('gr1-4.3l');
 	const SND = zip.decompress('gr1-3.3m');
+	const bufferSource = new Zlib.Unzip(archive).decompress('grobda.wasm');
 	return init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2});
 });

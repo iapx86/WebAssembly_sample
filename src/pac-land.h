@@ -59,6 +59,8 @@ struct PacLand {
 	array<uint8_t, 0x3800> ram = {};
 	array<uint8_t, 0x900> ram2 = {};
 	array<uint8_t, 5> in = {0xff, 0xff, 0xff, 0xff, 0xff};
+	bool cpu_irq = false;
+	bool mcu_irq = false;
 
 	array<uint8_t, 0x8000> fg;
 	array<uint8_t, 0x8000> bg;
@@ -72,8 +74,9 @@ struct PacLand {
 
 	MC6809 cpu;
 	MC6801 mcu;
+	IntTimer timer;
 
-	PacLand() {
+	PacLand() : cpu(49152000 / 32), mcu(49152000 / 8 / 4), timer(60) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x38; i++) {
 			cpu.memorymap[i].base = &ram[i << 8];
@@ -107,8 +110,19 @@ struct PacLand {
 		for (int i = 0; i < 0x10; i++)
 			cpu.memorymap[0x90 + i].write = [&](int addr, int data) { fFlip = !(addr & 0x800); };
 
+		cpu.check_interrupt = [&]() { return cpu_irq && cpu.interrupt() && (cpu_irq = false, true); };
+
 		mcu.memorymap[0].base = &ram2[0];
-		mcu.memorymap[0].read = [&](int addr) -> int { return addr == 2 ? in[4] : ram2[addr]; };
+		mcu.memorymap[0].read = [&](int addr) -> int {
+			int data;
+			switch (addr) {
+			case 2:
+				return in[4];
+			case 8:
+				return data = ram2[8], ram2[8] &= ~0xe0, data;
+			}
+			return ram2[addr];
+		};
 		mcu.memorymap[0].write = nullptr;
 		for (int i = 0; i < 4; i++) {
 			mcu.memorymap[0x10 + i].read = [&](int addr) { return sound0->read(addr); };
@@ -126,6 +140,8 @@ struct PacLand {
 		for (int i = 0; i < 0x10; i++)
 			mcu.memorymap[0xf0 + i].base = &PRG2I[i << 8];
 
+		mcu.check_interrupt = [&]() { return mcu_irq && mcu.interrupt() ? (mcu_irq = false, true) : (ram2[8] & 0x48) == 0x48 && mcu.interrupt(MC6801_OCF); };
+
 		// Videoの初期化
 		fg.fill(3), bg.fill(3), obj.fill(15);
 		convertGFX(&fg[0], &FG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
@@ -136,13 +152,18 @@ struct PacLand {
 		fill_n(&opaque[0][0], 0x80, 1), fill_n(&opaque[1][0], 0x7f, 1), fill_n(&opaque[1][0x80], 0x7f, 1), fill_n(&opaque[2][0xf0], 0xf, 1);
 	}
 
-	PacLand *execute() {
-		fInterruptEnable0 && cpu.interrupt(), fInterruptEnable1 && mcu.interrupt();
-		for (int i = 0; i < 800; i++)
-			cpu.execute(5), mcu.execute(6);
-		ram2[8] & 8 && mcu.interrupt(MC6801_OCF);
-		for (int i = 0; i < 800; i++)
-			cpu.execute(5), mcu.execute(6);
+	PacLand *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
+		cpu_irq = fInterruptEnable0, mcu_irq = fInterruptEnable1;
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			mcu.execute(tick_rate);
+			timer.execute(tick_rate, [&]() {
+				ram2[8] |= ram2[8] << 3 & 0x40;
+			});
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
+		}
 		return this;
 	}
 
@@ -224,6 +245,7 @@ struct PacLand {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
+			cpu_irq = mcu_irq = false;
 			cpu.reset();
 			mcu.disable();
 		}
@@ -809,7 +831,7 @@ struct PacLand {
 	}
 
 	static void init(int rate) {
-		sound0 = new C30(49152000 / 2 / 1024, rate);
+		sound0 = new C30(49152000 / 1024);
 	}
 };
 

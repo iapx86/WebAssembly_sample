@@ -64,8 +64,9 @@ struct MetroCross {
 
 	MC6809 cpu;
 	MC6801 mcu;
+	IntTimer timer;
 
-	MetroCross() {
+	MetroCross() : cpu(49152000 / 32), mcu(49152000 / 8 / 4), timer(60) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x40; i++) {
 			cpu.memorymap[i].base = &ram[i << 8];
@@ -98,7 +99,7 @@ struct MetroCross {
 			}
 		};
 
-		cpu.check_interrupt = [&]() { return cpu_irq && cpu.interrupt() ? (cpu_irq = false, true) : false; };
+		cpu.check_interrupt = [&]() { return cpu_irq && cpu.interrupt() && (cpu_irq = false, true); };
 
 		mcu.memorymap[0].read = [&](int addr) -> int {
 			int data;
@@ -110,11 +111,7 @@ struct MetroCross {
 			}
 			return ram2[addr];
 		};
-		mcu.memorymap[0].write = [&](int addr, int data) {
-			if (addr == 2 && (data & 0xe0) == 0x60)
-				select = data & 7;
-			ram2[addr] = data;
-		};
+		mcu.memorymap[0].write = [&](int addr, int data) { addr == 2 && (data & 0xe0) == 0x60 && (select = data & 7), ram2[addr] = data; };
 		for (int i = 0; i < 4; i++) {
 			mcu.memorymap[0x10 + i].read = [&](int addr) { return sound0->read(addr); };
 			mcu.memorymap[0x10 + i].write = [&](int addr, int data) { sound0->write(addr, data); };
@@ -142,13 +139,18 @@ struct MetroCross {
 			rgb[i] = 0xff000000 | (GREEN[i] >> 4) * 255 / 15 << 16 | (GREEN[i] & 15) * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
-	MetroCross *execute() {
+	MetroCross *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
 		cpu_irq = mcu_irq = true;
-		for (int i = 0; i < 800; i++)
-			cpu.execute(5), mcu.execute(6);
-		ram2[8] |= ram2[8] << 3 & 0x40;
-		for (int i = 0; i < 800; i++)
-			cpu.execute(5), mcu.execute(6);
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			mcu.execute(tick_rate);
+			timer.execute(tick_rate, [&]() {
+				ram2[8] |= ram2[8] << 3 & 0x40;
+			});
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
+		}
 		return this;
 	}
 
@@ -642,7 +644,7 @@ struct MetroCross {
 	}
 
 	static void init(int rate) {
-		sound0 = new C30(49152000 / 2048, rate);
+		sound0 = new C30(49152000 / 1024);
 	}
 };
 

@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './main.js';
-import {bufferSource} from './dist/strategy_x.wasm.js';
+import {archive} from './dist/strategy_x.wasm.js';
 
 read('stratgyx.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['2c_1.bin', '2e_2.bin', '2f_3.bin', '2h_4.bin', '2j_5.bin', '2l_6.bin'].map(e => zip.decompress(e)));
@@ -13,6 +13,7 @@ read('stratgyx.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const BG = Uint8Array.concat(...['5f_c2.bin', '5h_c1.bin'].map(e => zip.decompress(e)));
 	const RGB = zip.decompress('strategy.6e');
 	const MAP = zip.decompress('strategy.10k');
+	const bufferSource = new Zlib.Unzip(archive).decompress('strategy_x.wasm');
 	return init(bufferSource, {BG, RGB, PRG1, PRG2, MAP});
 }).then(instance => {
 	document.addEventListener('keydown', e => {

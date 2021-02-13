@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/1942.wasm.js';
+import {archive} from './dist/1942.wasm.js';
 
 read('1942.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	let PRG1 = Uint8Array.concat(...['srb-03.m3', 'srb-04.m4', 'srb-05.m5', 'srb-06.m6'].map(e => zip.decompress(e)));
@@ -20,5 +20,6 @@ read('1942.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip
 	const FGCOLOR = zip.decompress('sb-0.f1');
 	const BGCOLOR = zip.decompress('sb-4.d6');
 	const OBJCOLOR = zip.decompress('sb-8.k3');
+	const bufferSource = new Zlib.Unzip(archive).decompress('1942.wasm');
 	return init(bufferSource, {PRG1, PRG2, FG, BG, OBJ, RED, GREEN, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR});
 });

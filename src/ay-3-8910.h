@@ -5,26 +5,16 @@
 #ifndef AY_3_8910_H
 #define AY_3_8910_H
 
-#include <algorithm>
 #include <array>
-#include <list>
-#include <mutex>
-#include <utility>
-#include <vector>
 using namespace std;
 
 struct AY_3_8910 {
-	int rate;
-	int sampleRate;
-	int count;
-	int resolution;
-	float gain;
-	vector<list<pair<int, int>>> tmpwheel;
-	list<list<pair<int, int>>> wheel;
-	mutex mutex;
-	array<uint8_t, 0x10> ram = {};
+	double rate;
+	double gain;
+	double output = 0;
+	bool mute = false;
 	array<uint8_t, 0x10> reg = {};
-	int cycles = 0;
+	double frac = 0;
 	struct {
 		int freq = 0;
 		int count = 0;
@@ -35,65 +25,46 @@ struct AY_3_8910 {
 	int ecount = 0;
 	int step = 0;
 
-	AY_3_8910(int clock, int sampleRate = 48000, int resolution = 1, float gain = 0.1) {
+	AY_3_8910(double clock, double gain = 0.1) {
 		rate = clock / 8;
-		this->sampleRate = sampleRate;
-		count = sampleRate - 1;
-		this->resolution = resolution;
 		this->gain = gain;
-		tmpwheel.resize(resolution);
+	}
+
+	void control(bool flag) {
+		mute = !flag;
 	}
 
 	int read(int addr) {
-		return ram[addr & 0xf];
+		return reg[addr & 0xf];
 	}
 
-	void write(int addr, int data, int timer = 0) {
-		ram[addr &= 0xf] = data;
-		if (addr < 0xe)
-			tmpwheel[timer].push_back({addr, data});
+	void write(int addr, int data) {
+		reg[addr &= 15] = data, addr == 13 && (step = 0);
+	}
+
+	void execute(double rate, double rate_correction = 1) {
+		for (frac += this->rate * rate_correction; frac >= rate; frac -= rate) {
+			const int nfreq = reg[6] & 0x1f, efreq = reg[11] | reg[12] << 8, etype = reg[13];
+			for (int i = 0; i < 3; i++) {
+				auto& ch = channel[i];
+				ch.freq = reg[1 + i * 2] << 8 & 0xf00 | reg[i * 2], ++ch.count >= ch.freq && (ch.output = ~ch.output, ch.count = 0);
+			}
+			++ncount >= nfreq << 1 && (rng = (rng >> 16 ^ rng >> 13 ^ 1) & 1 | rng << 1, ncount = 0);
+			++ecount >= efreq && (step += ((step < 16) | etype >> 3 & ~etype & 1) - (step >= 47) * 32, ecount = 0);
+		}
 	}
 
 	void update() {
-		mutex.lock();
-		if (wheel.size() > resolution) {
-			while (!wheel.empty())
-				for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { regwrite(e); }), wheel.pop_front();
-			count = sampleRate - 1;
+		output = 0;
+		if (mute)
+			return;
+		const int etype = reg[13];
+		const int evol = (~step ^ ((((etype ^ etype >> 1) & step >> 4 ^ ~etype >> 2) & 1) - 1)) & (~etype >> 3 & step >> 4 & 1) - 1 & 15;
+		for (int i = 0; i < 3; i++) {
+			auto& ch = channel[i];
+			const int vol = reg[8 + i] >> 4 & 1 ? evol : reg[8 + i] & 0xf;
+			output += (((!ch.freq | reg[7] >> i | ch.output) & (reg[7] >> i + 3 | rng) & 1) * 2 - 1) * (vol ? pow(10, (vol - 15) / 10.0) : 0.0) * gain;
 		}
-		wheel.insert(wheel.end(), tmpwheel.begin(), tmpwheel.end());
-		mutex.unlock();
-		for_each(tmpwheel.begin(), tmpwheel.end(), [](list<pair<int, int>>& e) { e.clear(); });
-	}
-
-	void makeSound(float *data, uint32_t length) {
-		for (int i = 0; i < length; i++) {
-			for (count += 60 * resolution; count >= sampleRate; count -= sampleRate)
-				if (!wheel.empty()) {
-					mutex.lock();
-					for_each(wheel.front().begin(), wheel.front().end(), [&](pair<int, int>& e) { regwrite(e); }), wheel.pop_front();
-					mutex.unlock();
-				}
-			const int nfreq = reg[6] & 0x1f, efreq = reg[11] | reg[12] << 8, etype = reg[13];
-			const int evol = (~step ^ ((((etype ^ etype >> 1) & step >> 4 ^ ~etype >> 2) & 1) - 1)) & (~etype >> 3 & step >> 4 & 1) - 1 & 15;
-			for (int j = 0; j < 3; j++) {
-				auto& ch = channel[j];
-				ch.freq = reg[j * 2] | reg[1 + j * 2] << 8 & 0xf00;
-				const int vol = reg[8 + j] >> 4 & 1 ? evol : reg[8 + j] & 0xf;
-				data[i] += (((!ch.freq | reg[7] >> j | ch.output) & (reg[7] >> j + 3 | rng) & 1) * 2 - 1) * (vol ? pow(10, (vol - 15) / 10.0) : 0.0) * gain;
-			}
-			for (cycles += rate; cycles >= sampleRate; cycles -= sampleRate) {
-				for (auto& ch: channel)
-					++ch.count >= ch.freq && (ch.output = ~ch.output, ch.count = 0);
-				++ncount >= nfreq << 1 && (rng = (rng >> 16 ^ rng >> 13 ^ 1) & 1 | rng << 1, ncount = 0);
-				++ecount >= efreq && (step += ((step < 16) | etype >> 3 & ~etype & 1) - (step >= 47) * 32, ecount = 0);
-			}
-		}
-	}
-
-	void regwrite(pair<int, int>& e) {
-		int addr = e.first, data = e.second;
-		reg[addr] = data, addr == 13 && (step = 0);
 	}
 };
 

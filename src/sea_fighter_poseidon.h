@@ -9,16 +9,14 @@
 
 #include <algorithm>
 #include <array>
-#include <vector>
 #include "z80.h"
 #include "mc6805.h"
 #include "ay-3-8910.h"
-#include "sound_effect.h"
+#include "dac.h"
+#include "utils.h"
 using namespace std;
 
 struct SeaFighterPoseidon {
-	static vector<int> pcmtable;
-	static vector<vector<short>> pcm;
 	static array<uint8_t, 0xa000> PRG1;
 	static array<uint8_t, 0x2000> PRG2;
 	static array<uint8_t, 0x800> PRG3;
@@ -34,7 +32,7 @@ struct SeaFighterPoseidon {
 	static const bool rotate = true;
 
 	static AY_3_8910 *sound0, *sound1, *sound2, *sound3;
-	static SoundEffect *sound4;
+	static Dac1Ch *sound4;
 
 	bool fReset = false;
 	bool fTest = false;
@@ -54,8 +52,6 @@ struct SeaFighterPoseidon {
 	struct {
 		int addr = 0;
 	} psg[4];
-	int count = 0;
-	int timer = 0;
 	bool cpu2_irq = false;
 	bool cpu2_nmi = false;
 	bool cpu2_nmi2 = false;
@@ -78,12 +74,11 @@ struct SeaFighterPoseidon {
 	array<uint8_t, 2> colorbank = {};
 	int mode = 0;
 
-	vector<SE> se;
-
 	Z80 cpu, cpu2;
 	MC6805 mcu;
+	DoubleTimer timer;
 
-	SeaFighterPoseidon(int rate) {
+	SeaFighterPoseidon() : cpu(8000000 / 2), cpu2(6000000 / 2), mcu(3000000 / 4), timer(6000000.0 / 163840) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x80; i++)
 			cpu.memorymap[i].base = &PRG1[i << 8];
@@ -134,9 +129,7 @@ struct SeaFighterPoseidon {
 			case 0xe:
 				return void(psg[0].addr = data);
 			case 0xf:
-				if ((psg[0].addr & 0xf) < 0xe)
-					sound0->write(psg[0].addr, data, count);
-				return;
+				return (psg[0].addr & 0xf) < 0xe ? sound0->write(psg[0].addr, data) : void(0);
 			}
 		};
 		cpu.memorymap[0xd5].write = [&](int addr, int data) {
@@ -196,21 +189,21 @@ struct SeaFighterPoseidon {
 				case 0:
 					return void(psg[1].addr = data);
 				case 1:
-					return sound1->write(psg[1].addr, data, count);
+					(psg[1].addr & 0xf) == 0xe && (sound4->data = (data - 128) / 127.0);
+					(psg[1].addr & 0xf) == 0xf && (sound4->vol = (data ^ 255) / 255.0);
+					return sound1->write(psg[1].addr, data);
 				case 2:
 					return void(psg[2].addr = data);
 				case 3:
-					if ((psg[2].addr & 0xf) == 0xe)
-						in[5] = in[5] & 0x0f | data & 0xf0;
-					return sound2->write(psg[2].addr, data, count);
+					(psg[2].addr & 0xf) == 0xe && (in[5] = in[5] & 0x0f | data & 0xf0);
+					return sound2->write(psg[2].addr, data);
 				case 4:
 				case 6:
 					return void(psg[3].addr = data);
 				case 5:
 				case 7:
-					if ((psg[3].addr & 0xf) == 0xf)
-						fNmiEnable = !(data & 1);
-					return sound3->write(psg[3].addr, data, count);
+					(psg[3].addr & 0xf) == 0xf && (fNmiEnable = !(data & 1));
+					return sound3->write(psg[3].addr, data);
 				}
 			};
 			cpu2.memorymap[0x50 + i].read = [&](int addr) {
@@ -239,15 +232,6 @@ struct SeaFighterPoseidon {
 				return cpu2_irq = false, true;
 			return false;
 		};
-
-		cpu2.breakpoint = [&](int addr) {
-			const auto idx = distance(pcmtable.begin(), find(pcmtable.begin(), pcmtable.end(), ram2[1] | ram2[2] << 8));
-			for (auto& ch: se)
-				ch.stop = true;
-			if (idx != pcmtable.size())
-				se[idx].start = true;
-		};
-		cpu2.set_breakpoint(0x01be);
 
 		mcu.memorymap[0].fetch = [&](int addr) -> int { return addr >= 0x80 ? PRG3[addr] : ram3[addr]; };
 		mcu.memorymap[0].read = [&](int addr) -> int {
@@ -282,21 +266,23 @@ struct SeaFighterPoseidon {
 		for (int i = 16; i < 32; i++)
 			for (int mask = 0, j = 3; j >= 0; mask |= 1 << pri[i][j], --j)
 				pri[i][j] = PRI[i << 4 & 0xf0 | mask] >> 2 & 3;
-
-		// 効果音の初期化
-		convertPCM(rate);
-		se.resize(pcm.size());
-		for (int i = 0; i < se.size(); i++)
-			se[i].freq = rate, se[i].buf = pcm[i];
 	}
 
-	SeaFighterPoseidon *execute() {
-		Cpu *cpus[] = {&cpu, &cpu2, &mcu};
+	SeaFighterPoseidon *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
 		cpu.interrupt();
-		for (count = 0; count < 3; count++) {
-			!timer && (cpu2_irq = true);
-			Cpu::multiple_execute(3, cpus, 0x800);
-			++timer >= 5 && (timer = 0);
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			mcu.execute(tick_rate);
+			timer.execute(tick_rate, 1, [&]() {
+				cpu2_irq = true;
+			});
+			sound0->execute(tick_rate, rate_correction);
+			sound1->execute(tick_rate, rate_correction);
+			sound2->execute(tick_rate, rate_correction);
+			sound3->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
 		}
 		return this;
 	}
@@ -337,7 +323,6 @@ struct SeaFighterPoseidon {
 			cpu2_irq = false;
 			cpu2_nmi = false;
 			cpu2_nmi2 = false;
-			timer = 0;
 			cpu2_command = 0;
 			cpu2_flag = 0;
 			cpu2_flag2 = 0;
@@ -389,66 +374,6 @@ struct SeaFighterPoseidon {
 
 	void triggerB(bool fDown) {
 		in[0] = in[0] & ~(1 << 5) | !fDown << 5;
-	}
-
-	static void convertPCM(int rate) {
-		static bool converted = false;
-		const int clock = 3000000;
-
-		if (converted)
-			return;
-		pcmtable = {0xa26, 0xa34, 0xa73, 0xa81, 0xa8f, 0xaa5, 0xaeb, 0xb09};
-		for (int idx = 0; idx < pcmtable.size(); idx++) {
-			const int desc1 = pcmtable[idx];
-			const int r1 = PRG2[desc1 + 1], n = PRG2[desc1 + 2], desc2 = PRG2[desc1 + 3] | PRG2[desc1 + 4] << 8, w1 = PRG2[desc1 + 5];
-			unsigned int timer = 61;
-			for (int i = 0; i < r1; i++) {
-				for (int j = 0; j < n; j++) {
-					int len = PRG2[desc2 + j * 8], w2 = PRG2[desc2 + j * 8 + 1], r2 = PRG2[desc2 + j * 8 + 2], dw2 = PRG2[desc2 + j * 8 + 3];
-					for (int k = 0; k < r2; w2 = w2 + dw2 & 0xff, k++)
-						timer += 46 + 57 + (53 + 63 + (w1 - 1 & 0xff) * 16 + (w2 - 1 & 0xff) * 16) * len + 174;
-					if (j < n - 1)
-						timer += 388 + (j + 1) * 38;
-				}
-				if (i < r1 - 1)
-					timer += 496;
-			}
-			timer += 138;
-			vector<short> buf(size_t((double)timer * rate / clock));
-			int e = 0, m = 0, vol = 0, cnt = 0;
-			auto advance = [&](int cycle) {
-				for (timer += cycle * rate; timer >= clock; timer -= clock)
-					buf.at(cnt++) = e;
-			};
-			timer = 0;
-			advance(61);
-			for (int i = 0; i < r1; i++) {
-				for (int j = 0; j < n; j++) {
-					int len = PRG2[desc2 + j * 8], w2 = PRG2[desc2 + j * 8 + 1], r2 = PRG2[desc2 + j * 8 + 2], dw2 = PRG2[desc2 + j * 8 + 3];
-					int addr = PRG2[desc2 + j * 8 + 4] | PRG2[desc2 + j * 8 + 5] << 8, _vol = PRG2[desc2 + j * 8 + 6], dv = PRG2[desc2 + j * 8 + 7];
-					for (int k = 0; k < r2; k++) {
-						advance(46);
-						e = m * (vol = ~_vol & 0xff);
-						advance(57);
-						for (int l = 0; l < len; l++) {
-							advance(53);
-							e = (m = PRG2[addr + l] - 0x80) * vol;
-							advance(63 + (w1 - 1 & 0xff) * 16 + (w2 - 1 & 0xff) * 16);
-						}
-						_vol = _vol + dv & 0xff;
-						w2 = w2 + dw2 & 0xff;
-						advance(174);
-					}
-					if (j < n - 1)
-						advance(388 + (j + 1) * 38);
-				}
-				if (i < r1 - 1)
-					advance(496);
-			}
-			advance(138);
-			pcm.push_back(buf);
-		}
-		converted = true;
 	}
 
 	void makeBitmap(int *data) {
@@ -765,11 +690,11 @@ struct SeaFighterPoseidon {
 	}
 
 	void init(int rate) {
-		sound0 = new AY_3_8910(1500000, rate, 3);
-		sound1 = new AY_3_8910(1500000, rate, 3);
-		sound2 = new AY_3_8910(1500000, rate, 3);
-		sound3 = new AY_3_8910(1500000, rate, 3);
-		sound4 = new SoundEffect(se, rate, 0.2);
+		sound0 = new AY_3_8910(6000000 / 4);
+		sound1 = new AY_3_8910(6000000 / 4);
+		sound2 = new AY_3_8910(6000000 / 4);
+		sound3 = new AY_3_8910(6000000 / 4);
+		sound4 = new Dac1Ch(0.2);
 		Z80::init();
 	}
 };

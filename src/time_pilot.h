@@ -9,7 +9,7 @@
 
 #include <algorithm>
 #include <array>
-#include <list>
+#include <functional>
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "utils.h"
@@ -48,7 +48,6 @@ struct TimePilot {
 	int nDifficulty = 4;
 
 	bool fInterruptEnable = false;
-//	bool fSoundEnable = false;
 
 	array<uint8_t, 0x1400> ram = {};
 	array<uint8_t, 5> in = {0xff, 0xff, 0xff, 0xff, 0x4b};
@@ -56,9 +55,7 @@ struct TimePilot {
 	struct {
 		int addr = 0;
 	} psg[2];
-	int count = 0;
-	int timer = 0;
-	list<int> command;
+	bool cpu2_irq = false;
 
 	array<uint8_t, 0x8000> bg;
 	array<uint8_t, 0x10000> obj;
@@ -67,8 +64,26 @@ struct TimePilot {
 	int vpos = 0;
 
 	Z80 cpu, cpu2;
+	struct {
+		int rate = 256 * 60;
+		int frac = 0;
+		int count = 0;
+		void execute(int rate, function<void(int)> fn) {
+			for (frac += this->rate; frac >= rate; frac -= rate)
+				fn(count = count + 1 & 255);
+		}
+	} scanline;
+	struct {
+		double rate = 14318181.0 / 4096;
+		double frac = 0;
+		int count = 0;
+		void execute(double rate, double rate_correction, function<void(int)> fn) {
+			for (frac += this->rate * rate_correction; frac >= rate; frac -= rate)
+				fn(count = (count + 1) % 10);
+		}
+	} timer;
 
-	TimePilot() {
+	TimePilot() : cpu(18432000 / 6), cpu2(14318181 / 8) {
 		// CPU周りの初期化
 		auto range = [](int page, int start, int end, int mirror = 0) { return (page & ~mirror) >= start && (page & ~mirror) <= end; };
 
@@ -86,7 +101,7 @@ struct TimePilot {
 				cpu.memorymap[page].write = nullptr;
 			} else if (range(page, 0xc0, 0xc0, 0x0c)) {
 				cpu.memorymap[page].read = [&](int addr) { return vpos; };
-				cpu.memorymap[page].write = [&](int addr, int data) { command.push_back(data); };
+				cpu.memorymap[page].write = [&](int addr, int data) { cpu2_irq = true, sound0->write(0xe, data); };
 			} else if (range(page, 0xc2, 0xc2, 0x0c))
 				cpu.memorymap[page].read = [&](int addr) -> int { return in[4]; };
 			else if (range(page, 0xc3, 0xc3, 0x0c)) {
@@ -95,8 +110,8 @@ struct TimePilot {
 					switch (addr >> 1 & 0x7f) {
 					case 0:
 						return void(fInterruptEnable = (data & 1) != 0);
-//					case 3:
-//						return void(fSoundEnable = (data & 1) == 0);
+					case 3:
+						return sound0->control(!(data & 1)), sound1->control(!(data & 1));
 					}
 				};
 			}
@@ -109,14 +124,16 @@ struct TimePilot {
 				cpu2.memorymap[page].write = nullptr;
 			} else if (range(page, 0x40, 0x40, 0x0f)) {
 				cpu2.memorymap[page].read = [&](int addr) { return sound0->read(psg[0].addr); };
-				cpu2.memorymap[page].write = [&](int addr, int data) { sound0->write(psg[0].addr, data, count); };
+				cpu2.memorymap[page].write = [&](int addr, int data) { sound0->write(psg[0].addr, data); };
 			} else if (range(page, 0x50, 0x50, 0x0f))
 				cpu2.memorymap[page].write = [&](int addr, int data) { psg[0].addr = data; };
 			else if (range(page, 0x60, 0x60, 0x0f)) {
 				cpu2.memorymap[page].read = [&](int addr) { return sound1->read(psg[1].addr); };
-				cpu2.memorymap[page].write = [&](int addr, int data) { sound1->write(psg[1].addr, data, count); };
+				cpu2.memorymap[page].write = [&](int addr, int data) { sound1->write(psg[1].addr, data); };
 			} else if (range(page, 0x70, 0x70, 0x0f))
 				cpu2.memorymap[page].write = [&](int addr, int data) { psg[1].addr = data; };
+
+		cpu2.check_interrupt = [&]() { return cpu2_irq && cpu2.interrupt() && (cpu2_irq = false, true); };
 
 		// Videoの初期化
 		bg.fill(3), obj.fill(3);
@@ -130,21 +147,22 @@ struct TimePilot {
 		}
 	}
 
-	TimePilot *execute() {
-//		sound0->mute(!fSoundEnable);
-//		sound1->mute(!fSoundEnable);
-		for (int i = 0; i < 256; i++) {
-			vpos = i + 144 & 0xff;
-			if (!vpos)
-				copy_n(&ram[0x1000], 0x200, &ram[0x1200]);
-			vpos == 240 && fInterruptEnable && cpu.non_maskable_interrupt(), cpu.execute(32);
-		}
-		for (count = 0; count < 58; count++) { // 14318181 / 8 / 60 / 512
-			if (command.size() && cpu2.interrupt())
-				sound0->write(0x0e, command.front()), command.pop_front();
-			sound0->write(0x0f, array<uint8_t, 10>{0x00, 0x10, 0x20, 0x30, 0x40, 0x90, 0xa0, 0xb0, 0xa0, 0xd0}[timer]);
-			cpu2.execute(73);
-			++timer >= 10 && (timer = 0);
+	TimePilot *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			scanline.execute(tick_rate, [&](int cnt) {
+				vpos = cnt + 240 & 0xff;
+				!vpos && copy_n(&ram[0x1000], 0x200, &ram[0x1200]);
+				vpos == 240 && fInterruptEnable && cpu.non_maskable_interrupt();
+			});
+			timer.execute(tick_rate, rate_correction, [&](int cnt) {
+				sound0->write(0xf, array<uint8_t, 10>{0x00, 0x10, 0x20, 0x30, 0x40, 0x90, 0xa0, 0xb0, 0xa0, 0xd0}[cnt]);
+			});
+			sound0->execute(tick_rate, rate_correction);
+			sound1->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
 		}
 		return this;
 	}
@@ -212,11 +230,10 @@ struct TimePilot {
 		// リセット処理
 		if (fReset) {
 			fReset = false;
-			cpu.reset();
 			fInterruptEnable = false;
-			command.clear();
+			cpu.reset();
+			cpu2_irq = false;
 			cpu2.reset();
-			timer = 0;
 		}
 		return this;
 	}
@@ -643,8 +660,8 @@ struct TimePilot {
 	}
 
 	static void init(int rate) {
-		sound0 = new AY_3_8910(14318181 / 8, rate, 58, 0.2);
-		sound1 = new AY_3_8910(14318181 / 8, rate, 58, 0.2);
+		sound0 = new AY_3_8910(14318181.0 / 8, 0.2);
+		sound1 = new AY_3_8910(14318181.0 / 8, 0.2);
 		Z80::init();
 	}
 };

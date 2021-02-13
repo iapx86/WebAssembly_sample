@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/motos.wasm.js';
+import {archive} from './dist/motos.wasm.js';
 
 read('motos.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['mo1_3.1d', 'mo1_1.1b'].map(e => zip.decompress(e)));
@@ -16,5 +16,6 @@ read('motos.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zi
 	const BGCOLOR = zip.decompress('mo1-6.4c');
 	const OBJCOLOR = zip.decompress('mo1-7.5k');
 	const SND = zip.decompress('mo1-3.3m');
+	const bufferSource = new Zlib.Unzip(archive).decompress('motos.wasm');
 	return init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2});
 });

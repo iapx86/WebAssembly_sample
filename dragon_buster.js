@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/dragon_buster.wasm.js';
+import {archive} from './dist/dragon_buster.wasm.js';
 
 read('drgnbstr.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['db1_2b.6c', 'db1_1.6b', 'db1_3.6d'].map(e => zip.decompress(e)));
@@ -19,5 +19,6 @@ read('drgnbstr.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const BLUE = zip.decompress('db1-3.2r');
 	const BGCOLOR = zip.decompress('db1-4.5n');
 	const OBJCOLOR = zip.decompress('db1-5.6n');
+	const bufferSource = new Zlib.Unzip(archive).decompress('dragon_buster.wasm');
 	return init(bufferSource, {PRG1, PRG2, PRG2I, FG, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR});
 });

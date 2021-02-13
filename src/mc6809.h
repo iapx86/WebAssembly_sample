@@ -10,6 +10,7 @@
 #include "cpu.h"
 
 struct MC6809 : Cpu {
+	static const unsigned char cc[0x100], cc_i[0x100];
 	int a = 0;
 	int b = 0;
 	int dp = 0;
@@ -19,9 +20,9 @@ struct MC6809 : Cpu {
 	int u = 0;
 	int s = 0;
 
-	MC6809() {}
+	MC6809(int clock = 0) : Cpu(clock) {}
 
-	void reset() {
+	void reset() override {
 		Cpu::reset();
 		ccr = 0x50;
 		dp = 0;
@@ -31,25 +32,25 @@ struct MC6809 : Cpu {
 	bool fast_interrupt() {
 		if (!Cpu::interrupt() || ccr & 0x40)
 			return false;
-		return pshs16(pc), pshs(ccr &= ~0x80), ccr |= 0x50, pc = read16(0xfff6), true;
+		return cycle -= 10, pshs16(pc), pshs(ccr &= ~0x80), ccr |= 0x50, pc = read16(0xfff6), true;
 	}
 
-	bool interrupt() {
+	bool interrupt() override {
 		if (!Cpu::interrupt() || ccr & 0x10)
 			return false;
-		return pshs16(pc), pshs16(u), pshs16(y), pshs16(x), pshs(dp), pshs(b), pshs(a), pshs(ccr |= 0x80), ccr |= 0x10, pc = read16(0xfff8), true;
+		return cycle -= cc[0x3f], pshs16(pc), pshs16(u), pshs16(y), pshs16(x), pshs(dp), pshs(b), pshs(a), pshs(ccr |= 0x80), ccr |= 0x10, pc = read16(0xfff8), true;
 	}
 
 	bool non_maskable_interrupt() {
 		if (!Cpu::interrupt())
 			return false;
-		return pshs16(pc), pshs16(u), pshs16(y), pshs16(x), pshs(dp), pshs(b), pshs(a), pshs(ccr |= 0x80), ccr |= 0x50, pc = read16(0xfffc), true;
+		return cycle -= cc[0x3f], pshs16(pc), pshs16(u), pshs16(y), pshs16(x), pshs(dp), pshs(b), pshs(a), pshs(ccr |= 0x80), ccr |= 0x50, pc = read16(0xfffc), true;
 	}
 
-	void _execute() {
-		int v, ea;
-
-		switch (fetch()) {
+	void _execute() override {
+		int v, ea, op = fetch();
+		cycle -= cc[op];
+		switch (op) {
 		case 0x00: // NEG <n
 			return ea = dp << 8 | fetch(), write8(neg8(read(ea)), ea);
 		case 0x03: // COM <n
@@ -75,7 +76,8 @@ struct MC6809 : Cpu {
 		case 0x0f: // CLR <n
 			return write8(clr8(), dp << 8 | fetch());
 		case 0x10:
-			switch (fetch()) {
+			cycle -= cc[op = fetch()];
+			switch (op) {
 			case 0x21: // LBRN
 				return lbcc(false);
 			case 0x22: // LBHI
@@ -159,7 +161,8 @@ struct MC6809 : Cpu {
 				return;
 			}
 		case 0x11:
-			switch (fetch()) {
+			cycle -= cc[op = fetch()];
+			switch (op) {
 			case 0x3f: // SWI3
 				return pshs16(pc), pshs16(u), pshs16(y), pshs16(x), pshs(dp), pshs(b), pshs(a), pshs(ccr |= 0x80), void(pc = read16(0xfff2));
 			case 0x83: // CMPU #nn
@@ -426,85 +429,27 @@ struct MC6809 : Cpu {
 		case 0x33: // LEAU
 			return void(u = index());
 		case 0x34: // PSHS
-			if ((v = fetch()) & 0x80)
-				pshs16(pc);
-			if (v & 0x40)
-				pshs16(u);
-			if (v & 0x20)
-				pshs16(y);
-			if (v & 0x10)
-				pshs16(x);
-			if (v & 8)
-				pshs(dp);
-			if (v & 4)
-				pshs(b);
-			if (v & 2)
-				pshs(a);
-			if (v & 1)
-				pshs(ccr);
-			return;
+			(v = fetch()) & 0x80 ? (cycle -= 2, pshs16(pc)) : void(0), v & 0x40 ? (cycle -= 2, pshs16(u)) : void(0);
+			v & 0x20 ? (cycle -= 2, pshs16(y)) : void(0), v & 0x10 ? (cycle -= 2, pshs16(x)) : void(0), v & 8 ? (cycle -= 1, pshs(dp)) : void(0);
+			return v & 4 ? (cycle -= 1, pshs(b)) : void(0), v & 2 ? (cycle -= 1, pshs(a)) : void(0), v & 1 ? (cycle -= 1, pshs(ccr)) : void(0);
 		case 0x35: // PULS
-			if ((v = fetch()) & 1)
-				ccr = puls();
-			if (v & 2)
-				a = puls();
-			if (v & 4)
-				b = puls();
-			if (v & 8)
-				dp = puls();
-			if (v & 0x10)
-				x = puls16();
-			if (v & 0x20)
-				y = puls16();
-			if (v & 0x40)
-				u = puls16();
-			if (v & 0x80)
-				pc = puls16();
-			return;
+			(v = fetch()) & 1 && (cycle -= 1, ccr = puls()), v & 2 && (cycle -= 1, a = puls()), v & 4 && (cycle -= 1, b = puls());
+			v & 8 && (cycle -= 1, dp = puls()), v & 0x10 && (cycle -= 2, x = puls16()), v & 0x20 && (cycle -= 2, y = puls16());
+			return v & 0x40 && (cycle -= 2, u = puls16()), void(v & 0x80 && (cycle -= 2, pc = puls16()));
 		case 0x36: // PSHU
-			if ((v = fetch()) & 0x80)
-				pshu16(pc);
-			if (v & 0x40)
-				pshu16(s);
-			if (v & 0x20)
-				pshu16(y);
-			if (v & 0x10)
-				pshu16(x);
-			if (v & 8)
-				pshu(dp);
-			if (v & 4)
-				pshu(b);
-			if (v & 2)
-				pshu(a);
-			if (v & 1)
-				pshu(ccr);
-			return;
+			(v = fetch()) & 0x80 ? (cycle -= 2, pshu16(pc)) : void(0), v & 0x40 ? (cycle -= 2, pshu16(s)) : void(0);
+			v & 0x20 ? (cycle -= 2, pshu16(y)) : void(0), v & 0x10 ? (cycle -= 2, pshu16(x)) : void(0), v & 8 ? (cycle -= 1, pshu(dp)) : void(0);
+			return v & 4 ? (cycle -= 1, pshu(b)) : void(0), v & 2 ? (cycle -= 1, pshu(a)) : void(0), v & 1 ? (cycle -= 1, pshu(ccr)) : void(0);
 		case 0x37: // PULU
-			if ((v = fetch()) & 1)
-				ccr = pulu();
-			if (v & 2)
-				a = pulu();
-			if (v & 4)
-				b = pulu();
-			if (v & 8)
-				dp = pulu();
-			if (v & 0x10)
-				x = pulu16();
-			if (v & 0x20)
-				y = pulu16();
-			if (v & 0x40)
-				s = pulu16();
-			if (v & 0x80)
-				pc = pulu16();
-			return;
+			(v = fetch()) & 1 && (cycle -= 1, ccr = pulu()), v & 2 && (cycle -= 1, a = pulu()), v & 4 && (cycle -= 1, b = pulu());
+			v & 8 && (cycle -= 1, dp = pulu()), v & 0x10 && (cycle -= 2, x = pulu16()), v & 0x20 && (cycle -= 2, y = pulu16());
+			return v & 0x40 && (cycle -= 2, s = pulu16()), void(v & 0x80 && (cycle -= 2, pc = pulu16()));
 		case 0x39: // RTS
 			return void(pc = puls16());
 		case 0x3a: // ABX
 			return void(x = x + b & 0xffff);
 		case 0x3b: // RTI
-			if ((ccr = puls()) & 0x80)
-				a = puls(), b = puls(), dp = puls(), x = puls16(), y = puls16(), u = puls16();
-			return void(pc = puls16());
+			return (ccr = puls()) & 0x80 && (cycle -= 9, a = puls(), b = puls(), dp = puls(), x = puls16(), y = puls16(), u = puls16()), void(pc = puls16());
 		case 0x3c: // CWAI
 			return ccr &= fetch(), suspend();
 		case 0x3d: // MUL
@@ -858,9 +803,9 @@ struct MC6809 : Cpu {
 	}
 
 	int index() {
-		int v;
-
-		switch (fetch()) {
+		int v, pb = fetch();
+		cycle -= cc_i[pb];
+		switch (pb) {
 		case 0x00: // $0,X
 			return x;
 		case 0x01: // $1,X
@@ -899,7 +844,7 @@ struct MC6809 : Cpu {
 			return x - 0x0f & 0xffff;
 		case 0x12: // -$e,X
 			return x - 0x0e & 0xffff;
-		case 0x13: // -$D,X
+		case 0x13: // -$d,X
 			return x - 0x0d & 0xffff;
 		case 0x14: // -$c,X
 			return x - 0x0c & 0xffff;
@@ -951,7 +896,7 @@ struct MC6809 : Cpu {
 			return y + 0x0b & 0xffff;
 		case 0x2c: // $c,Y
 			return y + 0x0c & 0xffff;
-		case 0x2d: // $D,Y
+		case 0x2d: // $d,Y
 			return y + 0x0d & 0xffff;
 		case 0x2e: // $e,Y
 			return y + 0x0e & 0xffff;
@@ -963,7 +908,7 @@ struct MC6809 : Cpu {
 			return y - 0x0f & 0xffff;
 		case 0x32: // -$e,Y
 			return y - 0x0e & 0xffff;
-		case 0x33: // -$D,Y
+		case 0x33: // -$d,Y
 			return y - 0x0d & 0xffff;
 		case 0x34: // -$c,Y
 			return y - 0x0c & 0xffff;
@@ -1015,7 +960,7 @@ struct MC6809 : Cpu {
 			return u + 0x0b & 0xffff;
 		case 0x4c: // $c,U
 			return u + 0x0c & 0xffff;
-		case 0x4d: // $D,U
+		case 0x4d: // $d,U
 			return u + 0x0d & 0xffff;
 		case 0x4e: // $e,U
 			return u + 0x0e & 0xffff;
@@ -1027,7 +972,7 @@ struct MC6809 : Cpu {
 			return u - 0x0f & 0xffff;
 		case 0x52: // -$e,U
 			return u - 0x0e & 0xffff;
-		case 0x53: // -$D,U
+		case 0x53: // -$d,U
 			return u - 0x0d & 0xffff;
 		case 0x54: // -$c,U
 			return u - 0x0c & 0xffff;
@@ -1079,7 +1024,7 @@ struct MC6809 : Cpu {
 			return s + 0x0b & 0xffff;
 		case 0x6c: // $c,S
 			return s + 0x0c & 0xffff;
-		case 0x6d: // $D,S
+		case 0x6d: // $d,S
 			return s + 0x0d & 0xffff;
 		case 0x6e: // $e,S
 			return s + 0x0e & 0xffff;
@@ -1091,7 +1036,7 @@ struct MC6809 : Cpu {
 			return s - 0x0f & 0xffff;
 		case 0x72: // -$e,S
 			return s - 0x0e & 0xffff;
-		case 0x73: // -$D,S
+		case 0x73: // -$d,S
 			return s - 0x0d & 0xffff;
 		case 0x74: // -$c,S
 			return s - 0x0c & 0xffff;
@@ -1261,30 +1206,15 @@ struct MC6809 : Cpu {
 			return read16(s + fetch16() & 0xffff);
 		case 0xfb: // [D,S]
 			return read16(s + (a << 8 | b) & 0xffff);
-		case 0x8c: // n,PC
-		case 0xac:
-		case 0xcc:
-		case 0xec:
+		case 0x8c: case 0xac: case 0xcc: case 0xec: // n,PC
 			return v = fetch(), pc + (v << 24 >> 24) & 0xffff;
-		case 0x8d: // nn,PC
-		case 0xad:
-		case 0xcd:
-		case 0xed:
+		case 0x8d: case 0xad: case 0xcd: case 0xed: // nn,PC
 			return v = fetch16(), pc + v & 0xffff;
-		case 0x9c: // [n,PC]
-		case 0xbc:
-		case 0xdc:
-		case 0xfc:
+		case 0x9c: case 0xbc: case 0xdc: case 0xfc: // [n,PC]
 			return v = fetch(), read16(pc + (v << 24 >> 24) & 0xffff);
-		case 0x9d: // [nn,PC]
-		case 0xbd:
-		case 0xdd:
-		case 0xfd:
+		case 0x9d: case 0xbd: case 0xdd: case 0xfd: // [nn,PC]
 			return v = fetch16(), read16(pc + v & 0xffff);
-		case 0x9f: // [nn]
-		case 0xbf:
-		case 0xdf:
-		case 0xff:
+		case 0x9f: case 0xbf: case 0xdf: case 0xff: // [nn]
 			return read16(fetch16());
 		default:
 			return 0xffffffff;
@@ -1293,7 +1223,7 @@ struct MC6809 : Cpu {
 
 	void lbcc(bool cond) {
 		const int nn = fetch16();
-		if (cond) pc = pc + nn & 0xffff;
+		cycle -= cond ? 2 : 1, cond && (pc = pc + nn & 0xffff);
 	}
 
 	void lbsr() {

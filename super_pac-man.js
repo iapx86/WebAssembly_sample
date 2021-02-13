@@ -5,7 +5,7 @@
  */
 
 import {init, read} from './default_main.js';
-import {bufferSource} from './dist/super_pac-man.wasm.js';
+import {archive} from './dist/super_pac-man.wasm.js';
 
 read('superpac.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
 	const PRG1 = Uint8Array.concat(...['sp1-2.1c', 'sp1-1.1b'].map(e => zip.decompress(e)));
@@ -16,5 +16,6 @@ read('superpac.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const BGCOLOR = zip.decompress('superpac.4e');
 	const OBJCOLOR = zip.decompress('superpac.3l');
 	const SND = zip.decompress('superpac.3m');
+	const bufferSource = new Zlib.Unzip(archive).decompress('super_pac-man.wasm');
 	return init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2});
 });

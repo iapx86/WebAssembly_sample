@@ -8,6 +8,7 @@
 #define _1942_H
 
 #include <array>
+#include <functional>
 #include "z80.h"
 #include "ay-3-8910.h"
 #include "utils.h"
@@ -46,7 +47,7 @@ struct _1942 {
 	int fCoin = 0;
 	int fStart1P = 0;
 	int fStart2P = 0;
-	bool fTurbo = 0;
+	bool fTurbo = false;
 	int nBonus = BONUS_1ST_20000_2ND_80000_EVERY_80000;
 	int nLife = 3;
 	int nRank = RANK_NORMAL;
@@ -59,7 +60,6 @@ struct _1942 {
 	} psg[2];
 	int command = 0;
 	int bank = 0x80;
-	int timer = 0;
 	bool cpu_irq = false;
 	bool cpu_irq2 = false;
 
@@ -74,8 +74,17 @@ struct _1942 {
 	int frame = 0;
 
 	Z80 cpu, cpu2;
+	struct {
+		int rate = 256 * 60;
+		int frac = 0;
+		int count = 0;
+		void execute(int rate, function<void(int)> fn) {
+			for (frac += this->rate; frac >= rate; frac -= rate)
+				fn(count = count + 1 & 255);
+		}
+	} scanline;
 
-	_1942() {
+	_1942() : cpu(12000000 / 3), cpu2(12000000 / 4) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0xc0; i++)
 			cpu.memorymap[i].base = &PRG1[i << 8];
@@ -132,7 +141,7 @@ struct _1942 {
 			case 0:
 				return void(psg[0].addr = data);
 			case 1:
-				return sound0->write(psg[0].addr, data, timer);
+				return sound0->write(psg[0].addr, data);
 			}
 		};
 		cpu2.memorymap[0xc0].write = [&](int addr, int data) {
@@ -140,7 +149,7 @@ struct _1942 {
 			case 0:
 				return void(psg[1].addr = data);
 			case 1:
-				return sound1->write(psg[1].addr, data, timer);
+				return sound1->write(psg[1].addr, data);
 			}
 		};
 
@@ -157,11 +166,19 @@ struct _1942 {
 			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
-	_1942 *execute() {
-		Cpu *cpus[] = {&cpu, &cpu2};
-		for (int i = 0; i < 16; i++) {
-			!i && (cpu_irq = true), i == 1 && (cpu_irq2 = true), !(i & 3) && (timer = i >> 2, cpu2.interrupt());
-			Cpu::multiple_execute(2, cpus, 800);
+	_1942 *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			scanline.execute(tick_rate, [&](int cnt) {
+				const int vpos = cnt + 240 & 0xff;
+				vpos == 44 && cpu2.interrupt(), vpos == 109 && (cpu_irq2 = true, cpu2.interrupt());
+				vpos == 175 && cpu2.interrupt(), vpos == 240 && (cpu_irq = true, cpu2.interrupt());
+			});
+			sound0->execute(tick_rate, rate_correction);
+			sound1->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
 		}
 		return this;
 	}
@@ -433,8 +450,8 @@ struct _1942 {
 	}
 
 	static void init(int rate) {
-		sound0 = new AY_3_8910(1500000, rate, 4);
-		sound1 = new AY_3_8910(1500000, rate, 4);
+		sound0 = new AY_3_8910(12000000 / 8);
+		sound1 = new AY_3_8910(12000000 / 8);
 		Z80::init();
 	}
 };

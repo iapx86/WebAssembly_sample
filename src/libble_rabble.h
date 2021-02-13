@@ -74,7 +74,7 @@ struct LibbleRabble {
 	MC6809 cpu, cpu2;
 	MC68000 cpu3;
 
-	LibbleRabble() {
+	LibbleRabble() : cpu(6144000 / 4), cpu2(6144000 / 4), cpu3(6144000) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x20; i++) {
 			cpu.memorymap[i].base = &ram[i << 8];
@@ -136,11 +136,16 @@ struct LibbleRabble {
 			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
-	LibbleRabble *execute() {
-		Cpu *cpus[] = {&cpu, &cpu2};
+	LibbleRabble *execute(DoubleTimer& audio, double rate_correction) {
+		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
 		fInterruptEnable && cpu.interrupt(), cpu2.interrupt(), fInterruptEnable2 && cpu3.interrupt(6);
-		for (int i = 0; i < 0x100; i++)
-			Cpu::multiple_execute(2, cpus, 32), cpu3.execute(48);
+		for (int i = 0; i < tick_max; i++) {
+			cpu.execute(tick_rate);
+			cpu2.execute(tick_rate);
+			cpu3.execute(tick_rate);
+			sound0->execute(tick_rate, rate_correction);
+			audio.execute(tick_rate, rate_correction);
+		}
 		return this;
 	}
 
@@ -551,7 +556,7 @@ struct LibbleRabble {
 	}
 
 	static void init(int rate) {
-		sound0 = new MappySound(SND, rate);
+		sound0 = new MappySound(SND);
 	}
 };
 

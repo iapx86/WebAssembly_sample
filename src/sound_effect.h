@@ -22,38 +22,35 @@ struct SE {
 struct SoundEffect {
 	vector<SE> *se = nullptr;
 	int sampleRate;
-	float gain;
+	double gain;
+	double output = 0;
 
-	SoundEffect(vector<SE>& se, int sampleRate = 48000, float gain = 1) {
+	SoundEffect(vector<SE>& se, int sampleRate = 48000, double gain = 1) {
 		this->se = &se;
 		this->sampleRate = sampleRate;
 		this->gain = gain;
 	}
 
 	void update() {
-	}
-
-	void makeSound(float *data, uint32_t length) {
 		for (auto& ch: *se) {
 			if (ch.stop)
 				ch.play = false;
 			if (ch.start && !ch.play)
 				ch.play = true, ch.p = ch.frac = 0;
 			ch.start = ch.stop = false;
-		}
-		for (int i = 0; i < length; i++)
-			for (auto& ch: *se) {
-				if (!ch.play)
+			if (!ch.play)
+				continue;
+			for (ch.frac += ch.freq; ch.frac >= sampleRate; ch.frac -= sampleRate) {
+				if (++ch.p < ch.buf.size())
 					continue;
-				data[i] += ch.buf[ch.p] / 32768.0 * gain;
-				for (ch.frac += ch.freq; ch.frac >= sampleRate; ch.frac -= sampleRate) {
-					if (++ch.p < ch.buf.size())
-						continue;
-					if (!(ch.play = ch.loop))
-						break;
-					ch.p = 0;
-				}
+				if (!(ch.play = ch.loop))
+					break;
+				ch.p = 0;
 			}
+		}
+		output = 0;
+		for (auto& ch: *se)
+			ch.play && (output += ch.buf[ch.p] / 32767.0 * gain);
 	}
 };
 
