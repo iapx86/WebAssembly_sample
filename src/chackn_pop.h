@@ -53,12 +53,15 @@ struct ChacknPop {
 	array<uint8_t, 0x10000> bg;
 	array<uint8_t, 0x10000> obj;
 	array<int, 0x400> rgb;
+	array<int, width * height> bitmap;
+	bool updated = false;
 	int mode = 0;
 
 	Z80 cpu;
 	MC6805 mcu;
+	Timer<int> timer;
 
-	ChacknPop() : cpu(18000000 / 6), mcu(18000000 / 6 / 4) {
+	ChacknPop() : cpu(18000000 / 6), mcu(18000000 / 6 / 4), timer(60) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x80; i++)
 			cpu.memorymap[i].base = &PRG1[i << 8];
@@ -151,7 +154,7 @@ struct ChacknPop {
 		mcu.check_interrupt = [&]() { return mcu.irq && mcu.interrupt(); };
 
 		// Videoの初期化
-		bg.fill(3), obj.fill(3);
+		bg.fill(3), obj.fill(3), bitmap.fill(0xff000000);
 		convertGFX(&bg[0], &BG[0], 1024, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x10000}, 8);
 		convertGFX(&obj[0], &OBJ[0], 256, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x10000}, 32);
 		for (int i = 0; i < rgb.size(); i++) {
@@ -160,17 +163,17 @@ struct ChacknPop {
 		}
 	}
 
-	ChacknPop *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		cpu.interrupt();
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			cpu.execute(tick_rate);
 			mcu.execute(tick_rate);
-			sound0->execute(tick_rate, rate_correction);
-			sound1->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			timer.execute(tick_rate, [&]() { update(), cpu.interrupt(); });
+			sound0->execute(tick_rate);
+			sound1->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		return this;
 	}
 
 	void reset() {
@@ -233,16 +236,16 @@ struct ChacknPop {
 		return this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void up(bool fDown) {
@@ -269,12 +272,15 @@ struct ChacknPop {
 		in[1] = in[1] & ~(1 << 5) | !fDown << 5;
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		// bg描画
 		int p = 256 * 8 * 2 + 232;
 		for (int k = 0x840, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
-				xfer8x8(data, p, k);
+				xfer8x8(bitmap.data(), p, k);
 
 		// obj描画
 		for (int k = 0xc40, i = 48; i != 0; k += 4, --i) {
@@ -282,16 +288,16 @@ struct ChacknPop {
 			const int src = ram[k + 1] & 0x3f | ram[k + 2] << 6;
 			switch (ram[k + 1] & 0xc0) {
 			case 0x00: // ノーマル
-				xfer16x16(data, x | y << 8, src);
+				xfer16x16(bitmap.data(), x | y << 8, src);
 				break;
 			case 0x40: // V反転
-				xfer16x16V(data, x | y << 8, src);
+				xfer16x16V(bitmap.data(), x | y << 8, src);
 				break;
 			case 0x80: // H反転
-				xfer16x16H(data, x | y << 8, src);
+				xfer16x16H(bitmap.data(), x | y << 8, src);
 				break;
 			case 0xc0: // HV反転
-				xfer16x16HV(data, x | y << 8, src);
+				xfer16x16HV(bitmap.data(), x | y << 8, src);
 				break;
 			}
 		}
@@ -301,45 +307,47 @@ struct ChacknPop {
 		for (int k = 0x0200, i = 256 >> 3; i != 0; --i) {
 			for (int j = 224 >> 2; j != 0; k += 0x80, p += 4, --j) {
 				int p0 = vram[k], p1 = vram[0x2000 + k], p2 = vram[0x4000 + k], p3 = vram[0x6000 + k];
-				data[p + 7 * 256] = rgb[p0 << 9 & 0x200 | p2 << 8 & 0x100 | p1 << 7 & 0x80 | p3 << 6 & 0x40 | data[p + 7 * 256]];
-				data[p + 6 * 256] = rgb[p0 << 8 & 0x200 | p2 << 7 & 0x100 | p1 << 6 & 0x80 | p3 << 5 & 0x40 | data[p + 6 * 256]];
-				data[p + 5 * 256] = rgb[p0 << 7 & 0x200 | p2 << 6 & 0x100 | p1 << 5 & 0x80 | p3 << 4 & 0x40 | data[p + 5 * 256]];
-				data[p + 4 * 256] = rgb[p0 << 6 & 0x200 | p2 << 5 & 0x100 | p1 << 4 & 0x80 | p3 << 3 & 0x40 | data[p + 4 * 256]];
-				data[p + 3 * 256] = rgb[p0 << 5 & 0x200 | p2 << 4 & 0x100 | p1 << 3 & 0x80 | p3 << 2 & 0x40 | data[p + 3 * 256]];
-				data[p + 2 * 256] = rgb[p0 << 4 & 0x200 | p2 << 3 & 0x100 | p1 << 2 & 0x80 | p3 << 1 & 0x40 | data[p + 2 * 256]];
-				data[p + 256] = rgb[p0 << 3 & 0x200 | p2 << 2 & 0x100 | p1 << 1 & 0x80 | p3 << 0 & 0x40 | data[p + 256]];
-				data[p] = rgb[p0 << 2 & 0x200 | p2 << 1 & 0x100 | p1 << 0 & 0x80 | p3 >> 1 & 0x40 | data[p]];
+				bitmap[p + 7 * 256] = rgb[p0 << 9 & 0x200 | p2 << 8 & 0x100 | p1 << 7 & 0x80 | p3 << 6 & 0x40 | bitmap[p + 7 * 256]];
+				bitmap[p + 6 * 256] = rgb[p0 << 8 & 0x200 | p2 << 7 & 0x100 | p1 << 6 & 0x80 | p3 << 5 & 0x40 | bitmap[p + 6 * 256]];
+				bitmap[p + 5 * 256] = rgb[p0 << 7 & 0x200 | p2 << 6 & 0x100 | p1 << 5 & 0x80 | p3 << 4 & 0x40 | bitmap[p + 5 * 256]];
+				bitmap[p + 4 * 256] = rgb[p0 << 6 & 0x200 | p2 << 5 & 0x100 | p1 << 4 & 0x80 | p3 << 3 & 0x40 | bitmap[p + 4 * 256]];
+				bitmap[p + 3 * 256] = rgb[p0 << 5 & 0x200 | p2 << 4 & 0x100 | p1 << 3 & 0x80 | p3 << 2 & 0x40 | bitmap[p + 3 * 256]];
+				bitmap[p + 2 * 256] = rgb[p0 << 4 & 0x200 | p2 << 3 & 0x100 | p1 << 2 & 0x80 | p3 << 1 & 0x40 | bitmap[p + 2 * 256]];
+				bitmap[p + 256] = rgb[p0 << 3 & 0x200 | p2 << 2 & 0x100 | p1 << 1 & 0x80 | p3 << 0 & 0x40 | bitmap[p + 256]];
+				bitmap[p] = rgb[p0 << 2 & 0x200 | p2 << 1 & 0x100 | p1 << 0 & 0x80 | p3 >> 1 & 0x40 | bitmap[p]];
 				p0 = vram[0x20 + k], p1 = vram[0x2020 + k], p2 = vram[0x4020 + k], p3 = vram[0x6020 + k];
-				data[p + 1 + 7 * 256] = rgb[p0 << 9 & 0x200 | p2 << 8 & 0x100 | p1 << 7 & 0x80 | p3 << 6 & 0x40 | data[p + 1 + 7 * 256]];
-				data[p + 1 + 6 * 256] = rgb[p0 << 8 & 0x200 | p2 << 7 & 0x100 | p1 << 6 & 0x80 | p3 << 5 & 0x40 | data[p + 1 + 6 * 256]];
-				data[p + 1 + 5 * 256] = rgb[p0 << 7 & 0x200 | p2 << 6 & 0x100 | p1 << 5 & 0x80 | p3 << 4 & 0x40 | data[p + 1 + 5 * 256]];
-				data[p + 1 + 4 * 256] = rgb[p0 << 6 & 0x200 | p2 << 5 & 0x100 | p1 << 4 & 0x80 | p3 << 3 & 0x40 | data[p + 1 + 4 * 256]];
-				data[p + 1 + 3 * 256] = rgb[p0 << 5 & 0x200 | p2 << 4 & 0x100 | p1 << 3 & 0x80 | p3 << 2 & 0x40 | data[p + 1 + 3 * 256]];
-				data[p + 1 + 2 * 256] = rgb[p0 << 4 & 0x200 | p2 << 3 & 0x100 | p1 << 2 & 0x80 | p3 << 1 & 0x40 | data[p + 1 + 2 * 256]];
-				data[p + 1 + 256] = rgb[p0 << 3 & 0x200 | p2 << 2 & 0x100 | p1 << 1 & 0x80 | p3 << 0 & 0x40 | data[p + 1 + 256]];
-				data[p + 1] = rgb[p0 << 2 & 0x200 | p2 << 1 & 0x100 | p1 << 0 & 0x80 | p3 >> 1 & 0x40 | data[p + 1]];
+				bitmap[p + 1 + 7 * 256] = rgb[p0 << 9 & 0x200 | p2 << 8 & 0x100 | p1 << 7 & 0x80 | p3 << 6 & 0x40 | bitmap[p + 1 + 7 * 256]];
+				bitmap[p + 1 + 6 * 256] = rgb[p0 << 8 & 0x200 | p2 << 7 & 0x100 | p1 << 6 & 0x80 | p3 << 5 & 0x40 | bitmap[p + 1 + 6 * 256]];
+				bitmap[p + 1 + 5 * 256] = rgb[p0 << 7 & 0x200 | p2 << 6 & 0x100 | p1 << 5 & 0x80 | p3 << 4 & 0x40 | bitmap[p + 1 + 5 * 256]];
+				bitmap[p + 1 + 4 * 256] = rgb[p0 << 6 & 0x200 | p2 << 5 & 0x100 | p1 << 4 & 0x80 | p3 << 3 & 0x40 | bitmap[p + 1 + 4 * 256]];
+				bitmap[p + 1 + 3 * 256] = rgb[p0 << 5 & 0x200 | p2 << 4 & 0x100 | p1 << 3 & 0x80 | p3 << 2 & 0x40 | bitmap[p + 1 + 3 * 256]];
+				bitmap[p + 1 + 2 * 256] = rgb[p0 << 4 & 0x200 | p2 << 3 & 0x100 | p1 << 2 & 0x80 | p3 << 1 & 0x40 | bitmap[p + 1 + 2 * 256]];
+				bitmap[p + 1 + 256] = rgb[p0 << 3 & 0x200 | p2 << 2 & 0x100 | p1 << 1 & 0x80 | p3 << 0 & 0x40 | bitmap[p + 1 + 256]];
+				bitmap[p + 1] = rgb[p0 << 2 & 0x200 | p2 << 1 & 0x100 | p1 << 0 & 0x80 | p3 >> 1 & 0x40 | bitmap[p + 1]];
 				p0 = vram[0x40 + k], p1 = vram[0x2040 + k], p2 = vram[0x4040 + k], p3 = vram[0x6040 + k];
-				data[p + 2 + 7 * 256] = rgb[p0 << 9 & 0x200 | p2 << 8 & 0x100 | p1 << 7 & 0x80 | p3 << 6 & 0x40 | data[p + 2 + 7 * 256]];
-				data[p + 2 + 6 * 256] = rgb[p0 << 8 & 0x200 | p2 << 7 & 0x100 | p1 << 6 & 0x80 | p3 << 5 & 0x40 | data[p + 2 + 6 * 256]];
-				data[p + 2 + 5 * 256] = rgb[p0 << 7 & 0x200 | p2 << 6 & 0x100 | p1 << 5 & 0x80 | p3 << 4 & 0x40 | data[p + 2 + 5 * 256]];
-				data[p + 2 + 4 * 256] = rgb[p0 << 6 & 0x200 | p2 << 5 & 0x100 | p1 << 4 & 0x80 | p3 << 3 & 0x40 | data[p + 2 + 4 * 256]];
-				data[p + 2 + 3 * 256] = rgb[p0 << 5 & 0x200 | p2 << 4 & 0x100 | p1 << 3 & 0x80 | p3 << 2 & 0x40 | data[p + 2 + 3 * 256]];
-				data[p + 2 + 2 * 256] = rgb[p0 << 4 & 0x200 | p2 << 3 & 0x100 | p1 << 2 & 0x80 | p3 << 1 & 0x40 | data[p + 2 + 2 * 256]];
-				data[p + 2 + 256] = rgb[p0 << 3 & 0x200 | p2 << 2 & 0x100 | p1 << 1 & 0x80 | p3 << 0 & 0x40 | data[p + 2 + 256]];
-				data[p + 2] = rgb[p0 << 2 & 0x200 | p2 << 1 & 0x100 | p1 << 0 & 0x80 | p3 >> 1 & 0x40 | data[p + 2]];
+				bitmap[p + 2 + 7 * 256] = rgb[p0 << 9 & 0x200 | p2 << 8 & 0x100 | p1 << 7 & 0x80 | p3 << 6 & 0x40 | bitmap[p + 2 + 7 * 256]];
+				bitmap[p + 2 + 6 * 256] = rgb[p0 << 8 & 0x200 | p2 << 7 & 0x100 | p1 << 6 & 0x80 | p3 << 5 & 0x40 | bitmap[p + 2 + 6 * 256]];
+				bitmap[p + 2 + 5 * 256] = rgb[p0 << 7 & 0x200 | p2 << 6 & 0x100 | p1 << 5 & 0x80 | p3 << 4 & 0x40 | bitmap[p + 2 + 5 * 256]];
+				bitmap[p + 2 + 4 * 256] = rgb[p0 << 6 & 0x200 | p2 << 5 & 0x100 | p1 << 4 & 0x80 | p3 << 3 & 0x40 | bitmap[p + 2 + 4 * 256]];
+				bitmap[p + 2 + 3 * 256] = rgb[p0 << 5 & 0x200 | p2 << 4 & 0x100 | p1 << 3 & 0x80 | p3 << 2 & 0x40 | bitmap[p + 2 + 3 * 256]];
+				bitmap[p + 2 + 2 * 256] = rgb[p0 << 4 & 0x200 | p2 << 3 & 0x100 | p1 << 2 & 0x80 | p3 << 1 & 0x40 | bitmap[p + 2 + 2 * 256]];
+				bitmap[p + 2 + 256] = rgb[p0 << 3 & 0x200 | p2 << 2 & 0x100 | p1 << 1 & 0x80 | p3 << 0 & 0x40 | bitmap[p + 2 + 256]];
+				bitmap[p + 2] = rgb[p0 << 2 & 0x200 | p2 << 1 & 0x100 | p1 << 0 & 0x80 | p3 >> 1 & 0x40 | bitmap[p + 2]];
 				p0 = vram[0x60 + k], p1 = vram[0x2060 + k], p2 = vram[0x4060 + k], p3 = vram[0x6060 + k];
-				data[p + 3 + 7 * 256] = rgb[p0 << 9 & 0x200 | p2 << 8 & 0x100 | p1 << 7 & 0x80 | p3 << 6 & 0x40 | data[p + 3 + 7 * 256]];
-				data[p + 3 + 6 * 256] = rgb[p0 << 8 & 0x200 | p2 << 7 & 0x100 | p1 << 6 & 0x80 | p3 << 5 & 0x40 | data[p + 3 + 6 * 256]];
-				data[p + 3 + 5 * 256] = rgb[p0 << 7 & 0x200 | p2 << 6 & 0x100 | p1 << 5 & 0x80 | p3 << 4 & 0x40 | data[p + 3 + 5 * 256]];
-				data[p + 3 + 4 * 256] = rgb[p0 << 6 & 0x200 | p2 << 5 & 0x100 | p1 << 4 & 0x80 | p3 << 3 & 0x40 | data[p + 3 + 4 * 256]];
-				data[p + 3 + 3 * 256] = rgb[p0 << 5 & 0x200 | p2 << 4 & 0x100 | p1 << 3 & 0x80 | p3 << 2 & 0x40 | data[p + 3 + 3 * 256]];
-				data[p + 3 + 2 * 256] = rgb[p0 << 4 & 0x200 | p2 << 3 & 0x100 | p1 << 2 & 0x80 | p3 << 1 & 0x40 | data[p + 3 + 2 * 256]];
-				data[p + 3 + 256] = rgb[p0 << 3 & 0x200 | p2 << 2 & 0x100 | p1 << 1 & 0x80 | p3 << 0 & 0x40 | data[p + 3 + 256]];
-				data[p + 3] = rgb[p0 << 2 & 0x200 | p2 << 1 & 0x100 | p1 << 0 & 0x80 | p3 >> 1 & 0x40 | data[p + 3]];
+				bitmap[p + 3 + 7 * 256] = rgb[p0 << 9 & 0x200 | p2 << 8 & 0x100 | p1 << 7 & 0x80 | p3 << 6 & 0x40 | bitmap[p + 3 + 7 * 256]];
+				bitmap[p + 3 + 6 * 256] = rgb[p0 << 8 & 0x200 | p2 << 7 & 0x100 | p1 << 6 & 0x80 | p3 << 5 & 0x40 | bitmap[p + 3 + 6 * 256]];
+				bitmap[p + 3 + 5 * 256] = rgb[p0 << 7 & 0x200 | p2 << 6 & 0x100 | p1 << 5 & 0x80 | p3 << 4 & 0x40 | bitmap[p + 3 + 5 * 256]];
+				bitmap[p + 3 + 4 * 256] = rgb[p0 << 6 & 0x200 | p2 << 5 & 0x100 | p1 << 4 & 0x80 | p3 << 3 & 0x40 | bitmap[p + 3 + 4 * 256]];
+				bitmap[p + 3 + 3 * 256] = rgb[p0 << 5 & 0x200 | p2 << 4 & 0x100 | p1 << 3 & 0x80 | p3 << 2 & 0x40 | bitmap[p + 3 + 3 * 256]];
+				bitmap[p + 3 + 2 * 256] = rgb[p0 << 4 & 0x200 | p2 << 3 & 0x100 | p1 << 2 & 0x80 | p3 << 1 & 0x40 | bitmap[p + 3 + 2 * 256]];
+				bitmap[p + 3 + 256] = rgb[p0 << 3 & 0x200 | p2 << 2 & 0x100 | p1 << 1 & 0x80 | p3 << 0 & 0x40 | bitmap[p + 3 + 256]];
+				bitmap[p + 3] = rgb[p0 << 2 & 0x200 | p2 << 1 & 0x100 | p1 << 0 & 0x80 | p3 >> 1 & 0x40 | bitmap[p + 3]];
 			}
 			k -= 0x20 * 224 - 1;
 			p -= 224 + 256 * 8;
 		}
+
+		return bitmap.data();
 	}
 
 	void xfer8x8(int *data, int p, int k) {

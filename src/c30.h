@@ -9,12 +9,12 @@
 using namespace std;
 
 struct C30 {
-	double clock;
+	int clock;
 	double gain;
 	double output = 0;
 	array<uint8_t, 0x400> ram = {};
 	array<double, 0x200> snd = {};
-	double frac = 0;
+	int frac = 0;
 	struct {
 		uint32_t phase = 0;
 		int ncount = 0;
@@ -22,7 +22,7 @@ struct C30 {
 		int output = 0;
 	} channel[8];
 
-	C30(double clock = 48000, double gain = 0.1) {
+	C30(int clock = 48000, double gain = 0.1) {
 		this->clock = clock;
 		this->gain = gain;
 	}
@@ -36,8 +36,8 @@ struct C30 {
 		addr < 0x100 && (snd[addr * 2] = (data >> 4) * 2 / 15.0 - 1, snd[1 + addr * 2] = (data & 15) * 2 / 15.0 - 1);
 	}
 
-	void execute(double rate, double rate_correction = 1) {
-		for (frac += clock * rate_correction; frac >= rate; frac -= rate) {
+	void execute(int rate) {
+		for (frac += clock; frac >= rate; frac -= rate) {
 			auto& r = ram;
 			for (int ch = 0x100; ch < 0x140; ch += 8)
 				if (ch >= 0x120 || ~r[0x104 | ch - 8 & 0x38] & 0x80) {

@@ -78,11 +78,14 @@ struct StarForce {
 	array<uint8_t, 0x8000> bg3;
 	array<uint8_t, 0x20000> obj;
 	array<int, 0x200> rgb;
+	array<int, width * height> bitmap;
+	bool updated = false;
 
 	Z80 cpu, cpu2;
-	DoubleTimer timer;
+	Timer<int> timer;
+	Timer<double> timer2;
 
-	StarForce() : cpu(4000000), cpu2(2000000), timer(2000000 / 2048 / 11) {
+	StarForce() : cpu(4000000), cpu2(2000000), timer(60), timer2(2000000 / 2048 / 11) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x80; i++)
 			cpu.memorymap[i].base = &PRG1[i << 8];
@@ -140,7 +143,7 @@ struct StarForce {
 		};
 
 		// Videoの初期化
-		fg.fill(7), bg1.fill(7), bg2.fill(7), bg3.fill(7), obj.fill(7);
+		fg.fill(7), bg1.fill(7), bg2.fill(7), bg3.fill(7), obj.fill(7), bitmap.fill(0xff000000);
 		convertGFX(&fg[0], &FG[0], 512, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x8000, 0x10000}, 8);
 		convertGFX(&bg1[0], &BG1[0], 256, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x10000, 0x20000}, 32);
 		convertGFX(&bg2[0], &BG2[0], 256, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x10000, 0x20000}, 32);
@@ -148,22 +151,20 @@ struct StarForce {
 		convertGFX(&obj[0], &OBJ[0], 512, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x20000, 0x40000}, 32);
 	}
 
-	StarForce *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		cpu_irq = true;
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			cpu.execute(tick_rate);
 			cpu2.execute(tick_rate);
-			timer.execute(tick_rate, 1, [&]() {
-				ctc.irq = ctc.fInterruptEnable;
-			});
-			sound0->execute(tick_rate, rate_correction);
-			sound1->execute(tick_rate, rate_correction);
-			sound2->execute(tick_rate, rate_correction);
-			sound3->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			timer.execute(tick_rate, [&]() { update(), cpu_irq = true; });
+			timer2.execute(tick_rate, [&]() { ctc.irq = ctc.fInterruptEnable; });
+			sound0->execute(tick_rate);
+			sound1->execute(tick_rate);
+			sound2->execute(tick_rate);
+			sound3->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		return this;
 	}
 
 	void reset() {
@@ -264,16 +265,16 @@ struct StarForce {
 		return this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void up(bool fDown) {
@@ -300,7 +301,10 @@ struct StarForce {
 		!(fTurbo = fDown) && (in[0] &= ~(1 << 4));
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		for (int j = 0; j < 0x200; j++) {
 			const int e = ram[0x1c00 + j], i = e >> 6 & 3, r = e << 2 & 12, g = e & 12, b = e >> 2 & 12;
 			rgb[j] = 0xff000000 | (b ? b | i : 0) * 255 / 15 << 16 | (g ? g | i : 0) * 255 / 15 << 8 | (r ? r | i : 0) * 255 / 15;
@@ -309,10 +313,10 @@ struct StarForce {
 		// 画面クリア
 		int p = 256 * 16 + 16;
 		for (int i = 0; i < 256; p += 256, i++)
-			fill_n(&data[p], 224, 0);
+			fill_n(&bitmap[p], 224, 0);
 
 		// obj描画
-		drawObj(data, 0);
+		drawObj(bitmap.data(), 0);
 
 		// bg描画
 		int hScroll = (ram[0x1e20] | ram[0x1e21] << 8) + 15;
@@ -321,10 +325,10 @@ struct StarForce {
 		int k = vScroll + 15 >> 4 & 0x0f | hScroll & 0x7f0 | 0x2000;
 		for (int i = 0; i < 15; k = k + 0x10 & 0x7ff | k & 0xf800, p -= 256 * 16 * 16 + 16, i++)
 			for (int j = 0; j < 16; k = k + 1 & 0x0f | k & 0xfff0, p += 256 * 16, j++)
-				xfer16x16_3(data, p, ram[k]);
+				xfer16x16_3(bitmap.data(), p, ram[k]);
 
 		// obj描画
-		drawObj(data, 1);
+		drawObj(bitmap.data(), 1);
 
 		// bg描画
 		hScroll = (ram[0x1e30] | ram[0x1e31] << 8) + 15;
@@ -333,10 +337,10 @@ struct StarForce {
 		k = vScroll + 15 >> 4 & 0x0f | hScroll & 0x7f0 | 0x2800;
 		for (int i = 0; i < 15; k = k + 0x10 & 0x7ff | k & 0xf800, p -= 256 * 16 * 16 + 16, i++)
 			for (int j = 0; j < 16; k = k + 1 & 0x0f | k & 0xfff0, p += 256 * 16, j++)
-				xfer16x16_2(data, p, ram[k]);
+				xfer16x16_2(bitmap.data(), p, ram[k]);
 
 		// obj描画
-		drawObj(data, 2);
+		drawObj(bitmap.data(), 2);
 
 		// bg描画
 		hScroll = (ram[0x1e30] | ram[0x1e31] << 8) + 15;
@@ -345,23 +349,25 @@ struct StarForce {
 		k = vScroll + 15 >> 4 & 0x0f | hScroll & 0x7f0 | 0x3000;
 		for (int i = 0; i < 15; k = k + 0x10 & 0x7ff | k & 0xf800, p -= 256 * 16 * 16 + 16, i++)
 			for (int j = 0; j < 16; k = k + 1 & 0x0f | k & 0xfff0, p += 256 * 16, j++)
-				xfer16x16_1(data, p, ram[k]);
+				xfer16x16_1(bitmap.data(), p, ram[k]);
 
 		// obj描画
-		drawObj(data, 3);
+		drawObj(bitmap.data(), 3);
 
 		// fg描画
 		p = 256 * 8 * 2 + 232;
 		k = 0x1040;
 		for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
-				xfer8x8(data, p, k);
+				xfer8x8(bitmap.data(), p, k);
 
 		// palette変換
 		p = 256 * 16 + 16;
 		for (int i = 0; i < 256; p += 256 - 224, i++)
 			for (int j = 0; j < 224; p++, j++)
-				data[p] = rgb[data[p]];
+				bitmap[p] = rgb[bitmap[p]];
+
+		return bitmap.data();
 	}
 
 	void drawObj(int *data, int pri) {

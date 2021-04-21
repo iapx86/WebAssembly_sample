@@ -72,6 +72,8 @@ struct ElevatorAction {
 	array<int, 0x40> rgb;
 	array<array<uint8_t, 4>, 32> pri = {};
 	array<uint8_t, width * height> layer[4];
+	array<int, width * height> bitmap;
+	bool updated = false;
 	int priority = 0;
 	array<uint8_t, 4> collision = {};
 	int gfxaddr = 0;
@@ -81,9 +83,10 @@ struct ElevatorAction {
 
 	Z80 cpu, cpu2;
 	MC6805 mcu;
-	DoubleTimer timer;
+	Timer<int> timer;
+	Timer<double> timer2;
 
-	ElevatorAction() : cpu(8000000 / 2), cpu2(6000000 / 2), mcu(3000000 / 4), timer(6000000.0 / 163840) {
+	ElevatorAction() : cpu(8000000 / 2), cpu2(6000000 / 2), mcu(3000000 / 4), timer(60), timer2(6000000.0 / 163840) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x80; i++)
 			cpu.memorymap[i].base = &PRG1[i << 8];
@@ -258,6 +261,7 @@ struct ElevatorAction {
 		mcu.check_interrupt = [&]() { return mcu.irq && mcu.interrupt(); };
 
 		// Videoの初期化
+		bitmap.fill(0xff000000);
 		for (int i = 0; i < 16; i++)
 			for (int mask = 0, j = 3; j >= 0; mask |= 1 << pri[i][j], --j)
 				pri[i][j] = PRI[i << 4 & 0xf0 | mask] & 3;
@@ -266,23 +270,21 @@ struct ElevatorAction {
 				pri[i][j] = PRI[i << 4 & 0xf0 | mask] >> 2 & 3;
 	}
 
-	ElevatorAction *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		cpu.interrupt();
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			cpu.execute(tick_rate);
 			cpu2.execute(tick_rate);
 			mcu.execute(tick_rate);
-			timer.execute(tick_rate, 1, [&]() {
-				cpu2_irq = true;
-			});
-			sound0->execute(tick_rate, rate_correction);
-			sound1->execute(tick_rate, rate_correction);
-			sound2->execute(tick_rate, rate_correction);
-			sound3->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			timer.execute(tick_rate, [&]() { update(), cpu.interrupt(); });
+			timer2.execute(tick_rate, [&]() { cpu2_irq = true; });
+			sound0->execute(tick_rate);
+			sound1->execute(tick_rate);
+			sound2->execute(tick_rate);
+			sound3->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		return this;
 	}
 
 	void reset() {
@@ -366,16 +368,16 @@ struct ElevatorAction {
 		return this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void up(bool fDown) {
@@ -402,7 +404,10 @@ struct ElevatorAction {
 		in[0] = in[0] & ~(1 << 5) | !fDown << 5;
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		// 画像データ変換
 		auto convertBG = [](uint8_t *dst, uint8_t *src, int n) {
 			for (int i = 0; i < n; src += 8, i++)
@@ -438,7 +443,7 @@ struct ElevatorAction {
 		// 画面クリア
 		int p = 256 * 16 + 16;
 		for (int i = 0; i < 256; p += 256, i++)
-			fill_n(&data[p], 224, colorbank[1] << 3 & 0x38);
+			fill_n(&bitmap[p], 224, colorbank[1] << 3 & 0x38);
 
 		// bg描画
 		if (mode & 0x10) {
@@ -496,38 +501,38 @@ struct ElevatorAction {
 			for (int j = 0; j < 256; p += 256 - 224, j++)
 				for (int k = 0; k < 7; p += 32, k++) {
 					int px;
-					(px = _layer[p]) & 7 && (data[p] = px);
-					(px = _layer[p + 0x01]) & 7 && (data[p + 0x01] = px);
-					(px = _layer[p + 0x02]) & 7 && (data[p + 0x02] = px);
-					(px = _layer[p + 0x03]) & 7 && (data[p + 0x03] = px);
-					(px = _layer[p + 0x04]) & 7 && (data[p + 0x04] = px);
-					(px = _layer[p + 0x05]) & 7 && (data[p + 0x05] = px);
-					(px = _layer[p + 0x06]) & 7 && (data[p + 0x06] = px);
-					(px = _layer[p + 0x07]) & 7 && (data[p + 0x07] = px);
-					(px = _layer[p + 0x08]) & 7 && (data[p + 0x08] = px);
-					(px = _layer[p + 0x09]) & 7 && (data[p + 0x09] = px);
-					(px = _layer[p + 0x0a]) & 7 && (data[p + 0x0a] = px);
-					(px = _layer[p + 0x0b]) & 7 && (data[p + 0x0b] = px);
-					(px = _layer[p + 0x0c]) & 7 && (data[p + 0x0c] = px);
-					(px = _layer[p + 0x0d]) & 7 && (data[p + 0x0d] = px);
-					(px = _layer[p + 0x0e]) & 7 && (data[p + 0x0e] = px);
-					(px = _layer[p + 0x0f]) & 7 && (data[p + 0x0f] = px);
-					(px = _layer[p + 0x10]) & 7 && (data[p + 0x10] = px);
-					(px = _layer[p + 0x11]) & 7 && (data[p + 0x11] = px);
-					(px = _layer[p + 0x12]) & 7 && (data[p + 0x12] = px);
-					(px = _layer[p + 0x13]) & 7 && (data[p + 0x13] = px);
-					(px = _layer[p + 0x14]) & 7 && (data[p + 0x14] = px);
-					(px = _layer[p + 0x15]) & 7 && (data[p + 0x15] = px);
-					(px = _layer[p + 0x16]) & 7 && (data[p + 0x16] = px);
-					(px = _layer[p + 0x17]) & 7 && (data[p + 0x17] = px);
-					(px = _layer[p + 0x18]) & 7 && (data[p + 0x18] = px);
-					(px = _layer[p + 0x19]) & 7 && (data[p + 0x19] = px);
-					(px = _layer[p + 0x1a]) & 7 && (data[p + 0x1a] = px);
-					(px = _layer[p + 0x1b]) & 7 && (data[p + 0x1b] = px);
-					(px = _layer[p + 0x1c]) & 7 && (data[p + 0x1c] = px);
-					(px = _layer[p + 0x1d]) & 7 && (data[p + 0x1d] = px);
-					(px = _layer[p + 0x1e]) & 7 && (data[p + 0x1e] = px);
-					(px = _layer[p + 0x1f]) & 7 && (data[p + 0x1f] = px);
+					(px = _layer[p]) & 7 && (bitmap[p] = px);
+					(px = _layer[p + 0x01]) & 7 && (bitmap[p + 0x01] = px);
+					(px = _layer[p + 0x02]) & 7 && (bitmap[p + 0x02] = px);
+					(px = _layer[p + 0x03]) & 7 && (bitmap[p + 0x03] = px);
+					(px = _layer[p + 0x04]) & 7 && (bitmap[p + 0x04] = px);
+					(px = _layer[p + 0x05]) & 7 && (bitmap[p + 0x05] = px);
+					(px = _layer[p + 0x06]) & 7 && (bitmap[p + 0x06] = px);
+					(px = _layer[p + 0x07]) & 7 && (bitmap[p + 0x07] = px);
+					(px = _layer[p + 0x08]) & 7 && (bitmap[p + 0x08] = px);
+					(px = _layer[p + 0x09]) & 7 && (bitmap[p + 0x09] = px);
+					(px = _layer[p + 0x0a]) & 7 && (bitmap[p + 0x0a] = px);
+					(px = _layer[p + 0x0b]) & 7 && (bitmap[p + 0x0b] = px);
+					(px = _layer[p + 0x0c]) & 7 && (bitmap[p + 0x0c] = px);
+					(px = _layer[p + 0x0d]) & 7 && (bitmap[p + 0x0d] = px);
+					(px = _layer[p + 0x0e]) & 7 && (bitmap[p + 0x0e] = px);
+					(px = _layer[p + 0x0f]) & 7 && (bitmap[p + 0x0f] = px);
+					(px = _layer[p + 0x10]) & 7 && (bitmap[p + 0x10] = px);
+					(px = _layer[p + 0x11]) & 7 && (bitmap[p + 0x11] = px);
+					(px = _layer[p + 0x12]) & 7 && (bitmap[p + 0x12] = px);
+					(px = _layer[p + 0x13]) & 7 && (bitmap[p + 0x13] = px);
+					(px = _layer[p + 0x14]) & 7 && (bitmap[p + 0x14] = px);
+					(px = _layer[p + 0x15]) & 7 && (bitmap[p + 0x15] = px);
+					(px = _layer[p + 0x16]) & 7 && (bitmap[p + 0x16] = px);
+					(px = _layer[p + 0x17]) & 7 && (bitmap[p + 0x17] = px);
+					(px = _layer[p + 0x18]) & 7 && (bitmap[p + 0x18] = px);
+					(px = _layer[p + 0x19]) & 7 && (bitmap[p + 0x19] = px);
+					(px = _layer[p + 0x1a]) & 7 && (bitmap[p + 0x1a] = px);
+					(px = _layer[p + 0x1b]) & 7 && (bitmap[p + 0x1b] = px);
+					(px = _layer[p + 0x1c]) & 7 && (bitmap[p + 0x1c] = px);
+					(px = _layer[p + 0x1d]) & 7 && (bitmap[p + 0x1d] = px);
+					(px = _layer[p + 0x1e]) & 7 && (bitmap[p + 0x1e] = px);
+					(px = _layer[p + 0x1f]) & 7 && (bitmap[p + 0x1f] = px);
 				}
 		}
 
@@ -535,7 +540,9 @@ struct ElevatorAction {
 		p = 256 * 16 + 16;
 		for (int i = 0; i < 256; p += 256 - 224, i++)
 			for (int j = 0; j < 224; p++, j++)
-				data[p] = rgb[data[p]];
+				bitmap[p] = rgb[bitmap[p]];
+
+		return bitmap.data();
 	}
 
 	void xfer8x8(uint8_t *data, int color, int p, int k) {

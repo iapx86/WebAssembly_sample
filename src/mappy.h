@@ -64,11 +64,14 @@ struct Mappy {
 	array<uint8_t, 0x10000> obj;
 	array<uint8_t, 0x100> bgcolor;
 	array<int, 0x20> rgb;
+	array<int, width * height> bitmap;
+	bool updated = false;
 	int dwScroll = 0xff;
 
 	MC6809 cpu, cpu2;
+	Timer<int> timer;
 
-	Mappy() : cpu(18432000 / 12), cpu2(18432000 / 12) {
+	Mappy() : cpu(18432000 / 12), cpu2(18432000 / 12), timer(60) {
 		// CPU周りの初期化
 		for (int i = 0; i < 0x28; i++) {
 			cpu.memorymap[i].base = &ram[i << 8];
@@ -120,7 +123,7 @@ struct Mappy {
 			cpu2.memorymap[0xe0 + i].base = &PRG2[i << 8];
 
 		// Videoの初期化
-		obj.fill(15);
+		obj.fill(15), bitmap.fill(0xff000000);
 		convertGFX(&bg[0], &BG[0], 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
 		convertGFX(&obj[0], &OBJ[0], 128, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)},	{0x10000, 0x10004, 0, 4}, 64);
 		for (int i = 0; i < bgcolor.size(); i++)
@@ -129,16 +132,16 @@ struct Mappy {
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
-	Mappy *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		fInterruptEnable0 && cpu.interrupt(), fInterruptEnable1 && cpu2.interrupt();
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			cpu.execute(tick_rate);
 			cpu2.execute(tick_rate);
-			sound0->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			timer.execute(tick_rate, [&]() { update(), fInterruptEnable0 && cpu.interrupt(), fInterruptEnable1 && cpu2.interrupt(); });
+			sound0->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		return this;
 	}
 
 	void reset() {
@@ -269,16 +272,16 @@ struct Mappy {
 		return edge = in[3] ^ 0xf, this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void right(bool fDown) {
@@ -293,14 +296,17 @@ struct Mappy {
 		in[3] = in[3] & ~(1 << 0) | fDown << 0;
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		// 画面クリア
 		int p = 256 * 16 + 16;
 		for (int i = 0; i < 288; p += 256, i++)
-			fill_n(&data[p], 224, 0x1f);
+			fill_n(&bitmap[p], 224, 0x1f);
 
 		// bg描画
-		drawBG(data, 0);
+		drawBG(bitmap.data(), 0);
 
 		// obj描画
 		for (int k = 0x1780, i = 64; i != 0; k += 2, --i) {
@@ -309,84 +315,86 @@ struct Mappy {
 			const int src = ram[k] | ram[k + 1] << 8;
 			switch (ram[k + 0x1000] & 0x0f) {
 			case 0x00: // ノーマル
-				xfer16x16(data, x | y << 8, src);
+				xfer16x16(bitmap.data(), x | y << 8, src);
 				break;
 			case 0x01: // V反転
-				xfer16x16V(data, x | y << 8, src);
+				xfer16x16V(bitmap.data(), x | y << 8, src);
 				break;
 			case 0x02: // H反転
-				xfer16x16H(data, x | y << 8, src);
+				xfer16x16H(bitmap.data(), x | y << 8, src);
 				break;
 			case 0x03: // HV反転
-				xfer16x16HV(data, x | y << 8, src);
+				xfer16x16HV(bitmap.data(), x | y << 8, src);
 				break;
 			case 0x04: // ノーマル
-				xfer16x16(data, x | y << 8, src & ~1);
-				xfer16x16(data, x | (y + 16 & 0x1ff) << 8, src | 1);
+				xfer16x16(bitmap.data(), x | y << 8, src & ~1);
+				xfer16x16(bitmap.data(), x | (y + 16 & 0x1ff) << 8, src | 1);
 				break;
 			case 0x05: // V反転
-				xfer16x16V(data, x | y << 8, src | 1);
-				xfer16x16V(data, x | (y + 16 & 0x1ff) << 8, src & ~1);
+				xfer16x16V(bitmap.data(), x | y << 8, src | 1);
+				xfer16x16V(bitmap.data(), x | (y + 16 & 0x1ff) << 8, src & ~1);
 				break;
 			case 0x06: // H反転
-				xfer16x16H(data, x | y << 8, src & ~1);
-				xfer16x16H(data, x | (y + 16 & 0x1ff) << 8, src | 1);
+				xfer16x16H(bitmap.data(), x | y << 8, src & ~1);
+				xfer16x16H(bitmap.data(), x | (y + 16 & 0x1ff) << 8, src | 1);
 				break;
 			case 0x07: // HV反転
-				xfer16x16HV(data, x | y << 8, src | 1);
-				xfer16x16HV(data, x | (y + 16 & 0x1ff) << 8, src & ~1);
+				xfer16x16HV(bitmap.data(), x | y << 8, src | 1);
+				xfer16x16HV(bitmap.data(), x | (y + 16 & 0x1ff) << 8, src & ~1);
 				break;
 			case 0x08: // ノーマル
-				xfer16x16(data, x | y << 8, src | 2);
-				xfer16x16(data, x + 16 & 0xff | y << 8, src & ~2);
+				xfer16x16(bitmap.data(), x | y << 8, src | 2);
+				xfer16x16(bitmap.data(), x + 16 & 0xff | y << 8, src & ~2);
 				break;
 			case 0x09: // V反転
-				xfer16x16V(data, x | y << 8, src | 2);
-				xfer16x16V(data, x + 16 & 0xff | y << 8, src & ~2);
+				xfer16x16V(bitmap.data(), x | y << 8, src | 2);
+				xfer16x16V(bitmap.data(), x + 16 & 0xff | y << 8, src & ~2);
 				break;
 			case 0x0a: // H反転
-				xfer16x16H(data, x | y << 8, src & ~2);
-				xfer16x16H(data, x + 16 & 0xff | y << 8, src | 2);
+				xfer16x16H(bitmap.data(), x | y << 8, src & ~2);
+				xfer16x16H(bitmap.data(), x + 16 & 0xff | y << 8, src | 2);
 				break;
 			case 0x0b: // HV反転
-				xfer16x16HV(data, x | y << 8, src & ~2);
-				xfer16x16HV(data, x + 16 & 0xff | y << 8, src | 2);
+				xfer16x16HV(bitmap.data(), x | y << 8, src & ~2);
+				xfer16x16HV(bitmap.data(), x + 16 & 0xff | y << 8, src | 2);
 				break;
 			case 0x0c: // ノーマル
-				xfer16x16(data, x | y << 8, src & ~3 | 2);
-				xfer16x16(data, x | (y + 16 & 0x1ff) << 8, src | 3);
-				xfer16x16(data, x + 16 & 0xff | y << 8, src & ~3);
-				xfer16x16(data, x + 16 & 0xff | (y + 16 & 0x1ff) << 8, src & ~3 | 1);
+				xfer16x16(bitmap.data(), x | y << 8, src & ~3 | 2);
+				xfer16x16(bitmap.data(), x | (y + 16 & 0x1ff) << 8, src | 3);
+				xfer16x16(bitmap.data(), x + 16 & 0xff | y << 8, src & ~3);
+				xfer16x16(bitmap.data(), x + 16 & 0xff | (y + 16 & 0x1ff) << 8, src & ~3 | 1);
 				break;
 			case 0x0d: // V反転
-				xfer16x16V(data, x | y << 8, src | 3);
-				xfer16x16V(data, x | (y + 16 & 0x1ff) << 8, src & ~3 | 2);
-				xfer16x16V(data, x + 16 & 0xff | y << 8, src & ~3 | 1);
-				xfer16x16V(data, x + 16 & 0xff | (y + 16 & 0x1ff) << 8, src & ~3);
+				xfer16x16V(bitmap.data(), x | y << 8, src | 3);
+				xfer16x16V(bitmap.data(), x | (y + 16 & 0x1ff) << 8, src & ~3 | 2);
+				xfer16x16V(bitmap.data(), x + 16 & 0xff | y << 8, src & ~3 | 1);
+				xfer16x16V(bitmap.data(), x + 16 & 0xff | (y + 16 & 0x1ff) << 8, src & ~3);
 				break;
 			case 0x0e: // H反転
-				xfer16x16H(data, x | y << 8, src & ~3);
-				xfer16x16H(data, x | (y + 16 & 0x1ff) << 8, src & ~3 | 1);
-				xfer16x16H(data, x + 16 & 0xff | y << 8, src & ~3 | 2);
-				xfer16x16H(data, x + 16 & 0xff | (y + 16 & 0x1ff) << 8, src | 3);
+				xfer16x16H(bitmap.data(), x | y << 8, src & ~3);
+				xfer16x16H(bitmap.data(), x | (y + 16 & 0x1ff) << 8, src & ~3 | 1);
+				xfer16x16H(bitmap.data(), x + 16 & 0xff | y << 8, src & ~3 | 2);
+				xfer16x16H(bitmap.data(), x + 16 & 0xff | (y + 16 & 0x1ff) << 8, src | 3);
 				break;
 			case 0x0f: // HV反転
-				xfer16x16HV(data, x | y << 8, src & ~3 | 1);
-				xfer16x16HV(data, x | (y + 16 & 0x1ff) << 8, src & ~3);
-				xfer16x16HV(data, x + 16 & 0xff | y << 8, src | 3);
-				xfer16x16HV(data, x + 16 & 0xff | (y + 16 & 0x1ff) << 8, src & ~3 | 2);
+				xfer16x16HV(bitmap.data(), x | y << 8, src & ~3 | 1);
+				xfer16x16HV(bitmap.data(), x | (y + 16 & 0x1ff) << 8, src & ~3);
+				xfer16x16HV(bitmap.data(), x + 16 & 0xff | y << 8, src | 3);
+				xfer16x16HV(bitmap.data(), x + 16 & 0xff | (y + 16 & 0x1ff) << 8, src & ~3 | 2);
 				break;
 			}
 		}
 
 		// bg描画
-		drawBG(data, 1);
+		drawBG(bitmap.data(), 1);
 
 		// palette変換
 		p = 256 * 16 + 16;
 		for (int i = 0; i < 288; p += 256 - 224, i++)
 			for (int j = 0; j < 224; p++, j++)
-				data[p] = rgb[data[p]];
+				bitmap[p] = rgb[bitmap[p]];
+
+		return bitmap.data();
 	}
 
 	void drawBG(int *data, int pri) {

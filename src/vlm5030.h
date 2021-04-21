@@ -18,11 +18,11 @@ struct VLM5030 {
 
 	const uint8_t *base;
 	int size;
-	double rate;
+	int clock;
 	int sampleRate;
 	double gain;
 	int BSY = 0;
-	double frac = 0;
+	int frac = 0;
 	int param = 0;
 	int offset = 0;
 	int icount = 0;
@@ -43,10 +43,10 @@ struct VLM5030 {
 	array<int, 10> x = {};
 	double output = 0;
 
-	template<class T> VLM5030(const T& VLM, double clock, int sampleRate = 48000, double gain = 0.1) {
+	template<class T> VLM5030(const T& VLM, int clock, int sampleRate = 48000, double gain = 0.1) {
 		base = VLM.data();
 		size = VLM.size();
-		rate = clock / 440;
+		this->clock = clock;
 		this->sampleRate = sampleRate;
 		this->gain = gain;
 		rst(0);
@@ -77,7 +77,7 @@ struct VLM5030 {
 	}
 
 	void update() {
-		for (frac += rate; frac >= sampleRate; frac -= sampleRate) {
+		for (frac += clock; frac >= sampleRate * 440; frac -= sampleRate * 440) {
 			if (!BSY)
 				continue;
 			if (!scount) {

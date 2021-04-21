@@ -56,19 +56,22 @@ struct StrategyX {
 	array<uint8_t, 0x4000> bg;
 	array<uint8_t, 0x4000> obj;
 	array<int, 0x20> rgb;
+	array<int, width * height> bitmap;
+	bool updated = false;
 
 	Z80 cpu, cpu2;
+	Timer<int> timer;
 	struct {
 		double rate = 14318000.0 / 2048;
 		double frac = 0;
 		int count = 0;
-		void execute(double rate, double rate_correction, function<void(int)> fn) {
-			for (frac += this->rate * rate_correction; frac >= rate; frac -= rate)
+		void execute(double rate, function<void(int)> fn) {
+			for (frac += this->rate; frac >= rate; frac -= rate)
 				fn(count = (count + 1) % 20);
 		}
-	} timer;
+	} timer2;
 
-	StrategyX() : cpu(18432000 / 6), cpu2(14318000 / 8) {
+	StrategyX() : cpu(18432000 / 6), cpu2(14318000 / 8), timer(60) {
 		// CPU周りの初期化
 		auto range = [](int page, int start, int end, int mirror = 0) { return (page & ~mirror) >= start && (page & ~mirror) <= end; };
 
@@ -142,27 +145,27 @@ struct StrategyX {
 		cpu2.check_interrupt = [&]() { return cpu2_irq && cpu2.interrupt() && (cpu2_irq = false, true); };
 
 		// Videoの初期化
-		bg.fill(3), obj.fill(3);
+		bg.fill(3), obj.fill(3), bitmap.fill(0xff000000);
 		convertGFX(&bg[0], &BG[0], 256, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x4000}, 8);
 		convertGFX(&obj[0], &BG[0], 64, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x4000}, 32);
 		for (int i = 0; i < rgb.size(); i++)
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
-	StrategyX *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		fInterruptEnable && cpu.non_maskable_interrupt();
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			cpu.execute(tick_rate);
 			cpu2.execute(tick_rate);
-			timer.execute(tick_rate, rate_correction, [&](int cnt) {
+			timer.execute(tick_rate, [&]() { update(), fInterruptEnable && cpu.non_maskable_interrupt(); });
+			timer2.execute(tick_rate, [&](int cnt) {
 				sound0->write(0xf, (cnt >= 10) << 7 | array<uint8_t, 10>{0x0e, 0x1e, 0x0e, 0x1e, 0x2e, 0x3e, 0x2e, 0x3e, 0x4e, 0x5e}[cnt % 10]);
 			});
-			sound0->execute(tick_rate, rate_correction);
-			sound1->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			sound0->execute(tick_rate);
+			sound1->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		return this;
 	}
 
 	void reset() {
@@ -209,16 +212,16 @@ struct StrategyX {
 		return this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void up(bool fDown) {
@@ -249,13 +252,16 @@ struct StrategyX {
 		ppi0[0] = ppi0[0] & ~(1 << 1) | !fDown << 1;
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		// bg描画
 		int p = 256 * 32;
 		for (int k = 0xbe2, i = 2; i < 32; p += 256 * 8, k += 0x401, i++) {
 			int dwScroll = ram[0xc00 + i * 2];
 			for (int j = 0; j < 32; k -= 0x20, j++) {
-				xfer8x8(data, p + dwScroll, k, i);
+				xfer8x8(bitmap.data(), p + dwScroll, k, i);
 				dwScroll = dwScroll + 8 & 0xff;
 			}
 		}
@@ -266,16 +272,16 @@ struct StrategyX {
 			const int src = ram[k + 1] & 0x3f | ram[k + 2] << 6;
 			switch (ram[k + 1] & 0xc0) {
 			case 0x00: // ノーマル
-				xfer16x16(data, x | y << 8, src);
+				xfer16x16(bitmap.data(), x | y << 8, src);
 				break;
 			case 0x40: // V反転
-				xfer16x16V(data, x | y << 8, src);
+				xfer16x16V(bitmap.data(), x | y << 8, src);
 				break;
 			case 0x80: // H反転
-				xfer16x16H(data, x | y << 8, src);
+				xfer16x16H(bitmap.data(), x | y << 8, src);
 				break;
 			case 0xc0: // HV反転
-				xfer16x16HV(data, x | y << 8, src);
+				xfer16x16HV(bitmap.data(), x | y << 8, src);
 				break;
 			}
 		}
@@ -283,7 +289,7 @@ struct StrategyX {
 		// bullets描画
 		for (int k = 0xc60, i = 0; i < 8; k += 4, i++) {
 			p = ram[k + 1] | 264 - ram[k + 3] << 8;
-			data[p] = 7;
+			bitmap[p] = 7;
 		}
 
 		// bg描画
@@ -291,7 +297,7 @@ struct StrategyX {
 		for (int k = 0xbe0, i = 0; i < 2; p += 256 * 8, k += 0x401, i++) {
 			int dwScroll = ram[0xc00 + i * 2];
 			for (int j = 0; j < 32; k -= 0x20, j++) {
-				xfer8x8(data, p + dwScroll, k, i);
+				xfer8x8(bitmap.data(), p + dwScroll, k, i);
 				dwScroll = dwScroll + 8 & 0xff;
 			}
 		}
@@ -304,8 +310,10 @@ struct StrategyX {
 							| (fBackgroundRed && ~MAP[i >> 3] & 2 ? 0x0000007c : 0)
 							| 0xff000000;
 			for (int j = 0; j < 224; p++, j++)
-				data[p] = data[p] & 3 ? rgb[data[p]] : color;
+				bitmap[p] = bitmap[p] & 3 ? rgb[bitmap[p]] : color;
 		}
+
+		return bitmap.data();
 	}
 
 	void xfer8x8(int *data, int p, int k, int i) {
@@ -430,8 +438,8 @@ struct StrategyX {
 	}
 
 	static void init(int rate) {
-		sound0 = new AY_3_8910(14318181.0 / 8, 0.2);
-		sound1 = new AY_3_8910(14318181.0 / 8, 0.2);
+		sound0 = new AY_3_8910(14318181 / 8, 0.2);
+		sound1 = new AY_3_8910(14318181 / 8, 0.2);
 		Z80::init();
 	}
 };

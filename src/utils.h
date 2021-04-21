@@ -37,32 +37,17 @@ inline void convertGFX(unsigned char *dst, const unsigned char *src, int n, cons
 					}
 }
 
-struct IntTimer {
-	int rate = 0;
-	int frac = 0;
+template<typename T> struct Timer {
+	T rate = 0;
+	T frac = 0;
 	function<void()> fn = []() {};
-	IntTimer(int rate = 0) { this->rate = rate; }
-	void execute(int rate) {
+	Timer(T rate = 0) { this->rate = rate; }
+	void execute(T rate) {
 		for (frac += this->rate; frac >= rate; frac -= rate)
 			fn();
 	}
-	void execute(int rate, function<void()> fn) {
+	void execute(T rate, function<void()> fn) {
 		for (frac += this->rate; frac >= rate; frac -= rate)
-			fn();
-	}
-};
-
-struct DoubleTimer {
-	double rate = 0;
-	double frac = 0;
-	function<void()> fn = []() {};
-	DoubleTimer(double rate = 0) { this->rate = rate; }
-	void execute(double rate, double rate_correction) {
-		for (frac += this->rate * rate_correction; frac >= rate; frac -= rate)
-			fn();
-	}
-	void execute(double rate, double rate_correction, function<void()> fn) {
-		for (frac += this->rate * rate_correction; frac >= rate; frac -= rate)
 			fn();
 	}
 };

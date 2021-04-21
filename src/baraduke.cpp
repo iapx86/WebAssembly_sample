@@ -13,9 +13,7 @@
 using namespace std;
 
 Baraduke *game;
-array<int, 7> geometry = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
-array<int, Baraduke::width * Baraduke::height> data = {};
-DoubleTimer audio;
+Timer audio(48000);
 list<float> samples;
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
@@ -33,33 +31,37 @@ extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 	return rom_table.data();
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE int *init(int rate) {
+extern "C" EMSCRIPTEN_KEEPALIVE void init(int rate) {
 	game = new Baraduke;
 	game->init(audio.rate = rate);
+	game->updateStatus()->updateInput();
 	audio.fn = []() {
 		samples.push_back(game->sound0->output);
 		game->sound0->update();
 	};
-	return geometry.data();
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE int *render(double timestamp, double rate_correction) {
-	game->updateStatus()->updateInput()->execute(audio, rate_correction)->makeBitmap(::data.data());
-	return ::data.data();
+extern "C" EMSCRIPTEN_KEEPALIVE int execute(double, int length) {
+	game->execute(audio, length - samples.size());
+	return samples.size();
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE void *sound() {
+extern "C" EMSCRIPTEN_KEEPALIVE int *geometry() {
+	static array<int, 7> buf;
+	buf = {game->cxScreen, game->cyScreen, game->width, game->height, game->xOffset, game->yOffset, game->rotate};
+	return buf.data();
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE int *image() {
+	return game->makeBitmap(false);
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE float *sound() {
 	static vector<float> buf;
-	static struct {
-		float *addr;
-		int size;
-	} iov;
 	buf.resize(samples.size());
 	copy(samples.begin(), samples.end(), buf.begin());
 	samples.clear();
-	iov.addr = buf.data();
-	iov.size = buf.size();
-	return &iov;
+	return buf.data();
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE void reset() {
@@ -71,16 +73,16 @@ extern "C" EMSCRIPTEN_KEEPALIVE void test() {
 		game->reset();
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE void coin() {
-	game->coin();
+extern "C" EMSCRIPTEN_KEEPALIVE void coin(int fDown) {
+	game->coin(fDown != 0);
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE void start1P() {
-	game->start1P();
+extern "C" EMSCRIPTEN_KEEPALIVE void start1P(int fDown) {
+	game->start1P(fDown != 0);
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE void start2P() {
-	game->start2P();
+extern "C" EMSCRIPTEN_KEEPALIVE void start2P(int fDown) {
+	game->start2P(fDown != 0);
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE void up(int fDown) {

@@ -9,7 +9,7 @@
 using namespace std;
 
 struct SN76489 {
-	double rate;
+	int rate;
 	double gain;
 	double output = 0;
 	bool mute = false;
@@ -17,14 +17,13 @@ struct SN76489 {
 	array<uint16_t, 8> reg;
 	int frac = 0;
 	struct {
-		int freq = 0;
 		int count = 0;
 		int output = 0;
 	} channel[3];
 	int ncount = 0;
 	int rng = 0x4000;
 
-	SN76489(double clock, double gain = 0.1) {
+	SN76489(int clock, double gain = 0.1) {
 		rate = clock / 16;
 		this->gain = gain;
 		reg.fill(0xffff);
@@ -42,13 +41,13 @@ struct SN76489 {
 		addr == 6 && (rng = 0x4000);
 	}
 
-	void execute(double rate, double rate_correction) {
-		for (frac += this->rate * rate_correction; frac >= rate; frac -= rate) {
+	void execute(int rate) {
+		for (frac += this->rate; frac >= rate; frac -= rate) {
+			const int nfreq = (reg[6] & 3) == 3 ? reg[4] << 1 : 32 << (reg[6] & 3);
 			for (int i = 0; i < 3; i++) {
 				auto& ch = channel[i];
-				ch.freq = reg[i * 2], !(--ch.count & 0x3ff) && (ch.output = ~ch.output, ch.count = ch.freq);
+				!(--ch.count & 0x3ff) && (ch.output = ~ch.output, ch.count = reg[i * 2]);
 			}
-			const int nfreq = (reg[6] & 3) == 3 ? channel[2].freq << 1 : 32 << (reg[6] & 3);
 			!(--ncount & 0x7ff) && (rng = rng >> 1 | (rng << 14 ^ rng << 13 & reg[6] << 12) & 0x4000, ncount = nfreq);
 		}
 	}

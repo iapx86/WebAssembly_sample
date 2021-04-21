@@ -60,10 +60,13 @@ struct ZigZag {
 	array<uint8_t, 0x4000> bg;
 	array<uint8_t, 0x4000> obj;
 	array<int, 0x80> rgb = {};
+	array<int, width * height> bitmap;
+	bool updated = false;
 
 	Z80 cpu;
+	Timer<int> timer;
 
-	ZigZag() : cpu(18432000 / 6) {
+	ZigZag() : cpu(18432000 / 6), timer(60) {
 		// CPU周りの初期化
 		auto range = [](int page, int start, int end, int mirror = 0) { return (page & ~mirror) >= start && (page & ~mirror) <= end; };
 
@@ -119,7 +122,7 @@ struct ZigZag {
 			}
 
 		// Videoの初期化
-		bg.fill(3), obj.fill(3);
+		bg.fill(3), obj.fill(3), bitmap.fill(0xff000000);
 		convertGFX(&bg[0], &BG[0], 256, {rseq8(0, 8)}, {seq8(0, 1)}, {0, 0x4000}, 8);
 		convertGFX(&obj[0], &OBJ[0], 64, {rseq8(128, 8), rseq8(0, 8)}, {seq8(0, 1), seq8(64, 1)}, {0, 0x4000}, 32);
 		for (int i = 0; i < 0x20; i++)
@@ -130,16 +133,15 @@ struct ZigZag {
 		initializeStar();
 	}
 
-	ZigZag *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		fInterruptEnable && cpu.non_maskable_interrupt();
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			cpu.execute(tick_rate);
-			sound0->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			timer.execute(tick_rate, [&]() { moveStars(), update(), fInterruptEnable && cpu.non_maskable_interrupt(); });
+			sound0->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		moveStars();
-		return this;
 	}
 
 	void reset() {
@@ -192,16 +194,16 @@ struct ZigZag {
 		return this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void up(bool fDown) {
@@ -251,13 +253,16 @@ struct ZigZag {
 				}
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		// bg描画
 		int p = 256 * 32;
 		for (int k = 0x7e2, i = 2; i < 32; p += 256 * 8, k += 0x401, i++) {
 			int dwScroll = ram[0x800 + i * 2];
 			for (int j = 0; j < 32; k -= 0x20, j++) {
-				xfer8x8(data, p + dwScroll, k, i);
+				xfer8x8(bitmap.data(), p + dwScroll, k, i);
 				dwScroll = dwScroll + 8 & 0xff;
 			}
 		}
@@ -268,16 +273,16 @@ struct ZigZag {
 			const int src = ram[k + 1] & 0x3f | ram[k + 2] << 6;
 			switch (ram[k + 1] & 0xc0) {
 			case 0x00: // ノーマル
-				xfer16x16(data, x | y << 8, src);
+				xfer16x16(bitmap.data(), x | y << 8, src);
 				break;
 			case 0x40: // V反転
-				xfer16x16V(data, x | y << 8, src);
+				xfer16x16V(bitmap.data(), x | y << 8, src);
 				break;
 			case 0x80: // H反転
-				xfer16x16H(data, x | y << 8, src);
+				xfer16x16H(bitmap.data(), x | y << 8, src);
 				break;
 			case 0xc0: // HV反転
-				xfer16x16HV(data, x | y << 8, src);
+				xfer16x16HV(bitmap.data(), x | y << 8, src);
 				break;
 			}
 		}
@@ -287,7 +292,7 @@ struct ZigZag {
 		for (int k = 0x7e0, i = 0; i < 2; p += 256 * 8, k += 0x401, i++) {
 			int dwScroll = ram[0x800 + i * 2];
 			for (int j = 0; j < 32; k -= 0x20, j++) {
-				xfer8x8(data, p + dwScroll, k, i);
+				xfer8x8(bitmap.data(), p + dwScroll, k, i);
 				dwScroll = dwScroll + 8 & 0xff;
 			}
 		}
@@ -300,10 +305,10 @@ struct ZigZag {
 				if (!px)
 					break;
 				const int x = stars[i].x, y = stars[i].y;
-				if (x & 1 && ~y & 8 && !(data[p + (x | y << 8)] & 3))
-					data[p + (x | y << 8)] = 0x40 | px;
-				else if (~x & 1 && y & 8 && !(data[p + (x | y << 8)] & 3))
-					data[p + (x | y << 8)] = 0x40 | px;
+				if (x & 1 && ~y & 8 && !(bitmap[p + (x | y << 8)] & 3))
+					bitmap[p + (x | y << 8)] = 0x40 | px;
+				else if (~x & 1 && y & 8 && !(bitmap[p + (x | y << 8)] & 3))
+					bitmap[p + (x | y << 8)] = 0x40 | px;
 			}
 		}
 
@@ -311,7 +316,9 @@ struct ZigZag {
 		p = 256 * 16 + 16;
 		for (int i = 0; i < 256; p += 256 - 224, i++)
 			for (int j = 0; j < 224; p++, j++)
-				data[p] = rgb[data[p]];
+				bitmap[p] = rgb[bitmap[p]];
+
+		return bitmap.data();
 	}
 
 	void xfer8x8(int *data, int p, int k, int i) {

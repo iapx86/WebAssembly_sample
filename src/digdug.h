@@ -78,20 +78,23 @@ struct DigDug {
 	array<uint8_t, 0x10000> obj;
 	array<uint8_t, 0x100> objcolor;
 	array<int, 0x20> rgb;
+	array<int, width * height> bitmap;
+	bool updated = false;
 
 	array<Z80, 3> cpu;
 	MB8840 mcu;
 	struct {
-		int rate = 18432000 / 384;
+		int rate = 256 * 60;
 		int frac = 0;
 		int count = 0;
 		void execute(int rate, function<void(int)> fn) {
 			for (frac += this->rate; frac >= rate; frac -= rate)
-				fn(count = (count + 1) % this->rate);
+				fn(count = count + 1 & 255);
 		}
-	} timer;
+	} scanline;
+	Timer<int> timer;
 
-	DigDug() {
+	DigDug() : timer(18432000 / 384) {
 		// CPU周りの初期化
 		cpu[0].clock = cpu[1].clock = cpu[2].clock = 18432000 / 6;
 		mmi.fill(0xff);
@@ -203,7 +206,7 @@ struct DigDug {
 		mmi[1] = 0x2e; // DIPSW B
 
 		// Videoの初期化
-		bg2.fill(1), bg4.fill(3), obj.fill(3);
+		bg2.fill(1), bg4.fill(3), obj.fill(3), bitmap.fill(0xff000000);
 		convertGFX(&bg2[0], &BG2[0], 128, {rseq8(0, 8)}, {rseq8(0, 1)}, {0}, 8);
 		convertGFX(&bg4[0], &BG4[0], 256, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
 		convertGFX(&obj[0], &OBJ[0], 256, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4}, 64);
@@ -213,20 +216,22 @@ struct DigDug {
 			rgb[i] = 0xff000000 | (RGB[i] >> 6) * 255 / 3 << 16 | (RGB[i] >> 3 & 7) * 255 / 7 << 8 | (RGB[i] & 7) * 255 / 7;
 	}
 
-	DigDug *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		fInterruptEnable0 && cpu[0].interrupt(), fInterruptEnable1 && cpu[1].interrupt();
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			for (int j = 0; j < 3; j++)
 				cpu[j].execute(tick_rate);
-			timer.execute(tick_rate, [&](int cnt) {
-				fNmiEnable && !--fNmiEnable && (fNmiEnable = 2 << (dmactrl >> 5), cpu[0].non_maskable_interrupt());
-				!(cnt % (timer.rate / 120)) && fInterruptEnable2 && cpu[2].non_maskable_interrupt();
+			scanline.execute(tick_rate, [&](int vpos) {
+				!(vpos & 0x7f) && fInterruptEnable2 && cpu[2].non_maskable_interrupt();
+				!vpos && (update(), fInterruptEnable0 && cpu[0].interrupt(), fInterruptEnable1 && cpu[1].interrupt());
 			});
-			sound0->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			timer.execute(tick_rate, [&]() {
+				fNmiEnable && !--fNmiEnable && (fNmiEnable = 2 << (dmactrl >> 5), cpu[0].non_maskable_interrupt());
+			});
+			sound0->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		return this;
 	}
 
 	void reset() {
@@ -324,16 +329,16 @@ struct DigDug {
 		return this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void up(bool fDown) {
@@ -356,42 +361,45 @@ struct DigDug {
 		mcu.r = mcu.r & ~(1 << 8) | !fDown << 8;
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		// bg描画
 		if (!fFlip) {
 			int p = 256 * 8 * 4 + 232;
 			for (int k = 0x40, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 				for (int j = 0; j < 32; k++, p += 256 * 8, j++)
-					xfer8x8(data, p, k);
+					xfer8x8(bitmap.data(), p, k);
 			p = 256 * 8 * 36 + 232;
 			for (int k = 2, i = 0; i < 28; p -= 8, k++, i++)
-				xfer8x8(data, p, k);
+				xfer8x8(bitmap.data(), p, k);
 			p = 256 * 8 * 37 + 232;
 			for (int k = 0x22, i = 0; i < 28; p -= 8, k++, i++)
-				xfer8x8(data, p, k);
+				xfer8x8(bitmap.data(), p, k);
 			p = 256 * 8 * 2 + 232;
 			for (int k = 0x3c2, i = 0; i < 28; p -= 8, k++, i++)
-				xfer8x8(data, p, k);
+				xfer8x8(bitmap.data(), p, k);
 			p = 256 * 8 * 3 + 232;
 			for (int k = 0x3e2, i = 0; i < 28; p -= 8, k++, i++)
-				xfer8x8(data, p, k);
+				xfer8x8(bitmap.data(), p, k);
 		} else {
 			int p = 256 * 8 * 35 + 16;
 			for (int k = 0x40, i = 0; i < 28; p += 256 * 8 * 32 + 8, i++)
 				for (int j = 0; j < 32; k++, p -= 256 * 8, j++)
-					xfer8x8HV(data, p, k);
+					xfer8x8HV(bitmap.data(), p, k);
 			p = 256 * 8 * 3 + 16;
 			for (int k = 2, i = 0; i < 28; p += 8, k++, i++)
-				xfer8x8HV(data, p, k);
+				xfer8x8HV(bitmap.data(), p, k);
 			p = 256 * 8 * 2 + 16;
 			for (int k = 0x22, i = 0; i < 28; p += 8, k++, i++)
-				xfer8x8HV(data, p, k);
+				xfer8x8HV(bitmap.data(), p, k);
 			p = 256 * 8 * 37 + 16;
 			for (int k = 0x3c2, i = 0; i < 28; p += 8, k++, i++)
-				xfer8x8HV(data, p, k);
+				xfer8x8HV(bitmap.data(), p, k);
 			p = 256 * 8 * 36 + 16;
 			for (int k = 0x3e2, i = 0; i < 28; p += 8, k++, i++)
-				xfer8x8HV(data, p, k);
+				xfer8x8HV(bitmap.data(), p, k);
 		}
 
 		// obj描画
@@ -403,72 +411,72 @@ struct DigDug {
 					const int src = ram[k] | ram[k + 1] << 8;
 					switch (ram[k + 0x1000] & 3) {
 					case 0: // ノーマル
-						xfer16x16(data, x | y << 8, src);
+						xfer16x16(bitmap.data(), x | y << 8, src);
 						break;
 					case 1: // V反転
-						xfer16x16V(data, x | y << 8, src);
+						xfer16x16V(bitmap.data(), x | y << 8, src);
 						break;
 					case 2: // H反転
-						xfer16x16H(data, x | y << 8, src);
+						xfer16x16H(bitmap.data(), x | y << 8, src);
 						break;
 					case 3: // HV反転
-						xfer16x16HV(data, x | y << 8, src);
+						xfer16x16HV(bitmap.data(), x | y << 8, src);
 						break;
 					}
 				} else if (ram[k] < 0xc0) {
 					const int src = ram[k] << 2 & 0x3c | ram[k + 1] << 8;
 					switch (ram[k + 0x1000] & 3) {
 					case 0: // ノーマル
-						xfer16x16(data, x | y << 8, src | 0x82);
-						xfer16x16(data, x | y + 16 << 8, src | 0x83);
-						xfer16x16(data, x + 16 & 0xff | y << 8, src | 0x80);
-						xfer16x16(data, x + 16 & 0xff | y + 16 << 8, src | 0x81);
+						xfer16x16(bitmap.data(), x | y << 8, src | 0x82);
+						xfer16x16(bitmap.data(), x | y + 16 << 8, src | 0x83);
+						xfer16x16(bitmap.data(), x + 16 & 0xff | y << 8, src | 0x80);
+						xfer16x16(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0x81);
 						break;
 					case 1: // V反転
-						xfer16x16V(data, x | y << 8, src | 0x83);
-						xfer16x16V(data, x | y + 16 << 8, src | 0x82);
-						xfer16x16V(data, x + 16 & 0xff | y << 8, src | 0x81);
-						xfer16x16V(data, x + 16 & 0xff | y + 16 << 8, src | 0x80);
+						xfer16x16V(bitmap.data(), x | y << 8, src | 0x83);
+						xfer16x16V(bitmap.data(), x | y + 16 << 8, src | 0x82);
+						xfer16x16V(bitmap.data(), x + 16 & 0xff | y << 8, src | 0x81);
+						xfer16x16V(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0x80);
 						break;
 					case 2: // H反転
-						xfer16x16H(data, x | y << 8, src | 0x80);
-						xfer16x16H(data, x | y + 16 << 8, src | 0x81);
-						xfer16x16H(data, x + 16 & 0xff | y << 8, src | 0x82);
-						xfer16x16H(data, x + 16 & 0xff | y + 16 << 8, src | 0x83);
+						xfer16x16H(bitmap.data(), x | y << 8, src | 0x80);
+						xfer16x16H(bitmap.data(), x | y + 16 << 8, src | 0x81);
+						xfer16x16H(bitmap.data(), x + 16 & 0xff | y << 8, src | 0x82);
+						xfer16x16H(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0x83);
 						break;
 					case 3: // HV反転
-						xfer16x16HV(data, x | y << 8, src | 0x81);
-						xfer16x16HV(data, x | y + 16 << 8, src | 0x80);
-						xfer16x16HV(data, x + 16 & 0xff | y << 8, src | 0x83);
-						xfer16x16HV(data, x + 16 & 0xff | y + 16 << 8, src | 0x82);
+						xfer16x16HV(bitmap.data(), x | y << 8, src | 0x81);
+						xfer16x16HV(bitmap.data(), x | y + 16 << 8, src | 0x80);
+						xfer16x16HV(bitmap.data(), x + 16 & 0xff | y << 8, src | 0x83);
+						xfer16x16HV(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0x82);
 						break;
 					}
 				} else {
 					const int src = ram[k] << 2 & 0x3c | ram[k + 1] << 8;
 					switch (ram[k + 0x1000] & 3) {
 					case 0: // ノーマル
-						xfer16x16(data, x | y << 8, src | 0xc2);
-						xfer16x16(data, x | y + 16 << 8, src | 0xc3);
-						xfer16x16(data, x + 16 & 0xff | y << 8, src | 0xc0);
-						xfer16x16(data, x + 16 & 0xff | y + 16 << 8, src | 0xc1);
+						xfer16x16(bitmap.data(), x | y << 8, src | 0xc2);
+						xfer16x16(bitmap.data(), x | y + 16 << 8, src | 0xc3);
+						xfer16x16(bitmap.data(), x + 16 & 0xff | y << 8, src | 0xc0);
+						xfer16x16(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0xc1);
 						break;
 					case 1: // V反転
-						xfer16x16V(data, x | y << 8, src | 0xc3);
-						xfer16x16V(data, x | y + 16 << 8, src | 0xc2);
-						xfer16x16V(data, x + 16 & 0xff | y << 8, src | 0xc1);
-						xfer16x16V(data, x + 16 & 0xff | y + 16 << 8, src | 0xc0);
+						xfer16x16V(bitmap.data(), x | y << 8, src | 0xc3);
+						xfer16x16V(bitmap.data(), x | y + 16 << 8, src | 0xc2);
+						xfer16x16V(bitmap.data(), x + 16 & 0xff | y << 8, src | 0xc1);
+						xfer16x16V(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0xc0);
 						break;
 					case 2: // H反転
-						xfer16x16H(data, x | y << 8, src | 0xc0);
-						xfer16x16H(data, x | y + 16 << 8, src | 0xc1);
-						xfer16x16H(data, x + 16 & 0xff | y << 8, src | 0xc2);
-						xfer16x16H(data, x + 16 & 0xff | y + 16 << 8, src | 0xc3);
+						xfer16x16H(bitmap.data(), x | y << 8, src | 0xc0);
+						xfer16x16H(bitmap.data(), x | y + 16 << 8, src | 0xc1);
+						xfer16x16H(bitmap.data(), x + 16 & 0xff | y << 8, src | 0xc2);
+						xfer16x16H(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0xc3);
 						break;
 					case 3: // HV反転
-						xfer16x16HV(data, x | y << 8, src | 0xc1);
-						xfer16x16HV(data, x | y + 16 << 8, src | 0xc0);
-						xfer16x16HV(data, x + 16 & 0xff | y << 8, src | 0xc3);
-						xfer16x16HV(data, x + 16 & 0xff | y + 16 << 8, src | 0xc2);
+						xfer16x16HV(bitmap.data(), x | y << 8, src | 0xc1);
+						xfer16x16HV(bitmap.data(), x | y + 16 << 8, src | 0xc0);
+						xfer16x16HV(bitmap.data(), x + 16 & 0xff | y << 8, src | 0xc3);
+						xfer16x16HV(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0xc2);
 						break;
 					}
 				}
@@ -481,72 +489,72 @@ struct DigDug {
 					const int src = ram[k] | ram[k + 1] << 8;
 					switch (ram[k + 0x1000] & 3) {
 					case 0: // ノーマル
-						xfer16x16HV(data, x | y << 8, src);
+						xfer16x16HV(bitmap.data(), x | y << 8, src);
 						break;
 					case 1: // V反転
-						xfer16x16H(data, x | y << 8, src);
+						xfer16x16H(bitmap.data(), x | y << 8, src);
 						break;
 					case 2: // H反転
-						xfer16x16V(data, x | y << 8, src);
+						xfer16x16V(bitmap.data(), x | y << 8, src);
 						break;
 					case 3: // HV反転
-						xfer16x16(data, x | y << 8, src);
+						xfer16x16(bitmap.data(), x | y << 8, src);
 						break;
 					}
 				} else if (ram[k] < 0xc0) {
 					const int src = ram[k] << 2 & 0x3c | ram[k + 1] << 8;
 					switch (ram[k + 0x1000] & 3) {
 					case 0: // ノーマル
-						xfer16x16HV(data, x | y << 8, src | 0x81);
-						xfer16x16HV(data, x | y + 16 << 8, src | 0x80);
-						xfer16x16HV(data, x + 16 & 0xff | y << 8, src | 0x83);
-						xfer16x16HV(data, x + 16 & 0xff | y + 16 << 8, src | 0x82);
+						xfer16x16HV(bitmap.data(), x | y << 8, src | 0x81);
+						xfer16x16HV(bitmap.data(), x | y + 16 << 8, src | 0x80);
+						xfer16x16HV(bitmap.data(), x + 16 & 0xff | y << 8, src | 0x83);
+						xfer16x16HV(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0x82);
 						break;
 					case 1: // V反転
-						xfer16x16H(data, x | y << 8, src | 0x80);
-						xfer16x16H(data, x | y + 16 << 8, src | 0x81);
-						xfer16x16H(data, x + 16 & 0xff | y << 8, src | 0x82);
-						xfer16x16H(data, x + 16 & 0xff | y + 16 << 8, src | 0x83);
+						xfer16x16H(bitmap.data(), x | y << 8, src | 0x80);
+						xfer16x16H(bitmap.data(), x | y + 16 << 8, src | 0x81);
+						xfer16x16H(bitmap.data(), x + 16 & 0xff | y << 8, src | 0x82);
+						xfer16x16H(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0x83);
 						break;
 					case 2: // H反転
-						xfer16x16V(data, x | y << 8, src | 0x83);
-						xfer16x16V(data, x | y + 16 << 8, src | 0x82);
-						xfer16x16V(data, x + 16 & 0xff | y << 8, src | 0x81);
-						xfer16x16V(data, x + 16 & 0xff | y + 16 << 8, src | 0x80);
+						xfer16x16V(bitmap.data(), x | y << 8, src | 0x83);
+						xfer16x16V(bitmap.data(), x | y + 16 << 8, src | 0x82);
+						xfer16x16V(bitmap.data(), x + 16 & 0xff | y << 8, src | 0x81);
+						xfer16x16V(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0x80);
 						break;
 					case 3: // HV反転
-						xfer16x16(data, x | y << 8, src | 0x82);
-						xfer16x16(data, x | y + 16 << 8, src | 0x83);
-						xfer16x16(data, x + 16 & 0xff | y << 8, src | 0x80);
-						xfer16x16(data, x + 16 & 0xff | y + 16 << 8, src | 0x81);
+						xfer16x16(bitmap.data(), x | y << 8, src | 0x82);
+						xfer16x16(bitmap.data(), x | y + 16 << 8, src | 0x83);
+						xfer16x16(bitmap.data(), x + 16 & 0xff | y << 8, src | 0x80);
+						xfer16x16(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0x81);
 						break;
 					}
 				} else {
 					const int src = ram[k] << 2 & 0x3c | ram[k + 1] << 8;
 					switch (ram[k + 0x1000] & 3) {
 					case 0: // ノーマル
-						xfer16x16HV(data, x | y << 8, src | 0xc1);
-						xfer16x16HV(data, x | y + 16 << 8, src | 0xc0);
-						xfer16x16HV(data, x + 16 & 0xff | y << 8, src | 0xc3);
-						xfer16x16HV(data, x + 16 & 0xff | y + 16 << 8, src | 0xc2);
+						xfer16x16HV(bitmap.data(), x | y << 8, src | 0xc1);
+						xfer16x16HV(bitmap.data(), x | y + 16 << 8, src | 0xc0);
+						xfer16x16HV(bitmap.data(), x + 16 & 0xff | y << 8, src | 0xc3);
+						xfer16x16HV(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0xc2);
 						break;
 					case 1: // V反転
-						xfer16x16H(data, x | y << 8, src | 0xc0);
-						xfer16x16H(data, x | y + 16 << 8, src | 0xc1);
-						xfer16x16H(data, x + 16 & 0xff | y << 8, src | 0xc2);
-						xfer16x16H(data, x + 16 & 0xff | y + 16 << 8, src | 0xc3);
+						xfer16x16H(bitmap.data(), x | y << 8, src | 0xc0);
+						xfer16x16H(bitmap.data(), x | y + 16 << 8, src | 0xc1);
+						xfer16x16H(bitmap.data(), x + 16 & 0xff | y << 8, src | 0xc2);
+						xfer16x16H(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0xc3);
 						break;
 					case 2: // H反転
-						xfer16x16V(data, x | y << 8, src | 0xc3);
-						xfer16x16V(data, x | y + 16 << 8, src | 0xc2);
-						xfer16x16V(data, x + 16 & 0xff | y << 8, src | 0xc1);
-						xfer16x16V(data, x + 16 & 0xff | y + 16 << 8, src | 0xc0);
+						xfer16x16V(bitmap.data(), x | y << 8, src | 0xc3);
+						xfer16x16V(bitmap.data(), x | y + 16 << 8, src | 0xc2);
+						xfer16x16V(bitmap.data(), x + 16 & 0xff | y << 8, src | 0xc1);
+						xfer16x16V(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0xc0);
 						break;
 					case 3: // HV反転
-						xfer16x16(data, x | y << 8, src | 0xc2);
-						xfer16x16(data, x | y + 16 << 8, src | 0xc3);
-						xfer16x16(data, x + 16 & 0xff | y << 8, src | 0xc0);
-						xfer16x16(data, x + 16 & 0xff | y + 16 << 8, src | 0xc1);
+						xfer16x16(bitmap.data(), x | y << 8, src | 0xc2);
+						xfer16x16(bitmap.data(), x | y + 16 << 8, src | 0xc3);
+						xfer16x16(bitmap.data(), x + 16 & 0xff | y << 8, src | 0xc0);
+						xfer16x16(bitmap.data(), x + 16 & 0xff | y + 16 << 8, src | 0xc1);
 						break;
 					}
 				}
@@ -556,7 +564,9 @@ struct DigDug {
 		int p = 256 * 16 + 16;
 		for (int i = 0; i < 288; p += 256 - 224, i++)
 			for (int j = 0; j < 224; p++, j++)
-				data[p] = rgb[data[p]];
+				bitmap[p] = rgb[bitmap[p]];
+
+		return bitmap.data();
 	}
 
 	void xfer8x8(int *data, int p, int k) {

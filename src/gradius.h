@@ -60,7 +60,7 @@ struct Gradius {
 
 	array<uint8_t, 0x49000> ram = {};
 	array<uint8_t, 0x4000> ram2 = {};
-	array<uint8_t, 0x800> vlm;
+	array<uint8_t, 0x800> vlm = {};
 	array<uint8_t, 6> in = {0xff, 0x53, 0xff, 0xff, 0xff, 0xff};
 	struct {
 		int addr = 0;
@@ -75,6 +75,8 @@ struct Gradius {
 
 	array<uint8_t, 0x20000> chr = {};
 	array<int, 0x800> rgb;
+	array<int, width * height> bitmap;
+	bool updated = false;
 	int flip = 0;
 	array<uint8_t, 32> intensity = {};
 
@@ -93,8 +95,8 @@ struct Gradius {
 		double rate = 14318180.0 / 4096;
 		double frac = 0;
 		int count = 0;
-		void execute(double rate, double rate_correction, function<void(int)> fn) {
-			for (frac += this->rate * rate_correction; frac >= rate; frac -= rate)
+		void execute(double rate, function<void(int)> fn) {
+			for (frac += this->rate; frac >= rate; frac -= rate)
 				fn(count = count + 1 & 255);
 		}
 	} timer;
@@ -211,7 +213,7 @@ struct Gradius {
 		cpu2.check_interrupt = [&]() { return cpu2_irq && cpu2.interrupt() && (cpu2_irq = false, true); };
 
 		// Videoの初期化
-		rgb.fill(0xff000000);
+		rgb.fill(0xff000000), bitmap.fill(0xff000000);
 
 		// 輝度の計算
 		array<double, 32> _intensity;
@@ -228,24 +230,22 @@ struct Gradius {
 			intensity[i] = (_intensity[i] - black) * white + 0.5;
 	}
 
-	Gradius *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			cpu.execute(tick_rate);
 			cpu2.execute(tick_rate);
-			scanline.execute(tick_rate, [&](int cnt) {
-				const int vpos = cnt + 240 & 0xff;
-				vpos == 0 && fInterrupt2Enable && cpu.interrupt(2);
+			scanline.execute(tick_rate, [&](int vpos) {
 				vpos == 120 && fInterrupt4Enable && cpu.interrupt(4);
+				!vpos && (update(), fInterrupt2Enable && cpu.interrupt(2), cpu2.non_maskable_interrupt());
 			});
-			timer.execute(tick_rate, rate_correction, [&](int cnt) { sound0->write(0xe, cnt & 0x2f | sound3->BSY << 5 | 0xd0); });
-			sound0->execute(tick_rate, rate_correction);
-			sound1->execute(tick_rate, rate_correction);
-			sound2->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			timer.execute(tick_rate, [&](int cnt) { sound0->write(0xe, cnt & 0x2f | sound3->BSY << 5 | 0xd0); });
+			sound0->execute(tick_rate);
+			sound1->execute(tick_rate);
+			sound2->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		cpu2.non_maskable_interrupt();
-		return this;
 	}
 
 	void reset() {
@@ -325,16 +325,16 @@ struct Gradius {
 		return this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void up(bool fDown) {
@@ -369,25 +369,28 @@ struct Gradius {
 		!(fTurbo = fDown) && (in[4] |= 1 << 6);
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		// 画面クリア
 		int p = 256 * 16 + 16;
 		for (int i = 0; i < 256; p += 256, i++)
-			fill_n(&data[p], 224, 0);
+			fill_n(&bitmap[p], 224, 0);
 
 		// bg描画
 		for (int k = 0x23000; k < 0x24000; k += 2)
 			if (!(ram[k] & 0x50) && ram[k] & 0xf8)
-				xfer8x8(data, k);
+				xfer8x8(bitmap.data(), k);
 		for (int k = 0x22000; k < 0x23000; k += 2)
 			if (!(ram[k] & 0x50) && ram[k] & 0xf8)
-				xfer8x8(data, k);
+				xfer8x8(bitmap.data(), k);
 		for (int k = 0x23000; k < 0x24000; k += 2)
 			if ((ram[k] & 0x50) == 0x40 && ram[k] & 0xf8)
-				xfer8x8(data, k);
+				xfer8x8(bitmap.data(), k);
 		for (int k = 0x22000; k < 0x23000; k += 2)
 			if ((ram[k] & 0x50) == 0x40 && ram[k] & 0xf8)
-				xfer8x8(data, k);
+				xfer8x8(bitmap.data(), k);
 
 		// obj描画
 		const int size[8][2] = {{32, 32}, {16, 32}, {32, 16}, {64, 64}, {8, 8}, {16, 8}, {8, 16}, {16, 16}};
@@ -408,16 +411,16 @@ struct Gradius {
 				const int w = size[ram[k + 3] >> 3 & 7][1];
 				switch (ram[k + 9] >> 4 & 2 | ram[k + 3] & 1) {
 				case 0:
-					xferHxW(data, src, color, y, x, h, w, zoom);
+					xferHxW(bitmap.data(), src, color, y, x, h, w, zoom);
 					break;
 				case 1:
-					xferHxW_V(data, src, color, y, x, h, w, zoom);
+					xferHxW_V(bitmap.data(), src, color, y, x, h, w, zoom);
 					break;
 				case 2:
-					xferHxW_H(data, src, color, y, x, h, w, zoom);
+					xferHxW_H(bitmap.data(), src, color, y, x, h, w, zoom);
 					break;
 				case 3:
-					xferHxW_HV(data, src, color, y, x, h, w, zoom);
+					xferHxW_HV(bitmap.data(), src, color, y, x, h, w, zoom);
 					break;
 				}
 			}
@@ -425,16 +428,18 @@ struct Gradius {
 		// bg描画
 		for (int k = 0x23000; k < 0x24000; k += 2)
 			if (ram[k] & 0x10 && ram[k] & 0xf8)
-				xfer8x8(data, k);
+				xfer8x8(bitmap.data(), k);
 		for (int k = 0x22000; k < 0x23000; k += 2)
 			if (ram[k] & 0x10 && ram[k] & 0xf8)
-				xfer8x8(data, k);
+				xfer8x8(bitmap.data(), k);
 
 		// palette変換
 		p = 256 * 16 + 16;
 		for (int i = 0; i < 256; p += 256 - 224, i++)
 			for (int j = 0; j < 224; p++, j++)
-				data[p] = rgb[data[p]];
+				bitmap[p] = rgb[bitmap[p]];
+
+		return bitmap.data();
 	}
 
 	void xfer8x8(int *data, int k) {
@@ -628,10 +633,10 @@ struct Gradius {
 	}
 
 	void init(int rate) {
-		sound0 = new AY_3_8910(14318180.0 / 8, 0.3);
-		sound1 = new AY_3_8910(14318180.0 / 8, 0.3);
-		sound2 = new K005289(SND, 14318180.0 / 4, 0.3);
-		sound3 = new VLM5030(vlm, 14318180.0 / 4, rate, 5);
+		sound0 = new AY_3_8910(14318180 / 8, 0.3);
+		sound1 = new AY_3_8910(14318180 / 8, 0.3);
+		sound2 = new K005289(SND, 14318180 / 4, 0.3);
+		sound3 = new VLM5030(vlm, 14318180 / 4, rate, 5);
 		Z80::init();
 	}
 };

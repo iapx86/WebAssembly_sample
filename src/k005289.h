@@ -10,13 +10,13 @@ using namespace std;
 
 struct K005289 {
 	const uint8_t *snd;
-	double clock;
+	int clock;
 	double gain;
 	double output = 0;
 	array<uint16_t, 8> reg = {};
-	double frac = 0;
+	int frac = 0;
 
-	K005289(const array<uint8_t, 0x200>& SND, double clock, double gain = 0.1) {
+	K005289(const array<uint8_t, 0x200>& SND, int clock, double gain = 0.1) {
 		snd = SND.data();
 		this->clock = clock;
 		this->gain = gain;
@@ -26,8 +26,8 @@ struct K005289 {
 		reg[addr] = data;
 	}
 
-	void execute(double rate, double rate_correction = 1) {
-		for (frac += clock * rate_correction; frac >= rate; frac -= rate)
+	void execute(int rate) {
+		for (frac += clock; frac >= rate; frac -= rate)
 			for (int i = 0; i < 2; i++)
 				++reg[i + 4] >= reg[i + 2] && (++reg[i + 6], reg[i + 4] = 0);
 	}

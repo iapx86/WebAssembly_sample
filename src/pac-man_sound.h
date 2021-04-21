@@ -10,14 +10,14 @@ using namespace std;
 
 struct PacManSound {
 	const uint8_t *snd;
-	double clock;
+	int clock;
 	double gain;
 	double output = 0;
 	bool mute = false;
 	array<uint8_t, 0x20> reg = {};
-	double frac;
+	int frac;
 
-	PacManSound(const array<uint8_t, 0x100>& SND, double clock = 96000, double gain = 0.1) {
+	PacManSound(const array<uint8_t, 0x100>& SND, int clock = 96000, double gain = 0.1) {
 		snd = SND.data();
 		this->clock = clock;
 		this->gain = gain;
@@ -31,8 +31,8 @@ struct PacManSound {
 		reg[addr & 0x1f] = data & 15;
 	}
 
-	void execute(double rate, double rate_correction = 1) {
-		for (frac += clock * rate_correction; frac >= rate; frac -= rate) {
+	void execute(int rate) {
+		for (frac += clock; frac >= rate; frac -= rate) {
 			auto& r = reg;
 			for (int ch = 0; ch < 15; ch += 5) {
 				int ph = r[ch + 4] << 16 | r[ch + 3] << 12 | r[ch + 2] << 8 | r[ch + 1] << 4 | (ch ? 0 : r[0]);

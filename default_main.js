@@ -14,22 +14,6 @@ iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAC4jAAAuIwF4pT92AAAAfklE
 iQEgOlcY4HaAt1oAQAIs+zLEofRmiEMBzhAH+TYkgL9i7/2zrwozAGAA1IrTU6gECOYUDGAAA4ydA9uTsHIUS16gmlGaG+7acVkeOAkk6YlIiWQtoXRuLPfP\
 aAbAA72UT2ikWgrdAAAAAElFTkSuQmCC\
 ';
-const stream_out = `
-registerProcessor('StreamOut', class extends AudioWorkletProcessor {
-	samples = [];
-	constructor (options) {
-		super(options);
-		this.port.onmessage = ({data: {samples}}) => { samples && (this.samples = this.samples.concat(samples)); };
-		this.port.start();
-	}
-	process (inputs, outputs) {
-		const buffer = outputs[0][0].fill(0), length = buffer.length;
-		this.samples.length >= length && buffer.set(this.samples.splice(0, length));
-		this.samples.length >= sampleRate / 60 * 2 && this.samples.every(e => !e) && this.samples.splice(0);
-		return true;
-	}
-});
-`;
 const vsSource = `
 	attribute vec4 aVertexPosition;
 	attribute vec2 aTextureCoord;
@@ -46,11 +30,8 @@ const fsSource = `
 		gl_FragColor = texture2D(uSampler, vTextureCoord);
 	}
 `;
-const game = {cxScreen: 0, cyScreen: 0, width: 1, height: 1, xOffset: 0, yOffset: 0, rotate: false};
 const cxScreen = canvas.width, cyScreen = canvas.height;
-const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl"), timestamps = [], samples = [];
-let source, worklet, scriptNode, button, state = '', toggle = 0;
-const addStreamOut = !audioCtx ? 0 : audioCtx.audioWorklet ? audioCtx.audioWorklet.addModule('data:text/javascript,' + stream_out) : new Promise((resolve, reject) => reject());
+const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
 let instance, memory, view;
 
 (window.onresize = () => {
@@ -122,9 +103,11 @@ export function init(bufferSource, roms) {
 			const name = String.fromCharCode(...new Uint8Array(memory, view.getUint32(p, true), view.getUint32(p + 4, true)));
 			new Uint8Array(memory, view.getUint32(p + 8, true), view.getUint32(p + 12, true)).set(roms[name]);
 		}
-		const g = new Int32Array(memory, instance.exports.init(audioCtx.sampleRate), 7 * 4);
-		Object.assign(game, {cxScreen: g[0], cyScreen: g[1], width: g[2], height: g[3], xOffset: g[4], yOffset: g[5], rotate: g[6] !== 0});
-		const positions = new Float32Array(game.rotate ? [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0] : [-1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, -1.0]);
+		instance.exports.init(audioCtx.sampleRate);
+		const [cxScreen, cyScreen, width, height, xOffset, yOffset, rotate] = new Int32Array(memory, instance.exports.geometry(), 7);
+		let images = [], silence, samples, maxLength, source, node;
+		let lastFrame = {timestamp: 0, array: new Uint8Array(new Int32Array(cxScreen * cyScreen).fill(0xff000000).buffer), cxScreen, cyScreen};
+		const positions = new Float32Array(rotate ? [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0] : [-1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, -1.0]);
 		const program = initShaderProgram(gl, vsSource, fsSource);
 		const aVertexPositionHandle = gl.getAttribLocation(program, 'aVertexPosition');
 		const aTextureCoordHandle = gl.getAttribLocation(program, 'aTextureCoord');
@@ -133,30 +116,20 @@ export function init(bufferSource, roms) {
 		const textureCoordBuffer = gl.createBuffer();
 		const texture = gl.createTexture();
 		gl.bindTexture(gl.TEXTURE_2D, texture);
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, game.width, game.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(game.width * game.height * 4));
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(new Int32Array(width * height).fill(0xff000000).buffer));
 		gl.useProgram(program);
 		gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 		gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
 		gl.vertexAttribPointer(aVertexPositionHandle, 2, gl.FLOAT, false, 0, 0);
 		gl.enableVertexAttribArray(aVertexPositionHandle);
-		source = audioCtx.createBufferSource();
-		addStreamOut.then(() => {
-			worklet = new AudioWorkletNode(audioCtx, 'StreamOut'), worklet.port.start(), source.connect(worklet).connect(audioCtx.destination), source.start();
-		}).catch(() => {
-			scriptNode = audioCtx.createScriptProcessor(1024, 1, 1);
-			scriptNode.onaudioprocess = ({outputBuffer}) => {
-				const buffer = outputBuffer.getChannelData(0).fill(0), length = buffer.length;
-				samples.length >= length && buffer.set(samples.splice(0, length)), samples.length >= length && samples.every(e => !e) && samples.splice(0);
-			};
-			source.connect(scriptNode).connect(audioCtx.destination), source.start();
-		});
-		button = new Image();
-		(button.update = () => { button.src = audioCtx.state === 'suspended' ? volume0 : volume1, button.alt = 'audio state: ' + audioCtx.state; })();
-		audioCtx.onstatechange = button.update;
+		node = audioCtx.createScriptProcessor(2048, 1, 1), samples = silence = new Float32Array(maxLength = node.bufferSize);
+		node.onaudioprocess = ({playbackTime, outputBuffer}) => {
+			const buffer = outputBuffer.getChannelData(0);
+			buffer.set(samples), samples !== silence && (samples = silence, postMessage({timestamp: playbackTime + maxLength / audioCtx.sampleRate}, '*'));
+		};
+		const button = new Image();
 		document.body.appendChild(button);
 		button.addEventListener('click', () => { audioCtx.state === 'suspended' ? audioCtx.resume().catch() : audioCtx.state === 'running' && audioCtx.suspend().catch(); });
-		window.addEventListener('blur', () => { state = audioCtx.state, audioCtx.suspend().catch(); });
-		window.addEventListener('focus', () => { state === 'running' && audioCtx.resume().catch(), timestamps.splice(0); });
 		document.addEventListener('keydown', e => {
 			if (e.repeat)
 				return;
@@ -170,11 +143,11 @@ export function init(bufferSource, roms) {
 			case 'ArrowDown':
 				return void('down' in instance.exports && instance.exports.down(true));
 			case 'Digit0':
-				return void('coin' in instance.exports && instance.exports.coin());
+				return void('coin' in instance.exports && instance.exports.coin(true));
 			case 'Digit1':
-				return void('start1P' in instance.exports && instance.exports.start1P());
+				return void('start1P' in instance.exports && instance.exports.start1P(true));
 			case 'Digit2':
-				return void('start2P' in instance.exports && instance.exports.start2P());
+				return void('start2P' in instance.exports && instance.exports.start2P(true)(true));
 			case 'KeyM': // MUTE
 				return void(audioCtx.state === 'suspended' ? audioCtx.resume().catch() : audioCtx.state === 'running' && audioCtx.suspend().catch());
 			case 'KeyR':
@@ -205,24 +178,36 @@ export function init(bufferSource, roms) {
 				return void('triggerB' in instance.exports && instance.exports.triggerB(false));
 			}
 		});
-		canvas.addEventListener('click', () => void('coin' in instance.exports && instance.exports.coin()));
-		requestAnimationFrame(function loop(timestamp) {
-			const textureCoordinates = new Float32Array([
-				game.xOffset / game.width, game.yOffset / game.height,
-				game.xOffset / game.width, (game.yOffset + game.cyScreen) / game.height,
-				(game.xOffset + game.cxScreen) / game.width, game.yOffset / game.height,
-				(game.xOffset + game.cxScreen) / game.width, (game.yOffset + game.cyScreen) / game.height
-			]);
-			for (!(toggle ^= 1) && timestamps.shift(), timestamps.push(timestamp); timestamps.length > 4096; timestamps.shift()) {}
-			const rate_correction = timestamps.length > 1 ? Math.max(0.8, Math.min(1.25, (timestamp - timestamps[0]) / (timestamps.length - 1) * 0.06)) : 1;
+		canvas.addEventListener('click', () => void('coin' in instance.exports && instance.exports.coin(true)));
+		addEventListener('message', ({data: {timestamp}}) => {
+			if (!timestamp)
+				return;
+			const length = instance.exports.execute(Date.now(), maxLength);
+			if (length >= maxLength)
+				return void(samples = new Float32Array(memory, instance.exports.sound(), maxLength).slice());
+			const [cxScreen, cyScreen] = new Int32Array(memory, instance.exports.geometry(), 2), array = new Uint8Array(cxScreen * cyScreen * 4);
+			for (let bitmap = instance.exports.image(), y = 0; y < cyScreen; ++y)
+				array.set(new Uint8Array(memory, bitmap + (xOffset + (y + yOffset) * width) * 4, cxScreen * 4), y * cxScreen * 4);
+			images.push({timestamp: timestamp + length / audioCtx.sampleRate, array, cxScreen, cyScreen}), postMessage({timestamp}, '*');
+		});
+		postMessage({timestamp: maxLength * 2 / audioCtx.sampleRate}, '*');
+		(audioCtx.onstatechange = () => {
+			if (audioCtx.state === 'running') {
+				button.src = volume1, button.alt = 'audio state: running';
+				source = audioCtx.createBufferSource(), source.connect(node).connect(audioCtx.destination), source.start();
+			} else {
+				button.src = volume0, button.alt = 'audio state: ' + audioCtx.state;
+				source && source.stop();
+			}
+		})();
+		requestAnimationFrame(function loop() {
 			updateGamepad(instance.exports);
-			const data = new Uint8Array(memory, instance.exports.render(Date.now(), rate_correction) + game.yOffset * game.width * 4, game.width * game.cyScreen * 4);
-			const iov = instance.exports.sound(), buf = new Float32Array(memory, view.getUint32(iov, true), view.getUint32(iov + 4, true));
-			Object.assign(game, {cxScreen: g[0], cyScreen: g[1], width: g[2], height: g[3], xOffset: g[4], yOffset: g[5], rotate: g[6] !== 0});
-			audioCtx.state === 'running' ? samples.push(...buf) : samples.splice(0), worklet && samples.length && (worklet.port.postMessage({samples}), samples.splice(0));
-			gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, game.yOffset, game.width, game.cyScreen, gl.RGBA, gl.UNSIGNED_BYTE, data);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, game.cxScreen <= 384 && game.cyScreen <= 384 ? gl.NEAREST : gl.LINEAR);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, game.cxScreen <= 384 && game.cyScreen <= 384 ? gl.NEAREST : gl.LINEAR);
+			for (; images.length && images[0].timestamp < audioCtx.currentTime; lastFrame = images.shift()) {}
+			const {array, cxScreen, cyScreen} = images.length ? images[0] : lastFrame;
+			const textureCoordinates = Float32Array.of(0, 0, 0, cyScreen / height, cxScreen / width, 0, cxScreen / width, cyScreen / height);
+			gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, cxScreen, cyScreen, gl.RGBA, gl.UNSIGNED_BYTE, array);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, cxScreen <= 384 && cyScreen <= 384 ? gl.NEAREST : gl.LINEAR);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, cxScreen <= 384 && cyScreen <= 384 ? gl.NEAREST : gl.LINEAR);
 			gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer);
 			gl.bufferData(gl.ARRAY_BUFFER, textureCoordinates, gl.STATIC_DRAW);
 			gl.vertexAttribPointer(aTextureCoordHandle, 2, gl.FLOAT, false, 0, 0);
@@ -265,6 +250,7 @@ export function read(url) {
 const haveEvents = 'ongamepadconnected' in window;
 const controllers = [];
 const gamepadStatus = {up: false, right: false, down: false, left: false, up2: false, right2: false, down2: false, left2: false, buttons: new Array(16).fill(false)};
+const buttons = ['triggerA', 'triggerB', 'triggerX', 'triggerY', 'triggerL1', 'triggerR1', 'triggerL2', 'triggerR2', 'coin', 'start1P', 'triggerL3', 'triggerR3', 'up', 'down', 'left', 'right'];
 
 window.addEventListener('gamepadconnected', e => controllers[e.gamepad.index] = e.gamepad);
 window.addEventListener('gamepaddisconnected', e => delete controllers[e.gamepad.index]);
@@ -280,69 +266,17 @@ function updateGamepad(game) {
 	const controller = controllers.find(() => true);
 	if (!controller)
 		return;
-	let val, pressed;
-	val = controller.buttons[0];
-	if ('triggerA' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[0])
-		game.triggerA(gamepadStatus.buttons[0] = pressed);
-	val = controller.buttons[1];
-	if ('triggerB' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[1])
-		game.triggerB(gamepadStatus.buttons[1] = pressed);
-	val = controller.buttons[2];
-	if ('triggerX' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[2])
-		game.triggerX(gamepadStatus.buttons[2] = pressed);
-	val = controller.buttons[3];
-	if ('triggerY' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[3])
-		game.triggerY(gamepadStatus.buttons[3] = pressed);
-	val = controller.buttons[4];
-	if ('triggerL1' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[4])
-		game.triggerL1(gamepadStatus.buttons[4] = pressed);
-	val = controller.buttons[5];
-	if ('triggerR1' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[5])
-		game.triggerR1(gamepadStatus.buttons[5] = pressed);
-	val = controller.buttons[6];
-	if ('triggerL2' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[6])
-		game.triggerL2(gamepadStatus.buttons[6] = pressed);
-	val = controller.buttons[7];
-	if ('triggerR2' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[7])
-		game.triggerR2(gamepadStatus.buttons[7] = pressed);
-	val = controller.buttons[8];
-	if ('coin' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[8] && (gamepadStatus.buttons[8] = pressed))
-		game.coin();
-	val = controller.buttons[9];
-	if ('start1P' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[9] && (gamepadStatus.buttons[9] = pressed))
-		game.start1P();
-	val = controller.buttons[10];
-	if ('triggerL3' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[10])
-		game.triggerL3(gamepadStatus.buttons[4] = pressed);
-	val = controller.buttons[11];
-	if ('triggerR3' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[11])
-		game.triggerR3(gamepadStatus.buttons[5] = pressed);
-	val = controller.buttons[12];
-	if ('up' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[12])
-		game.up(gamepadStatus.buttons[12] = pressed);
-	val = controller.buttons[13];
-	if ('down' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[13])
-		game.down(gamepadStatus.buttons[13] = pressed);
-	val = controller.buttons[14];
-	if ('left' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[14])
-		game.left(gamepadStatus.buttons[14] = pressed);
-	val = controller.buttons[15];
-	if ('right' in game && (pressed = typeof val === 'object' ? val.pressed : val === 1.0) !== gamepadStatus.buttons[15])
-		game.right(gamepadStatus.buttons[15] = pressed);
-	if ('up' in game && (pressed = controller.axes[1] < -0.5) !== gamepadStatus.up)
-		game.up(gamepadStatus.up = pressed);
-	if ('right' in game && (pressed = controller.axes[0] > 0.5) !== gamepadStatus.right)
-		game.right(gamepadStatus.right = pressed);
-	if ('down' in game && (pressed = controller.axes[1] > 0.5) !== gamepadStatus.down)
-		game.down(gamepadStatus.down = pressed);
-	if ('left' in game && (pressed = controller.axes[0] < -0.5) !== gamepadStatus.left)
-		game.left(gamepadStatus.left = pressed);
-	if ('up2' in game && (pressed = controller.axes[3] < -0.5) !== gamepadStatus.up2)
-		game.up2(gamepadStatus.up2 = pressed);
-	if ('right2' in game && (pressed = controller.axes[2] > 0.5) !== gamepadStatus.right2)
-		game.right2(gamepadStatus.right2 = pressed);
-	if ('down2' in game && (pressed = controller.axes[3] > 0.5) !== gamepadStatus.down2)
-		game.down2(gamepadStatus.down2 = pressed);
-	if ('left2' in game && (pressed = controller.axes[2] < -0.5) !== gamepadStatus.left2)
-		game.left2(gamepadStatus.left2 = pressed);
+	buttons.forEach((button, i) => {
+		const val = controller.buttons[i], pressed = typeof val === 'object' ? val.pressed : val === 1.0;
+		pressed !== gamepadStatus.buttons[i] && (gamepadStatus.buttons[i] = pressed, button in game && game[button](pressed));
+	});
+	let pressed;
+	(pressed = controller.axes[1] < -0.5) !== gamepadStatus.up && (gamepadStatus.up = pressed, 'up' in game && game.up(pressed));
+	(pressed = controller.axes[0] > 0.5) !== gamepadStatus.right && (gamepadStatus.right = pressed, 'right' in game && game.right(pressed));
+	(pressed = controller.axes[1] > 0.5) !== gamepadStatus.down && (gamepadStatus.down = pressed, 'down' in game && game.down(pressed));
+	(pressed = controller.axes[0] < -0.5) !== gamepadStatus.left && (gamepadStatus.left = pressed, 'left' in game && game.left(pressed));
+	(pressed = controller.axes[3] < -0.5) !== gamepadStatus.up2 && (gamepadStatus.up2 = pressed, 'up2' in game && game.up2(pressed));
+	(pressed = controller.axes[2] > 0.5) !== gamepadStatus.right2 && (gamepadStatus.right2 = pressed, 'right2' in game && game.right2(pressed));
+	(pressed = controller.axes[3] > 0.5) !== gamepadStatus.down2 && (gamepadStatus.down2 = pressed, 'down2' in game && game.down2(pressed));
+	(pressed = controller.axes[2] < -0.5) !== gamepadStatus.left2 && (gamepadStatus.left2 = pressed, 'left2' in game && game.left2(pressed));
 }

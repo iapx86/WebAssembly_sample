@@ -59,12 +59,14 @@ struct MetroCross {
 	array<uint8_t, 0x20000> bg;
 	array<uint8_t, 0x20000> obj;
 	array<int, 0x800> rgb;
+	array<int, width * height> bitmap;
+	bool updated = false;
 	array<int, 2> vScroll = {};
 	array<int, 2> hScroll = {};
 
 	MC6809 cpu;
 	MC6801 mcu;
-	IntTimer timer;
+	Timer<int> timer;
 
 	MetroCross() : cpu(49152000 / 32), mcu(49152000 / 8 / 4), timer(60) {
 		// CPU周りの初期化
@@ -139,19 +141,16 @@ struct MetroCross {
 			rgb[i] = 0xff000000 | (GREEN[i] >> 4) * 255 / 15 << 16 | (GREEN[i] & 15) * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
-	MetroCross *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		cpu_irq = mcu_irq = true;
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			cpu.execute(tick_rate);
 			mcu.execute(tick_rate);
-			timer.execute(tick_rate, [&]() {
-				ram2[8] |= ram2[8] << 3 & 0x40;
-			});
-			sound0->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			timer.execute(tick_rate, [&]() { update(), cpu_irq = mcu_irq = true, ram2[8] |= ram2[8] << 3 & 0x40; });
+			sound0->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		return this;
 	}
 
 	void reset() {
@@ -213,16 +212,16 @@ struct MetroCross {
 		return this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void up(bool fDown) {
@@ -245,7 +244,10 @@ struct MetroCross {
 		in[6] = in[6] & ~(1 << 4) | !fDown << 4;
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		int p, k, back;
 
 		// bg描画
@@ -254,10 +256,10 @@ struct MetroCross {
 		k = 0x2000 | back << 12 | 25 + hScroll[back] << 4 & 0xf80 | 25 - back * 2 + vScroll[back] >> 2 & 0x7e;
 		for (int i = 0; i < 29; k = k + 54 & 0x7e | k + 0x80 & 0xf80 | k & 0x3000, p -= 256 * 8 * 37 + 8, i++)
 			for (int j = 0; j < 37; k = k + 2 & 0x7e | k & 0x3f80, p += 256 * 8, j++)
-				xfer8x8b0(data, p, k, back);
+				xfer8x8b0(bitmap.data(), p, k, back);
 
 		// obj描画
-		drawObj(data, 0);
+		drawObj(bitmap.data(), 0);
 
 		// bg描画
 		back ^= 1;
@@ -265,39 +267,41 @@ struct MetroCross {
 		k = 0x2000 | back << 12 | 25 + hScroll[back] << 4 & 0xf80 | 25 - back * 2 + vScroll[back] >> 2 & 0x7e;
 		for (int i = 0; i < 29; k = k + 54 & 0x7e | k + 0x80 & 0xf80 | k & 0x3000, p -= 256 * 8 * 37 + 8, i++)
 			for (int j = 0; j < 37; k = k + 2 & 0x7e | k & 0x3f80, p += 256 * 8, j++)
-				xfer8x8b1(data, p, k, back);
+				xfer8x8b1(bitmap.data(), p, k, back);
 
 		// obj描画
-		drawObj(data, 1);
+		drawObj(bitmap.data(), 1);
 
 		// fg描画
 		p = 256 * 8 * 4 + 232;
 		k = 0x4040;
 		for (int i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
-				xfer8x8f(data, p, k);
+				xfer8x8f(bitmap.data(), p, k);
 		p = 256 * 8 * 36 + 232;
 		k = 0x4002;
 		for (int i = 0; i < 28; p -= 8, k++, i++)
-			xfer8x8f(data, p, k);
+			xfer8x8f(bitmap.data(), p, k);
 		p = 256 * 8 * 37 + 232;
 		k = 0x4022;
 		for (int i = 0; i < 28; p -= 8, k++, i++)
-			xfer8x8f(data, p, k);
+			xfer8x8f(bitmap.data(), p, k);
 		p = 256 * 8 * 2 + 232;
 		k = 0x43c2;
 		for (int i = 0; i < 28; p -= 8, k++, i++)
-			xfer8x8f(data, p, k);
+			xfer8x8f(bitmap.data(), p, k);
 		p = 256 * 8 * 3 + 232;
 		k = 0x43e2;
 		for (int i = 0; i < 28; p -= 8, k++, i++)
-			xfer8x8f(data, p, k);
+			xfer8x8f(bitmap.data(), p, k);
 
 		// palette変換
 		p = 256 * 16 + 16;
 		for (int i = 0; i < 288; p += 256 - 224, i++)
 			for (int j = 0; j < 224; p++, j++)
-				data[p] = rgb[data[p]];
+				bitmap[p] = rgb[bitmap[p]];
+
+		return bitmap.data();
 	}
 
 	void drawObj(int *data, int pri) {

@@ -36,11 +36,11 @@ export function init(bufferSource, roms) {
 			case 'ArrowDown':
 				return void('down' in instance.exports && instance.exports.down(true));
 			case 'Digit0':
-				return void('coin' in instance.exports && instance.exports.coin());
+				return void('coin' in instance.exports && instance.exports.coin(true));
 			case 'Digit1':
-				return void('start1P' in instance.exports && instance.exports.start1P());
+				return void('start1P' in instance.exports && instance.exports.start1P(true));
 			case 'Digit2':
-				return void('start2P' in instance.exports && instance.exports.start2P());
+				return void('start2P' in instance.exports && instance.exports.start2P(true)());
 			case 'KeyR':
 				return void('reset' in instance.exports && instance.exports.reset());
 			case 'KeyT':
@@ -69,7 +69,7 @@ export function init(bufferSource, roms) {
 				return void('triggerB' in instance.exports && instance.exports.triggerB(false));
 			}
 		});
-		canvas.addEventListener('click', () => void('coin' in instance.exports && instance.exports.coin()));
+		canvas.addEventListener('click', () => void('coin' in instance.exports && instance.exports.coin(true)));
 		requestAnimationFrame(function loop() {
 			const data = new Uint8ClampedArray(memory, instance.exports.render(Date.now(), 1), game.width * game.height * 4);
 			instance.exports.sound();

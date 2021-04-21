@@ -69,6 +69,8 @@ struct _1942 {
 	array<uint8_t, 0x100> fgcolor;
 	array<uint8_t, 0x100> objcolor;
 	array<int, 0x100> rgb;
+	array<int, width * height> bitmap;
+	bool updated = false;
 	int dwScroll = 0;
 	int palette = 0;
 	int frame = 0;
@@ -154,7 +156,7 @@ struct _1942 {
 		};
 
 		// Videoの初期化
-		fg.fill(3), bg.fill(7), obj.fill(15);
+		fg.fill(3), bg.fill(7), obj.fill(15), bitmap.fill(0xff000000);
 		convertGFX(&fg[0], &FG[0], 512, {seq8(0, 16)}, {rseq4(8, 1), rseq4(0, 1)}, {4, 0}, 16);
 		convertGFX(&bg[0], &BG[0], 512, {seq16(0, 8)}, {rseq8(128, 1), rseq8(0, 1)}, {0, 0x20000, 0x40000}, 32);
 		convertGFX(&obj[0], &OBJ[0], 512, {seq16(0, 16)}, {rseq4(264, 1), rseq4(256, 1), rseq4(8, 1), rseq4(0, 1)}, {0x40004, 0x40000, 4, 0}, 64);
@@ -166,21 +168,20 @@ struct _1942 {
 			rgb[i] = 0xff000000 | BLUE[i] * 255 / 15 << 16 | GREEN[i] * 255 / 15 << 8 | RED[i] * 255 / 15;
 	}
 
-	_1942 *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			cpu.execute(tick_rate);
 			cpu2.execute(tick_rate);
-			scanline.execute(tick_rate, [&](int cnt) {
-				const int vpos = cnt + 240 & 0xff;
+			scanline.execute(tick_rate, [&](int vpos) {
 				vpos == 44 && cpu2.interrupt(), vpos == 109 && (cpu_irq2 = true, cpu2.interrupt());
-				vpos == 175 && cpu2.interrupt(), vpos == 240 && (cpu_irq = true, cpu2.interrupt());
+				vpos == 175 && cpu2.interrupt(), vpos == 240 && (update(), cpu_irq = true, cpu2.interrupt());
 			});
-			sound0->execute(tick_rate, rate_correction);
-			sound1->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			sound0->execute(tick_rate);
+			sound1->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		return this;
 	}
 
 	void reset() {
@@ -254,16 +255,16 @@ struct _1942 {
 		return this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void up(bool fDown) {
@@ -294,14 +295,17 @@ struct _1942 {
 		!(fTurbo = fDown) && (in[1] |= 1 << 4);
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		frame++;
 
 		// bg描画
 		int p = 256 * 256 + 16 + (dwScroll & 0xf) * 256;
 		for (int k = dwScroll << 1 & 0x3e0 | 1, i = 0; i < 17; k = k + 0x12 & 0x3ff, p -= 14 * 16 + 256 * 16, i++)
 			for (int j = 0; j < 14; k++, p += 16, j++)
-				xfer16x16x3(data, p, 0x900 + k);
+				xfer16x16x3(bitmap.data(), p, 0x900 + k);
 
 		// obj描画
 		for (int k = 0x7c, i = 32; i != 0; k -= 4, --i) {
@@ -310,18 +314,18 @@ struct _1942 {
 			const int src = ram[k] & 0x7f | ram[k + 1] << 2 & 0x80 | ram[k] << 1 & 0x100 | ram[k + 1] << 9 & 0x1e00;
 			switch (ram[k + 1] >> 6) {
 			case 0:
-				xfer16x16x4(data, x | y << 8, src);
+				xfer16x16x4(bitmap.data(), x | y << 8, src);
 				break;
 			case 1:
-				xfer16x16x4(data, x | y << 8, src);
-				xfer16x16x4(data, x + 16 & 0xff | y << 8, src + 1);
+				xfer16x16x4(bitmap.data(), x | y << 8, src);
+				xfer16x16x4(bitmap.data(), x + 16 & 0xff | y << 8, src + 1);
 				break;
 			case 2:
 			case 3:
-				xfer16x16x4(data, x | y << 8, src);
-				xfer16x16x4(data, x + 16 & 0xff | y << 8, src + 1);
-				xfer16x16x4(data, x + 32 & 0xff | y << 8, src + 2);
-				xfer16x16x4(data, x + 48 & 0xff | y << 8, src + 3);
+				xfer16x16x4(bitmap.data(), x | y << 8, src);
+				xfer16x16x4(bitmap.data(), x + 16 & 0xff | y << 8, src + 1);
+				xfer16x16x4(bitmap.data(), x + 32 & 0xff | y << 8, src + 2);
+				xfer16x16x4(bitmap.data(), x + 48 & 0xff | y << 8, src + 3);
 				break;
 			}
 		}
@@ -330,13 +334,15 @@ struct _1942 {
 		p = 256 * 8 * 33 + 16;
 		for (int k = 0x140, i = 0; i < 28; p += 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p -= 256 * 8, j++)
-				xfer8x8(data, p, k);
+				xfer8x8(bitmap.data(), p, k);
 
 		// palette変換
 		p = 256 * 16 + 16;
 		for (int i = 0; i < 256; p += 256 - 224, i++)
 			for (int j = 0; j < 224; p++, j++)
-				data[p] = rgb[data[p]];
+				bitmap[p] = rgb[bitmap[p]];
+
+		return bitmap.data();
 	}
 
 	void xfer8x8(int *data, int p, int k) {

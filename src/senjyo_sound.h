@@ -35,10 +35,10 @@ struct BiquadFilter {
 
 struct SenjyoSound {
 	const uint8_t *snd;
-	double rate;
+	int clock;
 	double gain;
 	double output = 0;
-	double frac = 0;
+	int frac = 0;
 	struct {
 		double vol = 0;
 		int freq = 256;
@@ -47,9 +47,9 @@ struct SenjyoSound {
 	} channel;
 	BiquadFilter bq;
 
-	SenjyoSound(const array<uint8_t, 0x20>& SND, double clock, int sampleRate = 48000, double gain = 0.7) {
+	SenjyoSound(const array<uint8_t, 0x20>& SND, int clock, int sampleRate = 48000, double gain = 0.7) {
 		snd = SND.data();
-		rate = clock / 16;
+		this->clock = clock;
 		this->gain = gain;
 		bq.bandpass(200, 5, sampleRate);
 	}
@@ -58,8 +58,8 @@ struct SenjyoSound {
 		addr ? (channel.vol = data / 15.0) : (channel.count = channel.freq = data);
 	}
 
-	void execute(double rate, double rate_correction) {
-		for (frac += this->rate * rate_correction; frac >= rate; frac -= rate)
+	void execute(int rate) {
+		for (frac += clock; frac >= rate * 16; frac -= rate * 16)
 			--channel.count <= 0 && (channel.count = channel.freq, channel.phase = channel.phase + 1 & 15);
 	}
 

@@ -9,12 +9,12 @@
 using namespace std;
 
 struct AY_3_8910 {
-	double rate;
+	int rate;
 	double gain;
 	double output = 0;
 	bool mute = false;
 	array<uint8_t, 0x10> reg = {};
-	double frac = 0;
+	int frac = 0;
 	struct {
 		int freq = 0;
 		int count = 0;
@@ -25,7 +25,7 @@ struct AY_3_8910 {
 	int ecount = 0;
 	int step = 0;
 
-	AY_3_8910(double clock, double gain = 0.1) {
+	AY_3_8910(int clock, double gain = 0.1) {
 		rate = clock / 8;
 		this->gain = gain;
 	}
@@ -42,8 +42,8 @@ struct AY_3_8910 {
 		reg[addr &= 15] = data, addr == 13 && (step = 0);
 	}
 
-	void execute(double rate, double rate_correction = 1) {
-		for (frac += this->rate * rate_correction; frac >= rate; frac -= rate) {
+	void execute(int rate) {
+		for (frac += this->rate; frac >= rate; frac -= rate) {
 			const int nfreq = reg[6] & 0x1f, efreq = reg[11] | reg[12] << 8, etype = reg[13];
 			for (int i = 0; i < 3; i++) {
 				auto& ch = channel[i];

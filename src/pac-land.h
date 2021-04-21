@@ -66,6 +66,8 @@ struct PacLand {
 	array<uint8_t, 0x8000> bg;
 	array<uint8_t, 0x20000> obj;
 	array<int, 0x400> rgb;
+	array<int, width * height> bitmap;
+	bool updated = false;
 	array<uint8_t, 0x100> opaque[3] = {};
 	int dwScroll0 = 0;
 	int dwScroll1 = 0;
@@ -74,7 +76,7 @@ struct PacLand {
 
 	MC6809 cpu;
 	MC6801 mcu;
-	IntTimer timer;
+	Timer<int> timer;
 
 	PacLand() : cpu(49152000 / 32), mcu(49152000 / 8 / 4), timer(60) {
 		// CPU周りの初期化
@@ -143,7 +145,7 @@ struct PacLand {
 		mcu.check_interrupt = [&]() { return mcu_irq && mcu.interrupt() ? (mcu_irq = false, true) : (ram2[8] & 0x48) == 0x48 && mcu.interrupt(MC6801_OCF); };
 
 		// Videoの初期化
-		fg.fill(3), bg.fill(3), obj.fill(15);
+		fg.fill(3), bg.fill(3), obj.fill(15), bitmap.fill(0xff000000);
 		convertGFX(&fg[0], &FG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
 		convertGFX(&bg[0], &BG[0], 512, {rseq8(0, 8)}, {seq4(64, 1), seq4(0, 1)}, {0, 4}, 16);
 		convertGFX(&obj[0], &OBJ[0], 512, {rseq8(256, 8), rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1), seq4(128, 1), seq4(192, 1)}, {0, 4, 0x40000, 0x40004}, 64);
@@ -152,19 +154,16 @@ struct PacLand {
 		fill_n(&opaque[0][0], 0x80, 1), fill_n(&opaque[1][0], 0x7f, 1), fill_n(&opaque[1][0x80], 0x7f, 1), fill_n(&opaque[2][0xf0], 0xf, 1);
 	}
 
-	PacLand *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		cpu_irq = fInterruptEnable0, mcu_irq = fInterruptEnable1;
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			cpu.execute(tick_rate);
 			mcu.execute(tick_rate);
-			timer.execute(tick_rate, [&]() {
-				ram2[8] |= ram2[8] << 3 & 0x40;
-			});
-			sound0->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			timer.execute(tick_rate, [&]() { update(), cpu_irq = fInterruptEnable0, mcu_irq = fInterruptEnable1, ram2[8] |= ram2[8] << 3 & 0x40; });
+			sound0->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		return this;
 	}
 
 	void reset() {
@@ -259,16 +258,16 @@ struct PacLand {
 		return this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void right(bool fDown) {
@@ -283,21 +282,24 @@ struct PacLand {
 		in[4] = in[4] & ~(1 << 3) | !fDown << 3;
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		// 画面クリア
 		int p = 256 * 16 + 16;
 		for (int i = 0; i < 288; p += 256, i++)
-			fill_n(&data[p], 224, 0);
+			fill_n(&bitmap[p], 224, 0);
 
 		// obj描画
-		drawObj(data, 0);
+		drawObj(bitmap.data(), 0);
 
 		// bg描画
 		p = 256 * 8 * 2 + 232 - (fFlip ? 4 + dwScroll1 & 7 : 5 + dwScroll1 & 7) * 256;
 		int k = 0x1100 | (fFlip ? (4 + dwScroll1 >> 2) + 0x30 : (5 + dwScroll1 >> 2) + 4) & 0x7e;
 		for (int i = 0; i < 28; k = k + 54 & 0x7e | k + 0x80 & 0x1f80, p -= 256 * 8 * 37 + 8, i++)
 			for (int j = 0; j < 37; k = k + 2 & 0x7e | k & 0x1f80, p += 256 * 8, j++)
-				xfer8x8(data, &BGCOLOR[0], &bg[0], ram[k + 1] << 1 & 0x7c | ram[k] << 1 & 0x180 | ram[k + 1] << 9 & 0x200, p, k);
+				xfer8x8(bitmap.data(), &BGCOLOR[0], &bg[0], ram[k + 1] << 1 & 0x7c | ram[k] << 1 & 0x180 | ram[k + 1] << 9 & 0x200, p, k);
 
 		// fg描画
 		p = 256 * 8 * 2 + 208 - (fFlip ? 1 + dwScroll0 & 7 : dwScroll0 & 7) * 256;
@@ -305,21 +307,21 @@ struct PacLand {
 		for (int i = 0; i < 24; k = k + 54 & 0x7e | k + 0x80 & 0x1f80, p -= 256 * 8 * 37 + 8, i++)
 			for (int j = 0; j < 37; k = k + 2 & 0x7e | k & 0x1f80, p += 256 * 8, j++)
 				if (~ram[k + 1] & 0x20)
-					xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+					xfer8x8(bitmap.data(), &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 232;
 		k = fFlip ? 0x132 : 0x106;
 		for (int i = 0; i < 3; p -= 256 * 8 * 36 + 8, k += 56, i++)
 			for (int j = 0; j < 36; p += 256 * 8, k += 2, j++)
 				if (~ram[k + 1] & 0x20)
-					xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+					xfer8x8(bitmap.data(), &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 16;
 		k = fFlip ? 0xeb2 : 0xe86;
 		for (int i = 0; i < 36; p += 256 * 8, k += 2, i++)
 			if (~ram[k + 1] & 0x20)
-				xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+				xfer8x8(bitmap.data(), &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 
 		// obj描画
-		drawObj(data, 1);
+		drawObj(bitmap.data(), 1);
 
 		// fg描画
 		p = 256 * 8 * 2 + 208 - (fFlip ? 1 + dwScroll0 & 7 : dwScroll0 & 7) * 256;
@@ -327,27 +329,29 @@ struct PacLand {
 		for (int i = 0; i < 24; k = k + 54 & 0x7e | k + 0x80 & 0x1f80, p -= 256 * 8 * 37 + 8, i++)
 			for (int j = 0; j < 37; k = k + 2 & 0x7e | k & 0x1f80, p += 256 * 8, j++)
 				if (ram[k + 1] & 0x20)
-					xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+					xfer8x8(bitmap.data(), &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 232;
 		k = fFlip ? 0x132 : 0x106;
 		for (int i = 0; i < 3; p -= 256 * 8 * 36 + 8, k += 56, i++)
 			for (int j = 0; j < 36; p += 256 * 8, k += 2, j++)
 				if (ram[k + 1] & 0x20)
-					xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+					xfer8x8(bitmap.data(), &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 		p = 256 * 8 * 2 + 16;
 		k = fFlip ? 0xeb2 : 0xe86;
 		for (int i = 0; i < 36; p += 256 * 8, k += 2, i++)
 			if (ram[k + 1] & 0x20)
-				xfer8x8(data, &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
+				xfer8x8(bitmap.data(), &FGCOLOR[0], &fg[0], ram[k + 1] << 1 & 0x3c | ram[k] << 1 & 0x1c0 | ram[k + 1] << 9 & 0x200, p, k);
 
 		// obj描画
-		drawObj(data, 2);
+		drawObj(bitmap.data(), 2);
 
 		// palette変換
 		p = 256 * 16 + 16;
 		for (int i = 0; i < 288; p += 256 - 224, i++)
 			for (int j = 0; j < 224; p++, j++)
-				data[p] = rgb[palette | data[p]];
+				bitmap[p] = rgb[palette | bitmap[p]];
+
+		return bitmap.data();
 	}
 
 	void drawObj(int *data, int cat) {

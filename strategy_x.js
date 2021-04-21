@@ -29,11 +29,11 @@ read('stratgyx.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 		case 'ArrowDown':
 			return void instance.exports.down(true);
 		case 'Digit0':
-			return void instance.exports.coin();
+			return void instance.exports.coin(true);
 		case 'Digit1':
-			return void instance.exports.start1P();
+			return void instance.exports.start1P(true);
 		case 'Digit2':
-			return void instance.exports.start2P();
+			return void instance.exports.start2P(true)();
 		case 'KeyC':
 			return void instance.exports.triggerB(true);
 		case 'KeyM': // MUTE
@@ -70,5 +70,5 @@ read('stratgyx.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 			return void instance.exports.triggerX(false);
 		}
 	});
-	canvas.addEventListener('click', () => void instance.exports.coin());
+	canvas.addEventListener('click', () => void instance.exports.coin(true));
 });

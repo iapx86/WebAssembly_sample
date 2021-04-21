@@ -61,6 +61,8 @@ struct TimePilot {
 	array<uint8_t, 0x10000> obj;
 	array<uint8_t, 0x100> bgcolor;
 	array<int, 0x20> rgb;
+	array<int, width * height> bitmap;
+	bool updated = false;
 	int vpos = 0;
 
 	Z80 cpu, cpu2;
@@ -77,8 +79,8 @@ struct TimePilot {
 		double rate = 14318181.0 / 4096;
 		double frac = 0;
 		int count = 0;
-		void execute(double rate, double rate_correction, function<void(int)> fn) {
-			for (frac += this->rate * rate_correction; frac >= rate; frac -= rate)
+		void execute(double rate, function<void(int)> fn) {
+			for (frac += this->rate; frac >= rate; frac -= rate)
 				fn(count = (count + 1) % 10);
 		}
 	} timer;
@@ -136,7 +138,7 @@ struct TimePilot {
 		cpu2.check_interrupt = [&]() { return cpu2_irq && cpu2.interrupt() && (cpu2_irq = false, true); };
 
 		// Videoの初期化
-		bg.fill(3), obj.fill(3);
+		bg.fill(3), obj.fill(3), bitmap.fill(0xff000000);
 		convertGFX(&bg[0], &BG[0], 512, {rseq8(0, 8)}, {seq4(0, 1), seq4(64, 1)}, {4, 0}, 16);
 		convertGFX(&obj[0], &OBJ[0], 256, {rseq8(256, 8), rseq8(0, 8)}, {rseq4(192, 1), rseq4(128, 1), rseq4(64, 1), rseq4(0, 1)}, {4, 0}, 64);
 		for (int i = 0; i < bgcolor.size(); i++)
@@ -147,24 +149,24 @@ struct TimePilot {
 		}
 	}
 
-	TimePilot *execute(DoubleTimer& audio, double rate_correction) {
-		constexpr int tick_rate = 384000, tick_max = tick_rate / 60;
-		for (int i = 0; i < tick_max; i++) {
+	void execute(Timer<int>& audio, int length) {
+		const int tick_rate = 192000, tick_max = ceil(double(length * tick_rate - audio.frac) / audio.rate);
+		auto update = [&]() { makeBitmap(true), updateStatus(), updateInput(); };
+		for (int i = 0; !updated && i < tick_max; i++) {
 			cpu.execute(tick_rate);
 			cpu2.execute(tick_rate);
 			scanline.execute(tick_rate, [&](int cnt) {
 				vpos = cnt + 240 & 0xff;
 				!vpos && copy_n(&ram[0x1000], 0x200, &ram[0x1200]);
-				vpos == 240 && fInterruptEnable && cpu.non_maskable_interrupt();
+				vpos == 240 && (update(), fInterruptEnable && cpu.non_maskable_interrupt());
 			});
-			timer.execute(tick_rate, rate_correction, [&](int cnt) {
+			timer.execute(tick_rate, [&](int cnt) {
 				sound0->write(0xf, array<uint8_t, 10>{0x00, 0x10, 0x20, 0x30, 0x40, 0x90, 0xa0, 0xb0, 0xa0, 0xd0}[cnt]);
 			});
-			sound0->execute(tick_rate, rate_correction);
-			sound1->execute(tick_rate, rate_correction);
-			audio.execute(tick_rate, rate_correction);
+			sound0->execute(tick_rate);
+			sound1->execute(tick_rate);
+			audio.execute(tick_rate);
 		}
-		return this;
 	}
 
 	void reset() {
@@ -244,16 +246,16 @@ struct TimePilot {
 		return this;
 	}
 
-	void coin() {
-		fCoin = 2;
+	void coin(bool fDown) {
+		fDown && (fCoin = 2);
 	}
 
-	void start1P() {
-		fStart1P = 2;
+	void start1P(bool fDown) {
+		fDown && (fStart1P = 2);
 	}
 
-	void start2P() {
-		fStart2P = 2;
+	void start2P(bool fDown) {
+		fDown && (fStart2P = 2);
 	}
 
 	void up(bool fDown) {
@@ -276,12 +278,15 @@ struct TimePilot {
 		in[1] = in[1] & ~(1 << 4) | !fDown << 4;
 	}
 
-	void makeBitmap(int *data) {
+	int *makeBitmap(bool flag) {
+		if (!(updated = flag))
+			return bitmap.data();
+
 		// bg描画
 		int p = 256 * 8 * 2 + 232;
 		for (int k = 0x40, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
-				xfer8x8(data, p, k, 0);
+				xfer8x8(bitmap.data(), p, k, 0);
 
 		// obj描画
 		for (int k = 0x103e; k >= 0x1010; k -= 2) {
@@ -289,16 +294,16 @@ struct TimePilot {
 			const int src0 = ram[k + 0x201] | ram[k + 0x300] << 8;
 			switch (src0 >> 14) {
 			case 0: // ノーマル
-				xfer16x16(data, dst0, src0);
+				xfer16x16(bitmap.data(), dst0, src0);
 				break;
 			case 1: // V反転
-				xfer16x16V(data, dst0, src0);
+				xfer16x16V(bitmap.data(), dst0, src0);
 				break;
 			case 2: // H反転
-				xfer16x16H(data, dst0, src0);
+				xfer16x16H(bitmap.data(), dst0, src0);
 				break;
 			case 3: // HV反転
-				xfer16x16HV(data, dst0, src0);
+				xfer16x16HV(bitmap.data(), dst0, src0);
 				break;
 			}
 			const int dst1 = ram[k + 0x101] - 1 & 0xff | ram[k] + 16 << 8;
@@ -307,16 +312,16 @@ struct TimePilot {
 				continue;
 			switch (src1 >> 14) {
 			case 0: // ノーマル
-				xfer16x16(data, dst1, src1);
+				xfer16x16(bitmap.data(), dst1, src1);
 				break;
 			case 1: // V反転
-				xfer16x16V(data, dst1, src1);
+				xfer16x16V(bitmap.data(), dst1, src1);
 				break;
 			case 2: // H反転
-				xfer16x16H(data, dst1, src1);
+				xfer16x16H(bitmap.data(), dst1, src1);
 				break;
 			case 3: // HV反転
-				xfer16x16HV(data, dst1, src1);
+				xfer16x16HV(bitmap.data(), dst1, src1);
 				break;
 			}
 		}
@@ -325,13 +330,15 @@ struct TimePilot {
 		p = 256 * 8 * 2 + 232;
 		for (int k = 0x40, i = 0; i < 28; p -= 256 * 8 * 32 + 8, i++)
 			for (int j = 0; j < 32; k++, p += 256 * 8, j++)
-				xfer8x8(data, p, k, 1);
+				xfer8x8(bitmap.data(), p, k, 1);
 
 		// palette変換
 		p = 256 * 16 + 16;
 		for (int i = 0; i < 256; p += 256 - 224, i++)
 			for (int j = 0; j < 224; p++, j++)
-				data[p] = rgb[data[p]];
+				bitmap[p] = rgb[bitmap[p]];
+
+		return bitmap.data();
 	}
 
 	void xfer8x8(int *data, int p, int k, int pri) {
@@ -660,8 +667,8 @@ struct TimePilot {
 	}
 
 	static void init(int rate) {
-		sound0 = new AY_3_8910(14318181.0 / 8, 0.2);
-		sound1 = new AY_3_8910(14318181.0 / 8, 0.2);
+		sound0 = new AY_3_8910(14318181 / 8, 0.2);
+		sound1 = new AY_3_8910(14318181 / 8, 0.2);
 		Z80::init();
 	}
 };
