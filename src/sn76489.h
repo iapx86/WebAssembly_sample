@@ -53,16 +53,21 @@ struct SN76489 {
 	}
 
 	void update() {
+		static bool initialized = false;
+		static array<double, 16> vol = {};
+		if (!initialized) {
+			for (int i = 0; i < 16; i++)
+				vol[i] = i < 15 ? pow(10, -i / 10.0) : 0;
+			initialized = true;
+		}
 		output = 0;
 		if (mute)
 			return;
-		const int nvol = ~reg[7] & 0xf;
 		for (int i = 0; i < 3; i++) {
 			auto& ch = channel[i];
-			const int vol = ~reg[i * 2 + 1] & 0xf;
-			output += ((ch.output & 1) * 2 - 1) * (vol ? pow(10, (vol - 15) / 10.0) : 0.0) * gain;
+			output += ((ch.output & 1) * 2 - 1) * vol[reg[i * 2 + 1] & 15] * gain;
 		}
-		output += ((rng & 1) * 2 - 1) * (nvol ? pow(10, (nvol - 15) / 10.0) : 0.0) * gain;
+		output += ((rng & 1) * 2 - 1) * vol[reg[7] & 15] * gain;
 	}
 };
 

@@ -35,7 +35,7 @@ struct AY_3_8910 {
 	}
 
 	int read(int addr) {
-		return reg[addr & 0xf];
+		return reg[addr & 15];
 	}
 
 	void write(int addr, int data) {
@@ -44,7 +44,7 @@ struct AY_3_8910 {
 
 	void execute(int rate) {
 		for (frac += this->rate; frac >= rate; frac -= rate) {
-			const int nfreq = reg[6] & 0x1f, efreq = reg[11] | reg[12] << 8, etype = reg[13];
+			const int nfreq = reg[6] & 31, efreq = reg[11] | reg[12] << 8, etype = reg[13];
 			for (int i = 0; i < 3; i++) {
 				auto& ch = channel[i];
 				ch.freq = reg[1 + i * 2] << 8 & 0xf00 | reg[i * 2], ++ch.count >= ch.freq && (ch.output = ~ch.output, ch.count = 0);
@@ -55,6 +55,13 @@ struct AY_3_8910 {
 	}
 
 	void update() {
+		static bool initialized = false;
+		static array<double, 16> vol = {};
+		if (!initialized) {
+			for (int i = 0; i < 16; i++)
+				vol[i] = i ? pow(10, (i - 15) / 10.0) : 0;
+			initialized = true;
+		}
 		output = 0;
 		if (mute)
 			return;
@@ -62,8 +69,7 @@ struct AY_3_8910 {
 		const int evol = (~step ^ ((((etype ^ etype >> 1) & step >> 4 ^ ~etype >> 2) & 1) - 1)) & (~etype >> 3 & step >> 4 & 1) - 1 & 15;
 		for (int i = 0; i < 3; i++) {
 			auto& ch = channel[i];
-			const int vol = reg[8 + i] >> 4 & 1 ? evol : reg[8 + i] & 0xf;
-			output += (((!ch.freq | reg[7] >> i | ch.output) & (reg[7] >> i + 3 | rng) & 1) * 2 - 1) * (vol ? pow(10, (vol - 15) / 10.0) : 0.0) * gain;
+			output += (((!ch.freq | reg[7] >> i | ch.output) & (reg[7] >> i + 3 | rng) & 1) * 2 - 1) * vol[reg[8 + i] >> 4 & 1 ? evol : reg[8 + i] & 15] * gain;
 		}
 	}
 };

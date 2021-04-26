@@ -147,7 +147,7 @@ export function init(bufferSource, roms) {
 			case 'Digit1':
 				return void('start1P' in instance.exports && instance.exports.start1P(true));
 			case 'Digit2':
-				return void('start2P' in instance.exports && instance.exports.start2P(true)(true));
+				return void('start2P' in instance.exports && instance.exports.start2P(true));
 			case 'KeyM': // MUTE
 				return void(audioCtx.state === 'suspended' ? audioCtx.resume().catch() : audioCtx.state === 'running' && audioCtx.suspend().catch());
 			case 'KeyR':

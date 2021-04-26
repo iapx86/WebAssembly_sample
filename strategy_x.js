@@ -15,60 +15,56 @@ read('stratgyx.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 	const MAP = zip.decompress('strategy.10k');
 	const bufferSource = new Zlib.Unzip(archive).decompress('strategy_x.wasm');
 	return init(bufferSource, {BG, RGB, PRG1, PRG2, MAP});
-}).then(instance => {
+}).then(game => {
 	document.addEventListener('keydown', e => {
 		if (e.repeat)
 			return;
 		switch (e.code) {
 		case 'ArrowLeft':
-			return void instance.exports.left(true);
+			return game.left(true);
 		case 'ArrowUp':
-			return void instance.exports.up(true);
+			return game.up(true);
 		case 'ArrowRight':
-			return void instance.exports.right(true);
+			return game.right(true);
 		case 'ArrowDown':
-			return void instance.exports.down(true);
+			return game.down(true);
 		case 'Digit0':
-			return void instance.exports.coin(true);
+			return game.coin(true);
 		case 'Digit1':
-			return void instance.exports.start1P(true);
+			return game.start1P(true);
 		case 'Digit2':
-			return void instance.exports.start2P(true)();
+			return game.start2P(true);
 		case 'KeyC':
-			return void instance.exports.triggerB(true);
+			return game.triggerB(true);
 		case 'KeyM': // MUTE
-			if (audioCtx.state === 'suspended')
-				audioCtx.resume().catch();
-			else if (audioCtx.state === 'running')
-				audioCtx.suspend().catch();
-			return;
+			return void(audioCtx.state === 'suspended' ? audioCtx.resume().catch() : audioCtx.state === 'running' && audioCtx.suspend().catch());
 		case 'KeyR':
-			return void instance.exports.reset();
+			return game.reset();
 		case 'Space':
 		case 'KeyX':
-			return void instance.exports.triggerA(true);
+			return game.triggerA(true);
 		case 'KeyZ':
-			return void instance.exports.triggerX(true);
+			return game.triggerX(true);
 		}
 	});
 	document.addEventListener('keyup', e => {
 		switch (e.code) {
 		case 'ArrowLeft':
-			return void instance.exports.left(false);
+			return game.left(false);
 		case 'ArrowUp':
-			return void instance.exports.up(false);
+			return game.up(false);
 		case 'ArrowRight':
-			return void instance.exports.right(false);
+			return game.right(false);
 		case 'ArrowDown':
-			return void instance.exports.down(false);
+			return game.down(false);
 		case 'KeyC':
-			return void instance.exports.triggerB(false);
+			return game.triggerB(false);
 		case 'Space':
 		case 'KeyX':
-			return void instance.exports.triggerA(false);
+			return game.triggerA(false);
 		case 'KeyZ':
-			return void instance.exports.triggerX(false);
+			return game.triggerX(false);
 		}
 	});
-	canvas.addEventListener('click', () => void instance.exports.coin(true));
+	canvas.addEventListener('click', () => game.coin(true));
 });

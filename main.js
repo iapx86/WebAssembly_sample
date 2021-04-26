@@ -166,7 +166,7 @@ export function init(bufferSource, roms) {
 			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 			requestAnimationFrame(loop);
 		});
-		return instance;
+		return instance.exports;
 	});
 }
 
