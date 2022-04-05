@@ -1593,7 +1593,7 @@ struct MC68000 : Cpu {
 			case 073: // JSR d(PC,Xi)
 				return ea = index(pc), a[7] -= 4, write32(pc, a[7]), void(pc = ea);
 			}
-			return;
+			return exception(4);
 		case 030:
 			switch (x) {
 			case 0: // MOVE SR,Dy
