@@ -7,6 +7,7 @@
 #ifndef PAC_AND_PAL_H
 #define PAC_AND_PAL_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "mc6809.h"

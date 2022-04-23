@@ -4,18 +4,18 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/motos.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/motos.wasm.js';
+import {ROM} from "./dist/motos_rom.js";
+let roms;
 
-read('motos.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['mo1_3.1d', 'mo1_1.1b'].map(e => zip.decompress(e)));
-	const PRG2 = zip.decompress('mo1_4.1k');
-	const BG = zip.decompress('mo1_5.3b');
-	const OBJ = Uint8Array.concat(...['mo1_7.3n', 'mo1_6.3m'].map(e => zip.decompress(e)));
-	const RGB = zip.decompress('mo1-5.5b');
-	const BGCOLOR = zip.decompress('mo1-6.4c');
-	const OBJCOLOR = zip.decompress('mo1-7.5k');
-	const SND = zip.decompress('mo1-3.3m');
-	const bufferSource = new Zlib.Unzip(archive).decompress('motos.wasm');
-	return init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0x8000),
+	PRG2: new Uint8Array(ROM.buffer, 0x8000, 0x2000),
+	BG: new Uint8Array(ROM.buffer, 0xa000, 0x1000),
+	OBJ: new Uint8Array(ROM.buffer, 0xb000, 0x8000),
+	RGB: new Uint8Array(ROM.buffer, 0x13000, 0x20),
+	BGCOLOR: new Uint8Array(ROM.buffer, 0x13020, 0x100),
+	OBJCOLOR: new Uint8Array(ROM.buffer, 0x13120, 0x100),
+	SND: new Uint8Array(ROM.buffer, 0x13220, 0x100),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

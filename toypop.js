@@ -4,23 +4,21 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/toypop.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/toypop.wasm.js';
+import {ROM} from "./dist/toypop_rom.js";
+let roms;
 
-read('toypop.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['tp1-2.5b', 'tp1-1.5c'].map(e => zip.decompress(e)));
-	const PRG2 = zip.decompress('tp1-3.2c');
-	const PRG3 = new Uint8Array(0x8000);
-	zip.decompress('tp1-4.8c').forEach((e, i) => PRG3[i << 1] = e);
-	zip.decompress('tp1-5.10c').forEach((e, i) => PRG3[1 | i << 1] = e);
-	const BG = zip.decompress('tp1-7.5p');
-	const OBJ = zip.decompress('tp1-6.9t');
-	const RED = zip.decompress('tp1-3.1r');
-	const GREEN = zip.decompress('tp1-2.1s');
-	const BLUE = zip.decompress('tp1-1.1t');
-	const BGCOLOR = zip.decompress('tp1-4.5l');
-	const OBJCOLOR = zip.decompress('tp1-5.2p');
-	const SND = zip.decompress('tp1-6.3d');
-	const bufferSource = new Zlib.Unzip(archive).decompress('toypop.wasm');
-	return init(bufferSource, {PRG1, PRG2, PRG3, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR, SND});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0x8000),
+	PRG2: new Uint8Array(ROM.buffer, 0x8000, 0x2000),
+	PRG3: new Uint8Array(ROM.buffer, 0xa000, 0x8000),
+	BG: new Uint8Array(ROM.buffer, 0x12000, 0x2000),
+	OBJ: new Uint8Array(ROM.buffer, 0x14000, 0x4000),
+	RED: new Uint8Array(ROM.buffer, 0x18000, 0x100),
+	GREEN: new Uint8Array(ROM.buffer, 0x18100, 0x100),
+	BLUE: new Uint8Array(ROM.buffer, 0x18200, 0x100),
+	BGCOLOR: new Uint8Array(ROM.buffer, 0x18300, 0x100),
+	OBJCOLOR: new Uint8Array(ROM.buffer, 0x18400, 0x200),
+	SND: new Uint8Array(ROM.buffer, 0x18600, 0x100),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

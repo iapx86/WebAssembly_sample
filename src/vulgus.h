@@ -7,6 +7,7 @@
 #ifndef VULGUS_H
 #define VULGUS_H
 
+#include <cmath>
 #include <array>
 #include "z80.h"
 #include "ay-3-8910.h"

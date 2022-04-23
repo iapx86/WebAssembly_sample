@@ -7,6 +7,7 @@
 #ifndef ZIG_ZAG_H
 #define ZIG_ZAG_H
 
+#include <cmath>
 #include <array>
 #include "z80.h"
 #include "ay-3-8910.h"

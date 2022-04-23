@@ -7,6 +7,7 @@
 #ifndef PAC_MAN_H
 #define PAC_MAN_H
 
+#include <cmath>
 #include <array>
 #include "z80.h"
 #include "pac-man_sound.h"

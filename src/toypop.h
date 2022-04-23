@@ -7,6 +7,7 @@
 #ifndef TOYPOP_H
 #define TOYPOP_H
 
+#include <cmath>
 #include <array>
 #include "mc6809.h"
 #include "mc68000.h"

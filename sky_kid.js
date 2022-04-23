@@ -4,21 +4,21 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/sky_kid.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/sky_kid.wasm.js';
+import {ROM} from "./dist/sky_kid_rom.js";
+let roms;
 
-read('skykid.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['sk2_2.6c', 'sk1-1c.6b', 'sk1_3.6d'].map(e => zip.decompress(e)));
-	const PRG2 = zip.decompress('sk2_4.3c');
-	const PRG2I = zip.decompress('cus63-63a1.mcu');
-	const FG = zip.decompress('sk1_6.6l');
-	const BG = zip.decompress('sk1_5.7e');
-	const OBJ = Uint8Array.concat(...['sk1_8.10n', 'sk1_7.10m'].map(e => zip.decompress(e)));
-	const RED = zip.decompress('sk1-1.2n');
-	const GREEN = zip.decompress('sk1-2.2p');
-	const BLUE = zip.decompress('sk1-3.2r');
-	const BGCOLOR = zip.decompress('sk1-4.5n');
-	const OBJCOLOR = zip.decompress('sk1-5.6n');
-	const bufferSource = new Zlib.Unzip(archive).decompress('sky_kid.wasm');
-	return init(bufferSource, {PRG1, PRG2, PRG2I, FG, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0xc000),
+	PRG2: new Uint8Array(ROM.buffer, 0xc000, 0x2000),
+	PRG2I: new Uint8Array(ROM.buffer, 0xe000, 0x1000),
+	FG: new Uint8Array(ROM.buffer, 0xf000, 0x2000),
+	BG: new Uint8Array(ROM.buffer, 0x11000, 0x2000),
+	OBJ: new Uint8Array(ROM.buffer, 0x13000, 0x8000),
+	RED: new Uint8Array(ROM.buffer, 0x1b000, 0x100),
+	GREEN: new Uint8Array(ROM.buffer, 0x1b100, 0x100),
+	BLUE: new Uint8Array(ROM.buffer, 0x1b200, 0x100),
+	BGCOLOR: new Uint8Array(ROM.buffer, 0x1b300, 0x200),
+	OBJCOLOR: new Uint8Array(ROM.buffer, 0x1b500, 0x200),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

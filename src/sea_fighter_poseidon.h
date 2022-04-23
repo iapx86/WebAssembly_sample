@@ -7,6 +7,7 @@
 #ifndef SEA_FIGHTER_POSEIDON_H
 #define SEA_FIGHTER_POSEIDON_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "z80.h"

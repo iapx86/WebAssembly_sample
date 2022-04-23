@@ -4,18 +4,18 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/grobda.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/grobda.wasm.js';
+import {ROM} from "./dist/grobda_rom.js";
+let roms;
 
-read('grobda.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['gr2-3.1d', 'gr2-2.1c', 'gr2-1.1b'].map(e => zip.decompress(e)));
-	const PRG2 = zip.decompress('gr1-4.1k');
-	const BG = zip.decompress('gr1-7.3c');
-	const OBJ = Uint8Array.concat(...['gr1-5.3f', 'gr1-6.3e'].map(e => zip.decompress(e)));
-	const RGB = zip.decompress('gr1-6.4c');
-	const BGCOLOR = zip.decompress('gr1-5.4e');
-	const OBJCOLOR = zip.decompress('gr1-4.3l');
-	const SND = zip.decompress('gr1-3.3m');
-	const bufferSource = new Zlib.Unzip(archive).decompress('grobda.wasm');
-	return init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0x6000),
+	PRG2: new Uint8Array(ROM.buffer, 0x6000, 0x2000),
+	BG: new Uint8Array(ROM.buffer, 0x8000, 0x1000),
+	OBJ: new Uint8Array(ROM.buffer, 0x9000, 0x4000),
+	RGB: new Uint8Array(ROM.buffer, 0xd000, 0x20),
+	BGCOLOR: new Uint8Array(ROM.buffer, 0xd020, 0x100),
+	OBJCOLOR: new Uint8Array(ROM.buffer, 0xd120, 0x100),
+	SND: new Uint8Array(ROM.buffer, 0xd220, 0x100),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

@@ -7,6 +7,7 @@
 #ifndef BARADUKE_H
 #define BARADUKE_H
 
+#include <cmath>
 #include <array>
 #include "mc6809.h"
 #include "mc6801.h"

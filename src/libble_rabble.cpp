@@ -17,10 +17,10 @@ Timer audio(48000);
 list<float> samples;
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
-	static array<int,  11 * 4 + 1> rom_table = {
+	static array<int, 11 * 4 + 1> rom_table = {
 		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
 		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
-		(int)"PRG3", (int)strlen("PRG3"), (int)game->PRG3.data(), (int)sizeof(game->PRG3),
+		(int)"PRG3", (int)strlen("PRG3"), (int)game->PRG3.data(), (int)game->PRG3.size(),
 		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
 		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
 		(int)"RED", (int)strlen("RED"), (int)game->RED.data(), (int)game->RED.size(),

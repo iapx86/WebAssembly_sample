@@ -4,23 +4,21 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/libble_rabble.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/libble_rabble.wasm.js';
+import {ROM} from "./dist/libble_rabble_rom.js";
+let roms;
 
-read('liblrabl.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['5b.rom', '5c.rom'].map(e => zip.decompress(e)));
-	const PRG2 = zip.decompress('2c.rom');
-	const PRG3 = new Uint8Array(0x8000);
-	zip.decompress('8c.rom').forEach((e, i) => PRG3[i << 1] = e);
-	zip.decompress('10c.rom').forEach((e, i) => PRG3[1 | i << 1] = e);
-	const BG = zip.decompress('5p.rom');
-	const OBJ = zip.decompress('9t.rom');
-	const RED = zip.decompress('lr1-3.1r');
-	const GREEN = zip.decompress('lr1-2.1s');
-	const BLUE = zip.decompress('lr1-1.1t');
-	const BGCOLOR = zip.decompress('lr1-5.5l');
-	const OBJCOLOR = zip.decompress('lr1-6.2p');
-	const SND = zip.decompress('lr1-4.3d');
-	const bufferSource = new Zlib.Unzip(archive).decompress('libble_rabble.wasm');
-	return init(bufferSource, {PRG1, PRG2, PRG3, BG, OBJ, RED, GREEN, BLUE, BGCOLOR, OBJCOLOR, SND});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0x8000),
+	PRG2: new Uint8Array(ROM.buffer, 0x8000, 0x2000),
+	PRG3: new Uint8Array(ROM.buffer, 0xa000, 0x8000),
+	BG: new Uint8Array(ROM.buffer, 0x12000, 0x2000),
+	OBJ: new Uint8Array(ROM.buffer, 0x14000, 0x4000),
+	RED: new Uint8Array(ROM.buffer, 0x18000, 0x100),
+	GREEN: new Uint8Array(ROM.buffer, 0x18100, 0x100),
+	BLUE: new Uint8Array(ROM.buffer, 0x18200, 0x100),
+	BGCOLOR: new Uint8Array(ROM.buffer, 0x18300, 0x100),
+	OBJCOLOR: new Uint8Array(ROM.buffer, 0x18400, 0x200),
+	SND: new Uint8Array(ROM.buffer, 0x18600, 0x100),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

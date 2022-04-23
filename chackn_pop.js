@@ -4,19 +4,19 @@
  *
  */
 
-import {init, read} from './main.js';
-import {archive} from './dist/chackn_pop.wasm.js';
+import {init, expand} from './main.js';
+import {imageSource, imageSource_size} from './dist/chackn_pop.wasm.js';
+import {ROM} from "./dist/chackn_pop_rom.js";
+let roms;
 
-read('chaknpop.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['ao4_01.ic28', 'ao4_02.ic27', 'ao4_03.ic26', 'ao4_04.ic25', 'ao4_05.ic3'].map(e => zip.decompress(e)));
-	const PRG2 = zip.decompress('ao4_06.ic23');
-	const OBJ = Uint8Array.concat(...['ao4_08.ic14', 'ao4_07.ic15'].map(e => zip.decompress(e)));
-	const BG = Uint8Array.concat(...['ao4_09.ic98', 'ao4_10.ic97'].map(e => zip.decompress(e)));
-	const RGB_L = zip.decompress('ao4-11.ic96');
-	const RGB_H = zip.decompress('ao4-12.ic95');
-	const bufferSource = new Zlib.Unzip(archive).decompress('chackn_pop.wasm');
-	return init(bufferSource, {PRG1, PRG2, OBJ, BG, RGB_L, RGB_H});
-}).then(game => {
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0xa000),
+	PRG2: new Uint8Array(ROM.buffer, 0xa000, 0x800),
+	OBJ: new Uint8Array(ROM.buffer, 0xa800, 0x4000),
+	BG: new Uint8Array(ROM.buffer, 0xe800, 0x4000),
+	RGB_L: new Uint8Array(ROM.buffer, 0x12800, 0x400),
+	RGB_H: new Uint8Array(ROM.buffer, 0x12c00, 0x400),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)).then(game => {
 	document.addEventListener('keydown', e => {
 		if (e.repeat)
 			return;
@@ -64,4 +64,4 @@ read('chaknpop.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 		}
 	});
 	canvas.addEventListener('click', () => game.coin(true));
-});
+}));

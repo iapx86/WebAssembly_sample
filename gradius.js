@@ -4,20 +4,16 @@
  *
  */
 
-import {init, read} from './main.js';
-import {archive} from './dist/gradius.wasm.js';
+import {init, expand} from './main.js';
+import {imageSource, imageSource_size} from './dist/gradius.wasm.js';
+import {ROM} from "./dist/gradius_rom.js";
+let roms;
 
-read('nemesis.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = new Uint8Array(0x50000);
-	zip.decompress('gradius/400-a06.15l').forEach((e, i) => PRG1[i << 1] = e);
-	zip.decompress('gradius/400-a04.10l').forEach((e, i) => PRG1[1 + (i << 1)] = e);
-	zip.decompress('gradius/456-a07.17l').forEach((e, i) => PRG1[0x10000 + (i << 1)] = e);
-	zip.decompress('gradius/456-a05.12l').forEach((e, i) => PRG1[0x10001 + (i << 1)] = e);
-	const PRG2 = zip.decompress('gradius/400-e03.5l');
-	const SND = Uint8Array.concat(...['400-a01.fse', '400-a02.fse'].map(e => zip.decompress(e)));
-	const bufferSource = new Zlib.Unzip(archive).decompress('gradius.wasm');
-	return init(bufferSource, {PRG1, PRG2, SND});
-}).then(game => {
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0x50000),
+	PRG2: new Uint8Array(ROM.buffer, 0x50000, 0x2000),
+	SND: new Uint8Array(ROM.buffer, 0x52000, 0x200),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)).then(game => {
 	document.addEventListener('keydown', e => {
 		if (e.repeat)
 			return;
@@ -69,4 +65,4 @@ read('nemesis.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(
 		}
 	});
 	canvas.addEventListener('click', () => game.coin(true));
-});
+}));

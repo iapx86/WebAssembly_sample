@@ -7,6 +7,7 @@
 #ifndef FROGGER_H
 #define FROGGER_H
 
+#include <cmath>
 #include <array>
 #include <functional>
 #include "z80.h"

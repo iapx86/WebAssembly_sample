@@ -4,14 +4,14 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/zigzag.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/zigzag.wasm.js';
+import {ROM} from "./dist/zigzag_rom.js";
+let roms;
 
-read('zigzagb.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG = Uint8Array.concat(...['zz_d1.7l', 'zz_d2.7k', 'zz_d4.7f', 'zz_d3.7h'].map(e => zip.decompress(e)));
-	const BG = Uint8Array.concat(...['zz_6.1h', 'zz_5.1k'].map(e => zip.decompress(e).subarray(0, 0x800)));
-	const OBJ = Uint8Array.concat(...['zz_6.1h', 'zz_5.1k'].map(e => zip.decompress(e).subarray(0x800)));
-	const RGB = zip.decompress('zzbpr_e9.bin');
-	const bufferSource = new Zlib.Unzip(archive).decompress('zigzag.wasm');
-	return init(bufferSource, {BG, OBJ, RGB, PRG});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG: new Uint8Array(ROM.buffer, 0x0, 0x4000),
+	BG: new Uint8Array(ROM.buffer, 0x4000, 0x1000),
+	OBJ: new Uint8Array(ROM.buffer, 0x5000, 0x1000),
+	RGB: new Uint8Array(ROM.buffer, 0x6000, 0x20),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

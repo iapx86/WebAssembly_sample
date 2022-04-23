@@ -7,6 +7,7 @@
 #ifndef CHACKN_POP_H
 #define CHACKN_POP_H
 
+#include <cmath>
 #include <array>
 #include "z80.h"
 #include "mc6805.h"
@@ -15,10 +16,10 @@
 using namespace std;
 
 struct ChacknPop {
-	static array<uint8_t, 0x4000> BG, OBJ;
-	static array<uint8_t, 0x400> RGB_L, RGB_H;
 	static array<uint8_t, 0xa000> PRG1;
 	static array<uint8_t, 0x800> PRG2;
+	static array<uint8_t, 0x4000> OBJ, BG;
+	static array<uint8_t, 0x400> RGB_L, RGB_H;
 
 	static const int cxScreen = 224;
 	static const int cyScreen = 256;

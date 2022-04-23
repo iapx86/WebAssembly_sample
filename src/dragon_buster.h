@@ -7,6 +7,7 @@
 #ifndef DRAGON_BUSTER_H
 #define DRAGON_BUSTER_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "mc6809.h"

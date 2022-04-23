@@ -5,6 +5,7 @@
 #ifndef AY_3_8910_H
 #define AY_3_8910_H
 
+#include <cmath>
 #include <array>
 using namespace std;
 

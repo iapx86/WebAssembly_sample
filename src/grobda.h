@@ -7,6 +7,7 @@
 #ifndef GROBDA_H
 #define GROBDA_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "mc6809.h"

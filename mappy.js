@@ -4,18 +4,18 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/mappy.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/mappy.wasm.js';
+import {ROM} from "./dist/mappy_rom.js";
+let roms;
 
-read('mappy.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['mappyj/mp1_3.1d', 'mp1_2.1c', 'mappyj/mp1_1.1b'].map(e => zip.decompress(e)));
-	const PRG2 = zip.decompress('mp1_4.1k');
-	const BG = zip.decompress('mp1_5.3b');
-	const OBJ = Uint8Array.concat(...['mp1_7.3n', 'mp1_6.3m'].map(e => zip.decompress(e)));
-	const RGB = zip.decompress('mp1-5.5b');
-	const BGCOLOR = zip.decompress('mp1-6.4c');
-	const OBJCOLOR = zip.decompress('mp1-7.5k');
-	const SND = zip.decompress('mp1-3.3m');
-	const bufferSource = new Zlib.Unzip(archive).decompress('mappy.wasm');
-	return init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0x6000),
+	PRG2: new Uint8Array(ROM.buffer, 0x6000, 0x2000),
+	BG: new Uint8Array(ROM.buffer, 0x8000, 0x1000),
+	OBJ: new Uint8Array(ROM.buffer, 0x9000, 0x4000),
+	RGB: new Uint8Array(ROM.buffer, 0xd000, 0x20),
+	BGCOLOR: new Uint8Array(ROM.buffer, 0xd020, 0x100),
+	OBJCOLOR: new Uint8Array(ROM.buffer, 0xd120, 0x100),
+	SND: new Uint8Array(ROM.buffer, 0xd220, 0x100),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

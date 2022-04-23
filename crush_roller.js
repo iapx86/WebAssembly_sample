@@ -4,16 +4,16 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/crush_roller.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/crush_roller.wasm.js';
+import {ROM} from "./dist/crush_roller_rom.js";
+let roms;
 
-read('crush.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG = Uint8Array.concat(...['crushkrl.6e', 'crushkrl.6f', 'crushkrl.6h', 'crushkrl.6j'].map(e => zip.decompress(e)));
-	const BG = zip.decompress('maketrax.5e');
-	const OBJ = zip.decompress('maketrax.5f');
-	const RGB = zip.decompress('82s123.7f');
-	const COLOR = zip.decompress('2s140.4a');
-	const SND = zip.decompress('82s126.1m');
-	const bufferSource = new Zlib.Unzip(archive).decompress('crush_roller.wasm');
-	return init(bufferSource, {BG, COLOR, OBJ, RGB, PRG, SND});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG: new Uint8Array(ROM.buffer, 0x0, 0x4000),
+	BG: new Uint8Array(ROM.buffer, 0x4000, 0x1000),
+	OBJ: new Uint8Array(ROM.buffer, 0x5000, 0x1000),
+	RGB: new Uint8Array(ROM.buffer, 0x6000, 0x20),
+	COLOR: new Uint8Array(ROM.buffer, 0x6020, 0x100),
+	SND: new Uint8Array(ROM.buffer, 0x6120, 0x100),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

@@ -7,6 +7,7 @@
 #ifndef LIBBLE_RABBLE_H
 #define LIBBLE_RABBLE_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "mc6809.h"

@@ -18,10 +18,10 @@ list<float> samples;
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 	static array<int, 5 * 4 + 1> rom_table = {
-		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
-		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
 		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
 		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
 		(int)"MAP", (int)strlen("MAP"), (int)game->MAP.data(), (int)game->MAP.size(),
 		0
 	};
@@ -108,16 +108,16 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerX(int fDown) {
 
 AY_3_8910 *StrategyX::sound0, *StrategyX::sound1;
 
-array<unsigned char, 0x1000> StrategyX::BG = {
-};
-
-array<unsigned char, 0x20> StrategyX::RGB = {
-};
-
 array<unsigned char, 0x6000> StrategyX::PRG1 = {
 };
 
 array<unsigned char, 0x2000> StrategyX::PRG2 = {
+};
+
+array<unsigned char, 0x1000> StrategyX::BG = {
+};
+
+array<unsigned char, 0x20> StrategyX::RGB = {
 };
 
 array<unsigned char, 0x20> StrategyX::MAP = {

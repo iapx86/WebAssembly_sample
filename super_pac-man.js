@@ -4,18 +4,18 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/super_pac-man.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/super_pac-man.wasm.js';
+import {ROM} from "./dist/super_pac-man_rom.js";
+let roms;
 
-read('superpac.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['sp1-2.1c', 'sp1-1.1b'].map(e => zip.decompress(e)));
-	const PRG2 = zip.decompress('spc-3.1k');
-	const BG = zip.decompress('sp1-6.3c');
-	const OBJ = zip.decompress('spv-2.3f');
-	const RGB = zip.decompress('superpac.4c');
-	const BGCOLOR = zip.decompress('superpac.4e');
-	const OBJCOLOR = zip.decompress('superpac.3l');
-	const SND = zip.decompress('superpac.3m');
-	const bufferSource = new Zlib.Unzip(archive).decompress('super_pac-man.wasm');
-	return init(bufferSource, {SND, BG, OBJ, BGCOLOR, OBJCOLOR, RGB, PRG1, PRG2});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0x4000),
+	PRG2: new Uint8Array(ROM.buffer, 0x4000, 0x1000),
+	BG: new Uint8Array(ROM.buffer, 0x5000, 0x1000),
+	OBJ: new Uint8Array(ROM.buffer, 0x6000, 0x2000),
+	RGB: new Uint8Array(ROM.buffer, 0x8000, 0x20),
+	BGCOLOR: new Uint8Array(ROM.buffer, 0x8020, 0x100),
+	OBJCOLOR: new Uint8Array(ROM.buffer, 0x8120, 0x100),
+	SND: new Uint8Array(ROM.buffer, 0x8220, 0x100),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

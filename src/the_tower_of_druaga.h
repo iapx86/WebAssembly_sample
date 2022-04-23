@@ -7,6 +7,7 @@
 #ifndef THE_TOWER_OF_DRUAGA_H
 #define THE_TOWER_OF_DRUAGA_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "mc6809.h"

@@ -18,14 +18,14 @@ list<float> samples;
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 	static array<int, 8 * 4 + 1> rom_table = {
-		(int)"SND", (int)strlen("SND"), (int)game->SND.data(), (int)game->SND.size(),
-		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
-		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
-		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
-		(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR.data(), (int)game->OBJCOLOR.size(),
-		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
 		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
 		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
+		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
+		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
+		(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR.data(), (int)game->OBJCOLOR.size(),
+		(int)"SND", (int)strlen("SND"), (int)game->SND.data(), (int)game->SND.size(),
 		0
 	};
 	return rom_table.data();
@@ -107,7 +107,10 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 
 MappySound *Motos::sound0;
 
-array<unsigned char, 0x100> Motos::SND = {
+array<unsigned char, 0x8000> Motos::PRG1 = {
+};
+
+array<unsigned char, 0x2000> Motos::PRG2 = {
 };
 
 array<unsigned char, 0x1000> Motos::BG = {
@@ -116,18 +119,15 @@ array<unsigned char, 0x1000> Motos::BG = {
 array<unsigned char, 0x8000> Motos::OBJ = {
 };
 
+array<unsigned char, 0x20> Motos::RGB = {
+};
+
 array<unsigned char, 0x100> Motos::BGCOLOR = {
 };
 
 array<unsigned char, 0x100> Motos::OBJCOLOR = {
 };
 
-array<unsigned char, 0x20> Motos::RGB = {
-};
-
-array<unsigned char, 0x8000> Motos::PRG1 = {
-};
-
-array<unsigned char, 0x2000> Motos::PRG2 = {
+array<unsigned char, 0x100> Motos::SND = {
 };
 

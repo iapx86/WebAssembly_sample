@@ -7,6 +7,7 @@
 #ifndef TIME_TUNNEL_H
 #define TIME_TUNNEL_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "z80.h"

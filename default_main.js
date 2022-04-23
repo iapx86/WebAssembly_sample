@@ -99,10 +99,11 @@ export function init(bufferSource, roms) {
 	return WebAssembly.instantiate(bufferSource, importObject).then(result => {
 		instance = result.instance, memory = instance.exports.memory.buffer, view = new DataView(memory);
 		instance.exports._initialize();
-		for (let p = instance.exports.roms(); view.getUint32(p, true) !== 0; p += 16) {
-			const name = String.fromCharCode(...new Uint8Array(memory, view.getUint32(p, true), view.getUint32(p + 4, true)));
-			new Uint8Array(memory, view.getUint32(p + 8, true), view.getUint32(p + 12, true)).set(roms[name]);
-		}
+		if ('roms' in instance.exports)
+			for (let p = instance.exports.roms(); view.getUint32(p, true) !== 0; p += 16) {
+				const name = String.fromCharCode(...new Uint8Array(memory, view.getUint32(p, true), view.getUint32(p + 4, true)));
+				new Uint8Array(memory, view.getUint32(p + 8, true), view.getUint32(p + 12, true)).set(roms[name]);
+			}
 		instance.exports.init(audioCtx.sampleRate);
 		const [cxScreen, cyScreen, width, height, xOffset, yOffset, rotate] = new Int32Array(memory, instance.exports.geometry(), 7);
 		let images = [], silence, samples, maxLength, source, node;
@@ -179,6 +180,7 @@ export function init(bufferSource, roms) {
 			}
 		});
 		canvas.addEventListener('click', () => void('coin' in instance.exports && instance.exports.coin(true)));
+		addEventListener('blur', () => audioCtx.suspend().catch());
 		addEventListener('message', ({data: {timestamp}}) => {
 			if (!timestamp)
 				return;
@@ -215,29 +217,21 @@ export function init(bufferSource, roms) {
 			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 			requestAnimationFrame(loop);
 		});
-		return instance;
+		return instance.exports;
 	});
 }
 
 /*
  *
- *	Array supplementary
+ *	Utilities
  *
  */
 
-Uint8Array.concat = function (...args) {
-	const typed_array = new this(args.reduce((a, b) => a + b.length, 0));
-	for (let offset = 0, i = 0; i < args.length; offset += args[i++].length)
-		typed_array.set(args[i], offset);
-	return typed_array;
-};
-
-export function read(url) {
-	return fetch(url).then(response => {
-		if (response.ok)
-			return response.arrayBuffer();
-		alert(`failed to get: ${url}`);
-		throw new Error(url);
+export function expand(src, size) {
+	let img = new Image();
+	return new Promise((resolve) => Object.assign(img, {onload: () => resolve(), src})).then(() => {
+		const {width, height} = img, c = Object.assign(document.createElement('canvas'), {width, height}).getContext('2d');
+		return c.drawImage(img, 0, 0), new Uint8Array(new Int32Array(c.getImageData(0, 0, width, height).data.buffer, 0, size));
 	});
 }
 

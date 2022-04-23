@@ -18,10 +18,10 @@ list<float> samples;
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 	static array<int, 4 * 4 + 1> rom_table = {
+		(int)"PRG", (int)strlen("PRG"), (int)game->PRG.data(), (int)game->PRG.size(),
 		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
 		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
 		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
-		(int)"PRG", (int)strlen("PRG"), (int)game->PRG.data(), (int)game->PRG.size(),
 		0
 	};
 	return rom_table.data();
@@ -98,6 +98,9 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 
 AY_3_8910 *ZigZag::sound0;
 
+array<unsigned char, 0x4000> ZigZag::PRG = {
+};
+
 array<unsigned char, 0x1000> ZigZag::BG = {
 };
 
@@ -105,8 +108,5 @@ array<unsigned char, 0x1000> ZigZag::OBJ = {
 };
 
 array<unsigned char, 0x20> ZigZag::RGB = {
-};
-
-array<unsigned char, 0x4000> ZigZag::PRG = {
 };
 

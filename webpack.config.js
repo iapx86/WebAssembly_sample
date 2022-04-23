@@ -1,6 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const HtmlWebpackInlineSourcePlugin = require('html-webpack-inline-source-plugin');
+const HtmlInlineScriptPlugin = require('html-inline-script-webpack-plugin');
 
 const list = [
 	{name: '1942', title: '1942', width: 224, height: 256},
@@ -54,8 +54,9 @@ module.exports = {
 			width: e.width,
 			height: e.height,
 			inlineSource: '.js$',
+			inject: 'body',
 		})),
-		new HtmlWebpackInlineSourcePlugin(),
+		new HtmlInlineScriptPlugin(),
 	),
 	module: {
 		rules: [{

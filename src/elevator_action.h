@@ -7,6 +7,7 @@
 #ifndef ELEVATOR_ACTION_H
 #define ELEVATOR_ACTION_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "z80.h"

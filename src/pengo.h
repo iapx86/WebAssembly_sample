@@ -7,6 +7,7 @@
 #ifndef PENGO_H
 #define PENGO_H
 
+#include <cmath>
 #include <array>
 #include "sega_z80.h"
 #include "pac-man_sound.h"

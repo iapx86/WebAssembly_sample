@@ -18,10 +18,10 @@ list<float> samples;
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 	static array<int, 4 * 4 + 1> rom_table = {
-		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
-		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
 		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
 		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
+		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
+		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
 		0
 	};
 	return rom_table.data();
@@ -102,15 +102,15 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerB(int fDown) {
 
 AY_3_8910 *Frogger::sound0;
 
-array<unsigned char, 0x1000> Frogger::BG = {
-};
-
-array<unsigned char, 0x20> Frogger::RGB = {
-};
-
 array<unsigned char, 0x3000> Frogger::PRG1 = {
 };
 
 array<unsigned char, 0x1800> Frogger::PRG2 = {
+};
+
+array<unsigned char, 0x1000> Frogger::BG = {
+};
+
+array<unsigned char, 0x20> Frogger::RGB = {
 };
 

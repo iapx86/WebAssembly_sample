@@ -7,6 +7,7 @@
 #ifndef SKY_KID_H
 #define SKY_KID_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "mc6809.h"

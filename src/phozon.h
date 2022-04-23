@@ -7,6 +7,7 @@
 #ifndef PHOZON_H
 #define PHOZON_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "mc6809.h"

@@ -4,18 +4,18 @@
  *
  */
 
-import {init, read} from './main.js';
-import {archive} from './dist/strategy_x.wasm.js';
+import {init, expand} from './main.js';
+import {imageSource, imageSource_size} from './dist/strategy_x.wasm.js';
+import {ROM} from "./dist/strategy_x_rom.js";
+let roms;
 
-read('stratgyx.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['2c_1.bin', '2e_2.bin', '2f_3.bin', '2h_4.bin', '2j_5.bin', '2l_6.bin'].map(e => zip.decompress(e)));
-	const PRG2 = Uint8Array.concat(...['s1.bin', 's2.bin'].map(e => zip.decompress(e)));
-	const BG = Uint8Array.concat(...['5f_c2.bin', '5h_c1.bin'].map(e => zip.decompress(e)));
-	const RGB = zip.decompress('strategy.6e');
-	const MAP = zip.decompress('strategy.10k');
-	const bufferSource = new Zlib.Unzip(archive).decompress('strategy_x.wasm');
-	return init(bufferSource, {BG, RGB, PRG1, PRG2, MAP});
-}).then(game => {
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0x6000),
+	PRG2: new Uint8Array(ROM.buffer, 0x6000, 0x2000),
+	BG: new Uint8Array(ROM.buffer, 0x8000, 0x1000),
+	RGB: new Uint8Array(ROM.buffer, 0x9000, 0x20),
+	MAP: new Uint8Array(ROM.buffer, 0x9020, 0x20),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)).then(game => {
 	document.addEventListener('keydown', e => {
 		if (e.repeat)
 			return;
@@ -67,4 +67,4 @@ read('stratgyx.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then
 		}
 	});
 	canvas.addEventListener('click', () => game.coin(true));
-});
+}));

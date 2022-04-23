@@ -4,17 +4,16 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/pengo.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/pengo.wasm.js';
+import {ROM} from "./dist/pengo_rom.js";
+let roms;
 
-read('pengo.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	let PRG = Uint8Array.concat(...['ep1689c.8', 'ep1690b.7', 'ep1691b.15', 'ep1692b.14'].map(e => zip.decompress(e)));
-	PRG = Uint8Array.concat(PRG, ...['ep1693b.21', 'ep1694b.20', 'ep5118b.32', 'ep5119c.31'].map(e => zip.decompress(e)));
-	const BG = Uint8Array.concat(...['ep1640.92', 'ep1695.105'].map(e => zip.decompress(e).subarray(0, 0x1000)));
-	const OBJ = Uint8Array.concat(...['ep1640.92', 'ep1695.105'].map(e => zip.decompress(e).subarray(0x1000)));
-	const RGB = zip.decompress('pr1633.78');
-	const COLOR = zip.decompress('pr1634.88');
-	const SND = zip.decompress('pr1635.51');
-	const bufferSource = new Zlib.Unzip(archive).decompress('pengo.wasm');
-	return init(bufferSource, {BG, COLOR, OBJ, RGB, PRG, SND});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG: new Uint8Array(ROM.buffer, 0x0, 0x8000),
+	BG: new Uint8Array(ROM.buffer, 0x8000, 0x2000),
+	OBJ: new Uint8Array(ROM.buffer, 0xa000, 0x2000),
+	RGB: new Uint8Array(ROM.buffer, 0xc000, 0x20),
+	COLOR: new Uint8Array(ROM.buffer, 0xc020, 0x400),
+	SND: new Uint8Array(ROM.buffer, 0xc420, 0x100),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

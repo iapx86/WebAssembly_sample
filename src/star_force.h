@@ -7,6 +7,7 @@
 #ifndef STAR_FORCE_H
 #define STAR_FORCE_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "z80.h"

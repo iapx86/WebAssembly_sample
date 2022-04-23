@@ -7,6 +7,7 @@
 #ifndef TIME_PILOT_H
 #define TIME_PILOT_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include <functional>

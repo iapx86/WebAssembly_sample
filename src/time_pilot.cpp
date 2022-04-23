@@ -24,8 +24,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
 		(int)"RGB_H", (int)strlen("RGB_H"), (int)game->RGB_H.data(), (int)game->RGB_H.size(),
 		(int)"RGB_L", (int)strlen("RGB_L"), (int)game->RGB_L.data(), (int)game->RGB_L.size(),
-		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
 		(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR.data(), (int)game->OBJCOLOR.size(),
+		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
 		0
 	};
 	return rom_table.data();
@@ -103,16 +103,16 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 
 AY_3_8910 *TimePilot::sound0, *TimePilot::sound1;
 
+array<unsigned char, 0x6000> TimePilot::PRG1 = {
+};
+
+array<unsigned char, 0x1000> TimePilot::PRG2 = {
+};
+
 array<unsigned char, 0x2000> TimePilot::BG = {
 };
 
 array<unsigned char, 0x4000> TimePilot::OBJ = {
-};
-
-array<unsigned char, 0x100> TimePilot::BGCOLOR = {
-};
-
-array<unsigned char, 0x100> TimePilot::OBJCOLOR = {
 };
 
 array<unsigned char, 0x20> TimePilot::RGB_H = {
@@ -121,9 +121,9 @@ array<unsigned char, 0x20> TimePilot::RGB_H = {
 array<unsigned char, 0x20> TimePilot::RGB_L = {
 };
 
-array<unsigned char, 0x6000> TimePilot::PRG1 = {
+array<unsigned char, 0x100> TimePilot::OBJCOLOR = {
 };
 
-array<unsigned char, 0x1000> TimePilot::PRG2 = {
+array<unsigned char, 0x100> TimePilot::BGCOLOR = {
 };
 

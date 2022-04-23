@@ -18,11 +18,11 @@ list<float> samples;
 
 extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 	static array<int, 6 * 4 + 1> rom_table = {
+		(int)"PRG", (int)strlen("PRG"), (int)game->PRG.data(), (int)game->PRG.size(),
 		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
-		(int)"COLOR", (int)strlen("COLOR"), (int)game->COLOR.data(), (int)game->COLOR.size(),
 		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
 		(int)"RGB", (int)strlen("RGB"), (int)game->RGB.data(), (int)game->RGB.size(),
-		(int)"PRG", (int)strlen("PRG"), (int)game->PRG.data(), (int)game->PRG.size(),
+		(int)"COLOR", (int)strlen("COLOR"), (int)game->COLOR.data(), (int)game->COLOR.size(),
 		(int)"SND", (int)strlen("SND"), (int)game->SND.data(), (int)game->SND.size(),
 		0
 	};
@@ -100,10 +100,10 @@ extern "C" EMSCRIPTEN_KEEPALIVE void triggerA(int fDown) {
 
 PacManSound *Pengo::sound0;
 
-array<unsigned char, 0x2000> Pengo::BG = {
+array<unsigned char, 0x8000> Pengo::PRG = {
 };
 
-array<unsigned char, 0x400> Pengo::COLOR = {
+array<unsigned char, 0x2000> Pengo::BG = {
 };
 
 array<unsigned char, 0x2000> Pengo::OBJ = {
@@ -112,7 +112,7 @@ array<unsigned char, 0x2000> Pengo::OBJ = {
 array<unsigned char, 0x20> Pengo::RGB = {
 };
 
-array<unsigned char, 0x8000> Pengo::PRG = {
+array<unsigned char, 0x400> Pengo::COLOR = {
 };
 
 array<unsigned char, 0x100> Pengo::SND = {

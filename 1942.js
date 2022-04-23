@@ -4,22 +4,21 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/1942.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/1942.wasm.js';
+import {ROM} from "./dist/1942_rom.js";
+let roms;
 
-read('1942.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	let PRG1 = Uint8Array.concat(...['srb-03.m3', 'srb-04.m4', 'srb-05.m5', 'srb-06.m6'].map(e => zip.decompress(e)));
-	PRG1 = Uint8Array.concat(PRG1, new Uint8Array(0x2000).fill(0xff), zip.decompress('srb-07.m7'), new Uint8Array(0x4000).fill(0xff));
-	const PRG2 = zip.decompress('sr-01.c11');
-	const FG = zip.decompress('sr-02.f2');
-	const BG = Uint8Array.concat(...['sr-08.a1', 'sr-09.a2', 'sr-10.a3', 'sr-11.a4', 'sr-12.a5', 'sr-13.a6'].map(e => zip.decompress(e)));
-	const OBJ = Uint8Array.concat(...['sr-14.l1', 'sr-15.l2', 'sr-16.n1', 'sr-17.n2'].map(e => zip.decompress(e)));
-	const RED = zip.decompress('sb-5.e8');
-	const GREEN = zip.decompress('sb-6.e9');
-	const BLUE = zip.decompress('sb-7.e10');
-	const FGCOLOR = zip.decompress('sb-0.f1');
-	const BGCOLOR = zip.decompress('sb-4.d6');
-	const OBJCOLOR = zip.decompress('sb-8.k3');
-	const bufferSource = new Zlib.Unzip(archive).decompress('1942.wasm');
-	return init(bufferSource, {PRG1, PRG2, FG, BG, OBJ, RED, GREEN, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0x18000),
+	PRG2: new Uint8Array(ROM.buffer, 0x18000, 0x4000),
+	FG: new Uint8Array(ROM.buffer, 0x1c000, 0x2000),
+	BG: new Uint8Array(ROM.buffer, 0x1e000, 0xc000),
+	OBJ: new Uint8Array(ROM.buffer, 0x2a000, 0x10000),
+	RED: new Uint8Array(ROM.buffer, 0x3a000, 0x100),
+	GREEN: new Uint8Array(ROM.buffer, 0x3a100, 0x100),
+	BLUE: new Uint8Array(ROM.buffer, 0x3a200, 0x100),
+	FGCOLOR: new Uint8Array(ROM.buffer, 0x3a300, 0x100),
+	BGCOLOR: new Uint8Array(ROM.buffer, 0x3a400, 0x100),
+	OBJCOLOR: new Uint8Array(ROM.buffer, 0x3a500, 0x100),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

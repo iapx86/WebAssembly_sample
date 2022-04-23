@@ -21,14 +21,14 @@ extern "C" EMSCRIPTEN_KEEPALIVE int *roms() {
 		(int)"PRG1", (int)strlen("PRG1"), (int)game->PRG1.data(), (int)game->PRG1.size(),
 		(int)"PRG2", (int)strlen("PRG2"), (int)game->PRG2.data(), (int)game->PRG2.size(),
 		(int)"PRG3", (int)strlen("PRG3"), (int)game->PRG3.data(), (int)game->PRG3.size(),
-		(int)"RED", (int)strlen("RED"), (int)game->RED.data(), (int)game->RED.size(),
-		(int)"BLUE", (int)strlen("BLUE"), (int)game->BLUE.data(), (int)game->BLUE.size(),
-		(int)"GREEN", (int)strlen("GREEN"), (int)game->GREEN.data(), (int)game->GREEN.size(),
-		(int)"SND", (int)strlen("SND"), (int)game->SND.data(), (int)game->SND.size(),
 		(int)"BG", (int)strlen("BG"), (int)game->BG.data(), (int)game->BG.size(),
-		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
 		(int)"OBJ", (int)strlen("OBJ"), (int)game->OBJ.data(), (int)game->OBJ.size(),
+		(int)"RED", (int)strlen("RED"), (int)game->RED.data(), (int)game->RED.size(),
+		(int)"GREEN", (int)strlen("GREEN"), (int)game->GREEN.data(), (int)game->GREEN.size(),
+		(int)"BLUE", (int)strlen("BLUE"), (int)game->BLUE.data(), (int)game->BLUE.size(),
+		(int)"BGCOLOR", (int)strlen("BGCOLOR"), (int)game->BGCOLOR.data(), (int)game->BGCOLOR.size(),
 		(int)"OBJCOLOR", (int)strlen("OBJCOLOR"), (int)game->OBJCOLOR.data(), (int)game->OBJCOLOR.size(),
+		(int)"SND", (int)strlen("SND"), (int)game->SND.data(), (int)game->SND.size(),
 		0
 	};
 	return rom_table.data();
@@ -119,27 +119,27 @@ array<unsigned char, 0x2000> Phozon::PRG2 = {
 array<unsigned char, 0x2000> Phozon::PRG3 = {
 };
 
-array<unsigned char, 0x100> Phozon::RED = {
-};
-
-array<unsigned char, 0x100> Phozon::BLUE = {
-};
-
-array<unsigned char, 0x100> Phozon::GREEN = {
-};
-
-array<unsigned char, 0x100> Phozon::SND = {
-};
-
 array<unsigned char, 0x2000> Phozon::BG = {
-};
-
-array<unsigned char, 0x100> Phozon::BGCOLOR = {
 };
 
 array<unsigned char, 0x2000> Phozon::OBJ = {
 };
 
+array<unsigned char, 0x100> Phozon::RED = {
+};
+
+array<unsigned char, 0x100> Phozon::GREEN = {
+};
+
+array<unsigned char, 0x100> Phozon::BLUE = {
+};
+
+array<unsigned char, 0x100> Phozon::BGCOLOR = {
+};
+
 array<unsigned char, 0x100> Phozon::OBJCOLOR = {
+};
+
+array<unsigned char, 0x100> Phozon::SND = {
 };
 

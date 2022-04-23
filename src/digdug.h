@@ -7,6 +7,7 @@
 #ifndef DIGDUG_H
 #define DIGDUG_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include <functional>

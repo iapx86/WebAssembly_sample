@@ -7,6 +7,7 @@
 #ifndef STRATEGY_X_H
 #define STRATEGY_X_H
 
+#include <cmath>
 #include <array>
 #include <functional>
 #include "z80.h"

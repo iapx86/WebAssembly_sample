@@ -4,18 +4,18 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/star_force.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/star_force.wasm.js';
+import {ROM} from "./dist/star_force_rom.js";
+let roms;
 
-read('starforc.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['3.3p', '2.3mn'].map(e => zip.decompress(e)));
-	const PRG2 = zip.decompress('1.3hj');
-	const FG = Uint8Array.concat(...['7.2fh', '8.3fh', '9.3fh'].map(e => zip.decompress(e)));
-	const BG1 = Uint8Array.concat(...['15.10jk', '14.9jk', '13.8jk'].map(e => zip.decompress(e)));
-	const BG2 = Uint8Array.concat(...['12.10de', '11.9de', '10.8de'].map(e => zip.decompress(e)));
-	const BG3 = Uint8Array.concat(...['18.10pq', '17.9pq', '16.8pq'].map(e => zip.decompress(e)));
-	const OBJ = Uint8Array.concat(...['6.10lm', '5.9lm', '4.8lm'].map(e => zip.decompress(e)));
-	const SND = zip.decompress('07b.bin');
-	const bufferSource = new Zlib.Unzip(archive).decompress('star_force.wasm');
-	return init(bufferSource, {PRG1, PRG2, FG, BG1, BG2, BG3, OBJ, SND});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0x8000),
+	PRG2: new Uint8Array(ROM.buffer, 0x8000, 0x2000),
+	FG: new Uint8Array(ROM.buffer, 0xa000, 0x3000),
+	BG1: new Uint8Array(ROM.buffer, 0xd000, 0x6000),
+	BG2: new Uint8Array(ROM.buffer, 0x13000, 0x6000),
+	BG3: new Uint8Array(ROM.buffer, 0x19000, 0x3000),
+	OBJ: new Uint8Array(ROM.buffer, 0x1c000, 0xc000),
+	SND: new Uint8Array(ROM.buffer, 0x28000, 0x20),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

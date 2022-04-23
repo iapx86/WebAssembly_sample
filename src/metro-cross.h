@@ -7,6 +7,7 @@
 #ifndef METRO_CROSS_H
 #define METRO_CROSS_H
 
+#include <cmath>
 #include <array>
 #include "mc6809.h"
 #include "mc6801.h"

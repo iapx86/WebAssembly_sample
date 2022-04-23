@@ -7,6 +7,7 @@
 #ifndef _1942_H
 #define _1942_H
 
+#include <cmath>
 #include <array>
 #include <functional>
 #include "z80.h"

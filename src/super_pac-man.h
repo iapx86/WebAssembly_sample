@@ -7,6 +7,7 @@
 #ifndef SUPER_PAC_MAN_H
 #define SUPER_PAC_MAN_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include "mc6809.h"

@@ -7,6 +7,7 @@
 #ifndef GRADIUS_H
 #define GRADIUS_H
 
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include <functional>

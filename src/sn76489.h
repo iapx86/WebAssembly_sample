@@ -5,6 +5,7 @@
 #ifndef SN76489_H
 #define SN76489_H
 
+#include <cmath>
 #include <array>
 using namespace std;
 

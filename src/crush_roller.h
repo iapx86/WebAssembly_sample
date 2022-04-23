@@ -7,6 +7,7 @@
 #ifndef CRUSH_ROLLER_H
 #define CRUSH_ROLLER_H
 
+#include <cmath>
 #include <array>
 #include "z80.h"
 #include "pac-man_sound.h"

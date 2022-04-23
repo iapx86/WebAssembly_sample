@@ -4,21 +4,21 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/vulgus.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/vulgus.wasm.js';
+import {ROM} from "./dist/vulgus_rom.js";
+let roms;
 
-read('vulgus.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['vulgus.002', 'vulgus.003', 'vulgus.004', 'vulgus.005', '1-8n.bin'].map(e => zip.decompress(e)));
-	const PRG2 = zip.decompress('1-11c.bin');
-	const FG = zip.decompress('1-3d.bin');
-	const BG = Uint8Array.concat(...['2-2a.bin', '2-3a.bin', '2-4a.bin', '2-5a.bin', '2-6a.bin', '2-7a.bin'].map(e => zip.decompress(e)));
-	const OBJ = Uint8Array.concat(...['2-2n.bin', '2-3n.bin', '2-4n.bin', '2-5n.bin'].map(e => zip.decompress(e)));
-	const RED = zip.decompress('e8.bin');
-	const GREEN = zip.decompress('e9.bin');
-	const BLUE = zip.decompress('e10.bin');
-	const FGCOLOR = zip.decompress('d1.bin');
-	const BGCOLOR = zip.decompress('c9.bin');
-	const OBJCOLOR = zip.decompress('j2.bin');
-	const bufferSource = new Zlib.Unzip(archive).decompress('vulgus.wasm');
-	return init(bufferSource, {PRG1, PRG2, FG, BG, OBJ, RED, GREEN, BLUE, FGCOLOR, BGCOLOR, OBJCOLOR});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0xa000),
+	PRG2: new Uint8Array(ROM.buffer, 0xa000, 0x2000),
+	FG: new Uint8Array(ROM.buffer, 0xc000, 0x2000),
+	BG: new Uint8Array(ROM.buffer, 0xe000, 0xc000),
+	OBJ: new Uint8Array(ROM.buffer, 0x1a000, 0x8000),
+	RED: new Uint8Array(ROM.buffer, 0x22000, 0x100),
+	GREEN: new Uint8Array(ROM.buffer, 0x22100, 0x100),
+	BLUE: new Uint8Array(ROM.buffer, 0x22200, 0x100),
+	FGCOLOR: new Uint8Array(ROM.buffer, 0x22300, 0x100),
+	BGCOLOR: new Uint8Array(ROM.buffer, 0x22400, 0x100),
+	OBJCOLOR: new Uint8Array(ROM.buffer, 0x22500, 0x100),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));

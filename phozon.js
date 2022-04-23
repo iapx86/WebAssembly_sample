@@ -4,21 +4,21 @@
  *
  */
 
-import {init, read} from './default_main.js';
-import {archive} from './dist/phozon.wasm.js';
+import {init, expand} from './default_main.js';
+import {imageSource, imageSource_size} from './dist/phozon.wasm.js';
+import {ROM} from "./dist/phozon_rom.js";
+let roms;
 
-read('phozon.zip').then(buffer => new Zlib.Unzip(new Uint8Array(buffer))).then(zip => {
-	const PRG1 = Uint8Array.concat(...['6e.rom', '6h.rom', '6c.rom', '6d.rom'].map(e => zip.decompress(e)));
-	const PRG2 = zip.decompress('3b.rom');
-	const PRG3 = zip.decompress('9r.rom');
-	const BG = Uint8Array.concat(...['7j.rom', '8j.rom'].map(e => zip.decompress(e)));
-	const OBJ = zip.decompress('5t.rom');
-	const RED = zip.decompress('red.prm');
-	const BLUE = zip.decompress('blue.prm');
-	const GREEN = zip.decompress('green.prm');
-	const BGCOLOR = zip.decompress('chr.prm');
-	const OBJCOLOR = zip.decompress('sprite.prm');
-	const SND = zip.decompress('sound.prm');
-	const bufferSource = new Zlib.Unzip(archive).decompress('phozon.wasm');
-	return init(bufferSource, {PRG1, PRG2, PRG3, RED, BLUE, GREEN, SND, BG, BGCOLOR, OBJ, OBJCOLOR});
-});
+window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
+	PRG1: new Uint8Array(ROM.buffer, 0x0, 0x8000),
+	PRG2: new Uint8Array(ROM.buffer, 0x8000, 0x2000),
+	PRG3: new Uint8Array(ROM.buffer, 0xa000, 0x2000),
+	BG: new Uint8Array(ROM.buffer, 0xc000, 0x2000),
+	OBJ: new Uint8Array(ROM.buffer, 0xe000, 0x2000),
+	RED: new Uint8Array(ROM.buffer, 0x10000, 0x100),
+	GREEN: new Uint8Array(ROM.buffer, 0x10100, 0x100),
+	BLUE: new Uint8Array(ROM.buffer, 0x10200, 0x100),
+	BGCOLOR: new Uint8Array(ROM.buffer, 0x10300, 0x100),
+	OBJCOLOR: new Uint8Array(ROM.buffer, 0x10400, 0x100),
+	SND: new Uint8Array(ROM.buffer, 0x10500, 0x100),
+}).then(() => expand(imageSource, imageSource_size)).then(buf => init(buf, roms)));
