@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/pengo.wasm.js';
-import {ROM} from "./dist/pengo_rom.js";
+import {ROM} from "./dist/pengo.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

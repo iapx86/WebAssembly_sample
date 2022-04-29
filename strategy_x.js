@@ -6,7 +6,7 @@
 
 import {init, expand} from './main.js';
 import {imageSource, imageSource_size} from './dist/strategy_x.wasm.js';
-import {ROM} from "./dist/strategy_x_rom.js";
+import {ROM} from "./dist/strategy_x.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

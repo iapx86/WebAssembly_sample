@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/pac-land.wasm.js';
-import {ROM} from "./dist/pac-land_rom.js";
+import {ROM} from "./dist/pac-land.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/libble_rabble.wasm.js';
-import {ROM} from "./dist/libble_rabble_rom.js";
+import {ROM} from "./dist/libble_rabble.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

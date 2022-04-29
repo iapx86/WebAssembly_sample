@@ -6,7 +6,7 @@
 
 import {init, expand} from './main.js';
 import {imageSource, imageSource_size} from './dist/chackn_pop.wasm.js';
-import {ROM} from "./dist/chackn_pop_rom.js";
+import {ROM} from "./dist/chackn_pop.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

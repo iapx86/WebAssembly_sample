@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/grobda.wasm.js';
-import {ROM} from "./dist/grobda_rom.js";
+import {ROM} from "./dist/grobda.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

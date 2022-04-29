@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/the_tower_of_druaga.wasm.js';
-import {ROM} from "./dist/the_tower_of_druaga_rom.js";
+import {ROM} from "./dist/the_tower_of_druaga.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

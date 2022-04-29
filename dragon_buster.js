@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/dragon_buster.wasm.js';
-import {ROM} from "./dist/dragon_buster_rom.js";
+import {ROM} from "./dist/dragon_buster.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

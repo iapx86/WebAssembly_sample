@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/crush_roller.wasm.js';
-import {ROM} from "./dist/crush_roller_rom.js";
+import {ROM} from "./dist/crush_roller.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

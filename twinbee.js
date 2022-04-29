@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/twinbee.wasm.js';
-import {ROM} from "./dist/twinbee_rom.js";
+import {ROM} from "./dist/twinbee.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/time_tunnel.wasm.js';
-import {ROM} from "./dist/time_tunnel_rom.js";
+import {ROM} from "./dist/time_tunnel.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

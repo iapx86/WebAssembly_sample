@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/star_force.wasm.js';
-import {ROM} from "./dist/star_force_rom.js";
+import {ROM} from "./dist/star_force.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/super_pac-man.wasm.js';
-import {ROM} from "./dist/super_pac-man_rom.js";
+import {ROM} from "./dist/super_pac-man.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

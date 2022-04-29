@@ -6,7 +6,7 @@
 
 import {init, expand} from './default_main.js';
 import {imageSource, imageSource_size} from './dist/sea_fighter_poseidon.wasm.js';
-import {ROM} from "./dist/sea_fighter_poseidon_rom.js";
+import {ROM} from "./dist/sea_fighter_poseidon.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {

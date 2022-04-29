@@ -6,7 +6,7 @@
 
 import {init, expand} from './main.js';
 import {imageSource, imageSource_size} from './dist/gradius.wasm.js';
-import {ROM} from "./dist/gradius_rom.js";
+import {ROM} from "./dist/gradius.png.js";
 let roms;
 
 window.addEventListener('load', () => expand(ROM).then(ROM => roms = {
