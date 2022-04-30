@@ -21,8 +21,8 @@ wasm: dist $(addprefix dist/,$(subst .js,,$(filter %.wasm.js,$(targets))))
 
 .PHONY: clean
 clean:
-	del dist\*.wasm*
-	del dist\*.png.js
+	rm dist/*.wasm*
+	rm dist/*.png.js
 
 dist:
 	mkdir dist
