@@ -10,6 +10,7 @@
 #include <cmath>
 #include <algorithm>
 #include <array>
+#include <initializer_list>
 #include "z80.h"
 #include "mc6805.h"
 #include "ay-3-8910.h"
@@ -410,32 +411,16 @@ struct ElevatorAction {
 			return bitmap.data();
 
 		// 画像データ変換
-		auto convertBG = [](uint8_t *dst, uint8_t *src, int n) {
-			for (int i = 0; i < n; src += 8, i++)
-				for (int j = 0; j < 8; j++)
-					for (int k = 7; k >= 0; --k)
-						*dst++ = src[k] >> j & 1 | src[k + 0x800] >> j << 1 & 2 | src[k + 0x1000] >> j << 2 & 4;
+		auto convertGFX = [](uint8_t *dst, uint8_t *src, int n, const initializer_list<int>& x, const initializer_list<int>& y, int d) {
+			for (int i = 0; i < n; src += d, i++)
+				for (int j : y)
+					for (int k : x)
+						*dst++ = src[k + j >> 3] >> (~j & 7) & 1 | src[k + j >> 3 | 0x800] >> (~j & 7) << 1 & 2 | src[k + j >> 3 | 0x1000] >> (~j & 7) << 2 & 4;
 		};
-		convertBG(&bg[0], &ram[0x800], 256);
-		convertBG(&bg[0x4000], &ram[0x2000], 256);
-		auto convertOBJ = [](uint8_t *dst, uint8_t *src, int n) {
-			for (int i = 0; i < n; src += 32, i++) {
-				for (int j = 0; j < 8; j++) {
-					for (int k = 7; k >= 0; --k)
-						*dst++ = src[k + 16] >> j & 1 | src[k + 0x800 + 16] >> j << 1 & 2 | src[k + 0x1000 + 16] >> j << 2 & 4;
-					for (int k = 7; k >= 0; --k)
-						*dst++ = src[k] >> j & 1 | src[k + 0x800] >> j << 1 & 2 | src[k + 0x1000] >> j << 2 & 4;
-				}
-				for (int j = 0; j < 8; j++) {
-					for (int k = 7; k >= 0; --k)
-						*dst++ = src[k + 24] >> j & 1 | src[k + 0x800 + 24] >> j << 1 & 2 | src[k + 0x1000 + 24] >> j << 2 & 4;
-					for (int k = 7; k >= 0; --k)
-						*dst++ = src[k + 8] >> j & 1 | src[k + 0x800 + 8] >> j << 1 & 2 | src[k + 0x1000 + 8] >> j << 2 & 4;
-				}
-			}
-		};
-		convertOBJ(&obj[0], &ram[0x800], 64);
-		convertOBJ(&obj[0x4000], &ram[0x2000], 64);
+		convertGFX(&bg[0], &ram[0x800], 256, {rseq8(0, 8)}, {rseq8(0, 1)}, 8);
+		convertGFX(&bg[0x4000], &ram[0x2000], 256, {rseq8(0, 8)}, {rseq8(0, 1)}, 8);
+		convertGFX(&obj[0], &ram[0x800], 64, {rseq8(128, 8), rseq8(0, 8)}, {rseq8(0, 1), rseq8(64, 1)}, 32);
+		convertGFX(&obj[0x4000], &ram[0x2000], 64, {rseq8(128, 8), rseq8(0, 8)}, {rseq8(0, 1), rseq8(64, 1)}, 32);
 		for (int k = 0x4a00, i = 0; i < rgb.size(); k += 2, i++) {
 			const int e = ~(ram[k] << 8 | ram[k + 1]);
 			rgb[i] = 0xff000000 | (e & 7) * 255 / 7 << 16 | (e >> 3 & 7) * 255 / 7 << 8 | (e >> 6 & 7) * 255 / 7;

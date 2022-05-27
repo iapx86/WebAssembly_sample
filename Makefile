@@ -19,6 +19,9 @@ all: dist $(addprefix dist/,$(targets))
 .PHONY: wasm
 wasm: dist $(addprefix dist/,$(subst .js,,$(filter %.wasm.js,$(targets))))
 
+.PHONY: rom
+rom: dist $(addprefix dist/,$(filter %.png.js,$(targets)))
+
 .PHONY: clean
 clean:
 	rm dist/*.wasm*

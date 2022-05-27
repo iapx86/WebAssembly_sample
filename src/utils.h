@@ -6,6 +6,7 @@
 #define UTILS_H
 
 #include <initializer_list>
+#include <numeric>
 using namespace std;
 
 #define seq2(s, d) (s), (s) + (d)
@@ -19,22 +20,15 @@ using namespace std;
 #define rseq16(s, d) rseq8((s) + 8 * (d), d), rseq8(s, d)
 #define rseq32(s, d) rseq16((s) + 16 * (d), d), rseq16(s, d)
 
-template<typename T> inline T bitswap(T val, const initializer_list<unsigned char>& b) {
-	T ret = 0;
-	for (int i = 0; i < b.size(); i++)
-		ret |= (val >> b.begin()[i] & 1) << b.size() - i - 1;
-	return ret;
+inline int bitswap(int val, const initializer_list<int>& b) {
+	return reduce(b.begin(), b.end(), 0, [&](int a, int i) { return a << 1 | val >> i & 1; });
 }
 
 inline void convertGFX(unsigned char *dst, const unsigned char *src, int n, const initializer_list<int>& x, const initializer_list<int>& y, const initializer_list<int>& z, int d) {
 	for (int i = 0; i < n; src += d, i++)
-		for (int j = 0; j < y.size(); j++)
-			for (int k = 0; k < x.size(); dst++, k++)
-				for (int l = 0; l < z.size(); l++)
-					if (z.begin()[l] >= 0) {
-						const int pos = x.begin()[k] + y.begin()[j] + z.begin()[l];
-						*dst ^= (~src[pos >> 3] >> (pos & 7 ^ 7) & 1) << z.size() - l - 1;
-					}
+		for (int j : y)
+			for (int k : x)
+				*dst++ ^= reduce(z.begin(), z.end(), 0, [&](int a, int l) { return a << 1 | (l < 0 ? 0 : ~src[k + j + l >> 3] >> (k + j + l & 7 ^ 7) & 1); });
 }
 
 template<typename T> struct Timer {
