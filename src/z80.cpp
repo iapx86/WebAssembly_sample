@@ -4,7 +4,7 @@
  *
  */
 
-#include "z80.h"
+#include "z80.hpp"
 
 int Z80::fLogic[0x100];
 

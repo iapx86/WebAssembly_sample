@@ -4,7 +4,7 @@
  *
  */
 
-#include "cpu.h"
+#include "cpu.hpp"
 
 unsigned char Page::dummypage[0x100] = {
 		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,

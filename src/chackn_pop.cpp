@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "chackn_pop.h"
+#include "chackn_pop.hpp"
 using namespace std;
 
 ChacknPop *game;

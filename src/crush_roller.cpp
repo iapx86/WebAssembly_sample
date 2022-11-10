@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "crush_roller.h"
+#include "crush_roller.hpp"
 using namespace std;
 
 CrushRoller *game;

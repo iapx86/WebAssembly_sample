@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "vulgus.h"
+#include "vulgus.hpp"
 using namespace std;
 
 Vulgus *game;

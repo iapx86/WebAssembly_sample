@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "grobda.h"
+#include "grobda.hpp"
 using namespace std;
 
 Grobda *game;

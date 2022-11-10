@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "strategy_x.h"
+#include "strategy_x.hpp"
 using namespace std;
 
 StrategyX *game;

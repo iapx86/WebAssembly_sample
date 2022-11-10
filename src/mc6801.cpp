@@ -4,7 +4,7 @@
  *
  */
 
-#include "mc6801.h"
+#include "mc6801.hpp"
 
 const unsigned char MC6801::cc[0x100] = { // HD63701
 	 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,

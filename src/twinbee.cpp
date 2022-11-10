@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "twinbee.h"
+#include "twinbee.hpp"
 using namespace std;
 
 TwinBee *game;

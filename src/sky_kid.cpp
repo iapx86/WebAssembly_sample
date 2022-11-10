@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "sky_kid.h"
+#include "sky_kid.hpp"
 using namespace std;
 
 SkyKid *game;

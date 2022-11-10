@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "libble_rabble.h"
+#include "libble_rabble.hpp"
 using namespace std;
 
 LibbleRabble *game;

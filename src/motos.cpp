@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "motos.h"
+#include "motos.hpp"
 using namespace std;
 
 Motos *game;

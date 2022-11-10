@@ -4,7 +4,7 @@
  *
  */
 
-#include "mc6805.h"
+#include "mc6805.hpp"
 
 const unsigned char MC6805::cc[0x100] = { // MC68705P5
 	10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,

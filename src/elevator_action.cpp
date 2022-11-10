@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "elevator_action.h"
+#include "elevator_action.hpp"
 using namespace std;
 
 ElevatorAction *game;

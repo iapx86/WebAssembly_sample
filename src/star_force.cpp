@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "star_force.h"
+#include "star_force.hpp"
 using namespace std;
 
 StarForce *game;

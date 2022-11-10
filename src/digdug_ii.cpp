@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "digdug_ii.h"
+#include "digdug_ii.hpp"
 using namespace std;
 
 DigDugII *game;

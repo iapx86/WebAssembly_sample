@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "dragon_buster.h"
+#include "dragon_buster.hpp"
 using namespace std;
 
 DragonBuster *game;

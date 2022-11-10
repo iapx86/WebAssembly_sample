@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "the_tower_of_druaga.h"
+#include "the_tower_of_druaga.hpp"
 using namespace std;
 
 TheTowerOfDruaga *game;

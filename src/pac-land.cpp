@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "pac-land.h"
+#include "pac-land.hpp"
 using namespace std;
 
 PacLand *game;

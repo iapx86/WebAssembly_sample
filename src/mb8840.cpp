@@ -4,7 +4,7 @@
  *
  */
 
-#include "mb8840.h"
+#include "mb8840.hpp"
 
 const unsigned char MB8840::cc[0x100] = {
 	 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,

@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "phozon.h"
+#include "phozon.hpp"
 using namespace std;
 
 Phozon *game;

@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "gradius.h"
+#include "gradius.hpp"
 using namespace std;
 
 Gradius *game;

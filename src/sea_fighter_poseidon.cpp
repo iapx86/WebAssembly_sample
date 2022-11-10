@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "sea_fighter_poseidon.h"
+#include "sea_fighter_poseidon.hpp"
 using namespace std;
 
 SeaFighterPoseidon *game;

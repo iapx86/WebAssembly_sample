@@ -4,7 +4,7 @@
  *
  */
 
-#include "mc68000.h"
+#include "mc68000.hpp"
 
 const unsigned char MC68000::cc[0x10000] = {
 	  8,   8,   8,   8,   8,   8,   8,   8,   0,   0,   0,   0,   0,   0,   0,

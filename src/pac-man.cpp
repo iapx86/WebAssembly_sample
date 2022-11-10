@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "pac-man.h"
+#include "pac-man.hpp"
 using namespace std;
 
 PacMan *game;

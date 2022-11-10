@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "toypop.h"
+#include "toypop.hpp"
 using namespace std;
 
 Toypop *game;

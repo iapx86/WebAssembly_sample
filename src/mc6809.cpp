@@ -4,7 +4,7 @@
  *
  */
 
-#include "mc6809.h"
+#include "mc6809.hpp"
 
 const unsigned char MC6809::cc[0x100] = {
 	 6, 0, 0, 6, 6, 0, 6, 6, 6, 6, 6, 0, 6, 6, 3, 6,

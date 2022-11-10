@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "pac_and_pal.h"
+#include "pac_and_pal.hpp"
 using namespace std;
 
 PacAndPal *game;

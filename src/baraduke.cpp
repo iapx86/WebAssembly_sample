@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "baraduke.h"
+#include "baraduke.hpp"
 using namespace std;
 
 Baraduke *game;

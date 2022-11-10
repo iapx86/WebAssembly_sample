@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "time_pilot.h"
+#include "time_pilot.hpp"
 using namespace std;
 
 TimePilot *game;

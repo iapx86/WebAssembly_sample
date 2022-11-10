@@ -33,193 +33,193 @@ dist:
 %.wasm.js: convert.py %.wasm
 	python $^ $@
 
-dist/1942.wasm: $(addprefix src/,1942.cpp z80.cpp cpu.cpp 1942.h z80.h cpu.h ay-3-8910.h utils.h)
+dist/1942.wasm: $(addprefix src/,1942.cpp z80.cpp cpu.cpp 1942.hpp z80.hpp cpu.hpp ay-3-8910.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/1942.png.js: $(addprefix roms/,1942.py 1942.zip)
 	python $^ $@
 
-dist/baraduke.wasm: $(addprefix src/,baraduke.cpp mc6809.cpp mc6801.cpp cpu.cpp baraduke.h mc6809.h mc6801.h cpu.h c30.h utils.h)
+dist/baraduke.wasm: $(addprefix src/,baraduke.cpp mc6809.cpp mc6801.cpp cpu.cpp baraduke.hpp mc6809.hpp mc6801.hpp cpu.hpp c30.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/baraduke.png.js: $(addprefix roms/,baraduke.py aliensec.zip)
 	python $^ $@
 
-dist/chackn_pop.wasm: $(addprefix src/,chackn_pop.cpp z80.cpp mc6805.cpp cpu.cpp chackn_pop.h z80.h mc6805.h cpu.h ay-3-8910.h utils.h)
+dist/chackn_pop.wasm: $(addprefix src/,chackn_pop.cpp z80.cpp mc6805.cpp cpu.cpp chackn_pop.hpp z80.hpp mc6805.hpp cpu.hpp ay-3-8910.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/chackn_pop.png.js: $(addprefix roms/,chackn_pop.py chaknpop.zip)
 	python $^ $@
 
-dist/crush_roller.wasm: $(addprefix src/,crush_roller.cpp z80.cpp cpu.cpp crush_roller.h z80.h cpu.h pac-man_sound.h utils.h)
+dist/crush_roller.wasm: $(addprefix src/,crush_roller.cpp z80.cpp cpu.cpp crush_roller.hpp z80.hpp cpu.hpp pac-man_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/crush_roller.png.js: $(addprefix roms/,crush_roller.py crush.zip)
 	python $^ $@
 
-dist/digdug.wasm: $(addprefix src/,digdug.cpp z80.cpp mb8840.cpp cpu.cpp digdug.h z80.h mb8840.h cpu.h pac-man_sound.h utils.h)
+dist/digdug.wasm: $(addprefix src/,digdug.cpp z80.cpp mb8840.cpp cpu.cpp digdug.hpp z80.hpp mb8840.hpp cpu.hpp pac-man_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/digdug.png.js: $(addprefix roms/,digdug.py digdug.zip namco51.zip)
 	python $^ $@
 
-dist/digdug_ii.wasm: $(addprefix src/,digdug_ii.cpp mc6809.cpp cpu.cpp digdug_ii.h mc6809.h cpu.h mappy_sound.h utils.h)
+dist/digdug_ii.wasm: $(addprefix src/,digdug_ii.cpp mc6809.cpp cpu.cpp digdug_ii.hpp mc6809.hpp cpu.hpp mappy_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/digdug_ii.png.js: $(addprefix roms/,digdug_ii.py digdug2.zip)
 	python $^ $@
 
-dist/dragon_buster.wasm: $(addprefix src/,dragon_buster.cpp mc6809.cpp mc6801.cpp cpu.cpp dragon_buster.h mc6809.h mc6801.h cpu.h c30.h utils.h)
+dist/dragon_buster.wasm: $(addprefix src/,dragon_buster.cpp mc6809.cpp mc6801.cpp cpu.cpp dragon_buster.hpp mc6809.hpp mc6801.hpp cpu.hpp c30.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/dragon_buster.png.js: $(addprefix roms/,dragon_buster.py drgnbstr.zip)
 	python $^ $@
 
-dist/elevator_action.wasm: $(addprefix src/,elevator_action.cpp z80.cpp mc6805.cpp cpu.cpp elevator_action.h z80.h mc6805.h cpu.h ay-3-8910.h dac.h utils.h)
+dist/elevator_action.wasm: $(addprefix src/,elevator_action.cpp z80.cpp mc6805.cpp cpu.cpp elevator_action.hpp z80.hpp mc6805.hpp cpu.hpp ay-3-8910.hpp dac.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/elevator_action.png.js: $(addprefix roms/,elevator_action.py elevator.zip)
 	python $^ $@
 
-dist/frogger.wasm: $(addprefix src/,frogger.cpp z80.cpp cpu.cpp frogger.h z80.h cpu.h ay-3-8910.h utils.h)
+dist/frogger.wasm: $(addprefix src/,frogger.cpp z80.cpp cpu.cpp frogger.hpp z80.hpp cpu.hpp ay-3-8910.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/frogger.png.js: $(addprefix roms/,frogger.py frogger.zip)
 	python $^ $@
 
-dist/gradius.wasm: $(addprefix src/,gradius.cpp mc68000.cpp z80.cpp cpu.cpp vlm5030.cpp gradius.h mc68000.h z80.h cpu.h ay-3-8910.h k005289.h vlm5030.h utils.h)
+dist/gradius.wasm: $(addprefix src/,gradius.cpp mc68000.cpp z80.cpp cpu.cpp vlm5030.cpp gradius.hpp mc68000.hpp z80.hpp cpu.hpp ay-3-8910.hpp k005289.hpp vlm5030.hpp utils.hpp)
 	emcc --std=c++20 -O3 -s INITIAL_MEMORY=33554432 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/gradius.png.js: $(addprefix roms/,gradius.py nemesis.zip)
 	python $^ $@
 
-dist/grobda.wasm: $(addprefix src/,grobda.cpp mc6809.cpp cpu.cpp grobda.h mc6809.h cpu.h mappy_sound.h utils.h)
+dist/grobda.wasm: $(addprefix src/,grobda.cpp mc6809.cpp cpu.cpp grobda.hpp mc6809.hpp cpu.hpp mappy_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/grobda.png.js: $(addprefix roms/,grobda.py grobda.zip)
 	python $^ $@
 
-dist/libble_rabble.wasm: $(addprefix src/,libble_rabble.cpp mc6809.cpp mc68000.cpp cpu.cpp libble_rabble.h mc6809.h mc68000.h cpu.h mappy_sound.h utils.h)
+dist/libble_rabble.wasm: $(addprefix src/,libble_rabble.cpp mc6809.cpp mc68000.cpp cpu.cpp libble_rabble.hpp mc6809.hpp mc68000.hpp cpu.hpp mappy_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 -s INITIAL_MEMORY=33554432 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/libble_rabble.png.js: $(addprefix roms/,libble_rabble.py liblrabl.zip)
 	python $^ $@
 
-dist/mappy.wasm: $(addprefix src/,mappy.cpp mc6809.cpp cpu.cpp mappy.h mc6809.h cpu.h mappy_sound.h utils.h)
+dist/mappy.wasm: $(addprefix src/,mappy.cpp mc6809.cpp cpu.cpp mappy.hpp mc6809.hpp cpu.hpp mappy_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/mappy.png.js: $(addprefix roms/,mappy.py mappy.zip)
 	python $^ $@
 
-dist/metro-cross.wasm: $(addprefix src/,metro-cross.cpp mc6809.cpp mc6801.cpp cpu.cpp metro-cross.h mc6809.h mc6801.h cpu.h c30.h utils.h utils.h)
+dist/metro-cross.wasm: $(addprefix src/,metro-cross.cpp mc6809.cpp mc6801.cpp cpu.cpp metro-cross.hpp mc6809.hpp mc6801.hpp cpu.hpp c30.hpp utils.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/metro-cross.png.js: $(addprefix roms/,metro-cross.py metrocrs.zip)
 	python $^ $@
 
-dist/motos.wasm: $(addprefix src/,motos.cpp mc6809.cpp cpu.cpp motos.h mc6809.h cpu.h mappy_sound.h utils.h)
+dist/motos.wasm: $(addprefix src/,motos.cpp mc6809.cpp cpu.cpp motos.hpp mc6809.hpp cpu.hpp mappy_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/motos.png.js: $(addprefix roms/,motos.py motos.zip)
 	python $^ $@
 
-dist/pac-land.wasm: $(addprefix src/,pac-land.cpp mc6809.cpp mc6801.cpp cpu.cpp pac-land.h mc6809.h mc6801.h cpu.h c30.h utils.h)
+dist/pac-land.wasm: $(addprefix src/,pac-land.cpp mc6809.cpp mc6801.cpp cpu.cpp pac-land.hpp mc6809.hpp mc6801.hpp cpu.hpp c30.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/pac-land.png.js: $(addprefix roms/,pac-land.py pacland.zip)
 	python $^ $@
 
-dist/pac-man.wasm: $(addprefix src/,pac-man.cpp z80.cpp cpu.cpp pac-man.h z80.h cpu.h pac-man_sound.h utils.h)
+dist/pac-man.wasm: $(addprefix src/,pac-man.cpp z80.cpp cpu.cpp pac-man.hpp z80.hpp cpu.hpp pac-man_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/pac-man.png.js: $(addprefix roms/,pac-man.py puckman.zip)
 	python $^ $@
 
-dist/pac_and_pal.wasm: $(addprefix src/,pac_and_pal.cpp mc6809.cpp cpu.cpp pac_and_pal.h mc6809.h cpu.h mappy_sound.h utils.h)
+dist/pac_and_pal.wasm: $(addprefix src/,pac_and_pal.cpp mc6809.cpp cpu.cpp pac_and_pal.hpp mc6809.hpp cpu.hpp mappy_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/pac_and_pal.png.js: $(addprefix roms/,pac_and_pal.py pacnpal.zip)
 	python $^ $@
 
-dist/pengo.wasm: $(addprefix src/,pengo.cpp sega_z80.cpp z80.cpp cpu.cpp pengo.h sega_z80.h z80.h cpu.h pac-man_sound.h utils.h)
+dist/pengo.wasm: $(addprefix src/,pengo.cpp sega_z80.cpp z80.cpp cpu.cpp pengo.hpp sega_z80.hpp z80.hpp cpu.hpp pac-man_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/pengo.png.js: $(addprefix roms/,pengo.py pengo.zip)
 	python $^ $@
 
-dist/phozon.wasm: $(addprefix src/,phozon.cpp mc6809.cpp cpu.cpp phozon.h mc6809.h cpu.h mappy_sound.h utils.h)
+dist/phozon.wasm: $(addprefix src/,phozon.cpp mc6809.cpp cpu.cpp phozon.hpp mc6809.hpp cpu.hpp mappy_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/phozon.png.js: $(addprefix roms/,phozon.py phozon.zip)
 	python $^ $@
 
-dist/sea_fighter_poseidon.wasm: $(addprefix src/,sea_fighter_poseidon.cpp z80.cpp mc6805.cpp cpu.cpp sea_fighter_poseidon.h z80.h mc6805.h cpu.h ay-3-8910.h dac.h utils.h)
+dist/sea_fighter_poseidon.wasm: $(addprefix src/,sea_fighter_poseidon.cpp z80.cpp mc6805.cpp cpu.cpp sea_fighter_poseidon.hpp z80.hpp mc6805.hpp cpu.hpp ay-3-8910.hpp dac.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/sea_fighter_poseidon.png.js: $(addprefix roms/,sea_fighter_poseidon.py sfposeid.zip)
 	python $^ $@
 
-dist/sky_kid.wasm: $(addprefix src/,sky_kid.cpp mc6809.cpp mc6801.cpp cpu.cpp sky_kid.h mc6809.h mc6801.h cpu.h c30.h utils.h)
+dist/sky_kid.wasm: $(addprefix src/,sky_kid.cpp mc6809.cpp mc6801.cpp cpu.cpp sky_kid.hpp mc6809.hpp mc6801.hpp cpu.hpp c30.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/sky_kid.png.js: $(addprefix roms/,sky_kid.py skykid.zip)
 	python $^ $@
 
-dist/star_force.wasm: $(addprefix src/,star_force.cpp z80.cpp cpu.cpp star_force.h z80.h cpu.h sn76489.h senjyo_sound.h utils.h)
+dist/star_force.wasm: $(addprefix src/,star_force.cpp z80.cpp cpu.cpp star_force.hpp z80.hpp cpu.hpp sn76489.hpp senjyo_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/star_force.png.js: $(addprefix roms/,star_force.py starforc.zip)
 	python $^ $@
 
-dist/strategy_x.wasm: $(addprefix src/,strategy_x.cpp z80.cpp cpu.cpp strategy_x.h z80.h cpu.h ay-3-8910.h utils.h)
+dist/strategy_x.wasm: $(addprefix src/,strategy_x.cpp z80.cpp cpu.cpp strategy_x.hpp z80.hpp cpu.hpp ay-3-8910.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/strategy_x.png.js: $(addprefix roms/,strategy_x.py stratgyx.zip)
 	python $^ $@
 
-dist/super_pac-man.wasm: $(addprefix src/,super_pac-man.cpp mc6809.cpp cpu.cpp super_pac-man.h mc6809.h cpu.h mappy_sound.h utils.h)
+dist/super_pac-man.wasm: $(addprefix src/,super_pac-man.cpp mc6809.cpp cpu.cpp super_pac-man.hpp mc6809.hpp cpu.hpp mappy_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/super_pac-man.png.js: $(addprefix roms/,super_pac-man.py superpac.zip)
 	python $^ $@
 
-dist/the_tower_of_druaga.wasm: $(addprefix src/,the_tower_of_druaga.cpp mc6809.cpp cpu.cpp the_tower_of_druaga.h mc6809.h cpu.h mappy_sound.h utils.h)
+dist/the_tower_of_druaga.wasm: $(addprefix src/,the_tower_of_druaga.cpp mc6809.cpp cpu.cpp the_tower_of_druaga.hpp mc6809.hpp cpu.hpp mappy_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/the_tower_of_druaga.png.js: $(addprefix roms/,the_tower_of_druaga.py todruaga.zip)
 	python $^ $@
 
-dist/time_pilot.wasm: $(addprefix src/,time_pilot.cpp z80.cpp cpu.cpp time_pilot.h z80.h cpu.h ay-3-8910.h utils.h)
+dist/time_pilot.wasm: $(addprefix src/,time_pilot.cpp z80.cpp cpu.cpp time_pilot.hpp z80.hpp cpu.hpp ay-3-8910.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/time_pilot.png.js: $(addprefix roms/,time_pilot.py timeplt.zip)
 	python $^ $@
 
-dist/time_tunnel.wasm: $(addprefix src/,time_tunnel.cpp z80.cpp cpu.cpp time_tunnel.h z80.h cpu.h ay-3-8910.h dac.h utils.h)
+dist/time_tunnel.wasm: $(addprefix src/,time_tunnel.cpp z80.cpp cpu.cpp time_tunnel.hpp z80.hpp cpu.hpp ay-3-8910.hpp dac.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/time_tunnel.png.js: $(addprefix roms/,time_tunnel.py timetunl.zip)
 	python $^ $@
 
-dist/toypop.wasm: $(addprefix src/,toypop.cpp mc6809.cpp mc68000.cpp cpu.cpp toypop.h mc6809.h mc68000.h cpu.h mappy_sound.h utils.h)
+dist/toypop.wasm: $(addprefix src/,toypop.cpp mc6809.cpp mc68000.cpp cpu.cpp toypop.hpp mc6809.hpp mc68000.hpp cpu.hpp mappy_sound.hpp utils.hpp)
 	emcc --std=c++20 -O3 -s INITIAL_MEMORY=33554432 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/toypop.png.js: $(addprefix roms/,toypop.py toypop.zip)
 	python $^ $@
 
-dist/twinbee.wasm: $(addprefix src/,twinbee.cpp mc68000.cpp z80.cpp cpu.cpp vlm5030.cpp twinbee.h mc68000.h z80.h cpu.h ay-3-8910.h k005289.h vlm5030.h utils.h)
+dist/twinbee.wasm: $(addprefix src/,twinbee.cpp mc68000.cpp z80.cpp cpu.cpp vlm5030.cpp twinbee.hpp mc68000.hpp z80.hpp cpu.hpp ay-3-8910.hpp k005289.hpp vlm5030.hpp utils.hpp)
 	emcc --std=c++20 -O3 -s INITIAL_MEMORY=33554432 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/twinbee.png.js: $(addprefix roms/,twinbee.py twinbee.zip)
 	python $^ $@
 
-dist/vulgus.wasm: $(addprefix src/,vulgus.cpp z80.cpp cpu.cpp vulgus.h z80.h cpu.h ay-3-8910.h utils.h)
+dist/vulgus.wasm: $(addprefix src/,vulgus.cpp z80.cpp cpu.cpp vulgus.hpp z80.hpp cpu.hpp ay-3-8910.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/vulgus.png.js: $(addprefix roms/,vulgus.py vulgus.zip)
 	python $^ $@
 
-dist/zigzag.wasm: $(addprefix src/,zigzag.cpp z80.cpp cpu.cpp zigzag.h z80.h cpu.h ay-3-8910.h utils.h)
+dist/zigzag.wasm: $(addprefix src/,zigzag.cpp z80.cpp cpu.cpp zigzag.hpp z80.hpp cpu.hpp ay-3-8910.hpp utils.hpp)
 	emcc --std=c++20 -O3 --no-entry -Wno-shift-op-parentheses -o $@ $(filter %.cpp,$^)
 
 dist/zigzag.png.js: $(addprefix roms/,zigzag.py zigzagb.zip)

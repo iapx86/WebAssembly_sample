@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "zigzag.h"
+#include "zigzag.hpp"
 using namespace std;
 
 ZigZag *game;

@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "mappy.h"
+#include "mappy.hpp"
 using namespace std;
 
 Mappy *game;

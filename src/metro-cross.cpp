@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "metro-cross.h"
+#include "metro-cross.hpp"
 using namespace std;
 
 MetroCross *game;

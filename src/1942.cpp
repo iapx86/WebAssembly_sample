@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "1942.h"
+#include "1942.hpp"
 using namespace std;
 
 _1942 *game;

@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "pengo.h"
+#include "pengo.hpp"
 using namespace std;
 
 Pengo *game;

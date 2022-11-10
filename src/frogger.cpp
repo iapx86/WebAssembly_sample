@@ -9,7 +9,7 @@
 #include <array>
 #include <list>
 #include <vector>
-#include "frogger.h"
+#include "frogger.hpp"
 using namespace std;
 
 Frogger *game;
