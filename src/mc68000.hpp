@@ -571,7 +571,7 @@ struct MC68000 : Cpu {
 		case 046: // BTST Dx,d(Ay,Xi)
 			return ea = index(a[y]), btst8(d[x], read8(ea));
 		case 047: // BTST Dx,Abs...
-			return y >= 4 ? exception(4) : btst8(d[x], rop8());
+			return y >= 5 ? exception(4) : btst8(d[x], rop8());
 		case 050: // BCHG Dx,Dy
 			return void(d[y] = bchg32(d[x], d[y]));
 		case 051: // MOVEP.L d(Ay),Dx
@@ -3561,12 +3561,9 @@ struct MC68000 : Cpu {
 	}
 
 	int sbcd(int src, int dst) {
-		int r = dst - src - (sr >> 4 & 1) & 0xff, c = ~dst & src | src & r | r & ~dst;
-		if (c & 8 && (r & 0x0f) > 5 || (r & 0x0f) > 9)
-			r -= 6;
-		if (c & 0x80 && (r & 0xf0) > 0x50 || (r & 0xf0) > 0x90)
-			r -= 0x60, c |= 0x80;
-		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | sr & !r << 2 | c >> 7 & 1, r;
+		const int h = (dst & 0x0f) - (src & 0x0f) - (sr >> 4 & 1) < 0, c = (dst >> 4 & 0x0f) - (src >> 4 & 0x0f) - h < 0;
+		const int r = dst - src - (sr >> 4 & 1) - h * 6 - c * 0x60 & 0xff;
+		return sr = sr & ~0x15 | c << 4 | sr & !r << 2 | c, r;
 	}
 
 	int divs(int src, int dst) {
@@ -3607,13 +3604,9 @@ struct MC68000 : Cpu {
 	}
 
 	int abcd(int src, int dst) {
-		int r = dst + src + (sr >> 4 & 1) & 0xff, c = dst & src | src & ~r | ~r & dst;
-		if (c & 8 && (r & 0x0f) < 4 || (r & 0x0f) > 9)
-			if ((r += 6) >= 0x100)
-				c |= 0x80;
-		if (c & 0x80 && (r & 0xf0) < 0x40 || (r & 0xf0) > 0x90)
-			r += 0x60, c |= 0x80;
-		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | sr & !r << 2 | c >> 7 & 1, r;
+		const int h = (dst & 0x0f) + (src & 0x0f) + (sr >> 4 & 1) > 9, c = (dst >> 4 & 0x0f) + (src >> 4 & 0x0f) + h > 9;
+		const int r = dst + src + (sr >> 4 & 1) + h * 6 + c * 0x60 & 0xff;
+		return sr = sr & ~0x15 | c << 4 | sr & !r << 2 | c, r;
 	}
 
 	int muls(int src, int dst) {
@@ -3822,12 +3815,8 @@ struct MC68000 : Cpu {
 	}
 
 	int nbcd(int dst) {
-		int r = -dst - (sr >> 4 & 1) & 0xff, c = dst | r;
-		if (c & 8 && (r & 0x0f) > 5 || (r & 0x0f) > 9)
-			r -= 6;
-		if (c & 0x80 && (r & 0xf0) > 0x50 || (r & 0xf0) > 0x90)
-			r -= 0x60, c |= 0x80;
-		return r &= 0xff, sr = sr & ~0x15 | c >> 3 & 0x10 | sr & !r << 2 | c >> 7 & 1, r;
+		const int h = -(dst & 0x0f) - (sr >> 4 & 1) < 0, c = -(dst >> 4 & 0x0f) - h < 0, r = -dst - (sr >> 4 & 1) - h * 6 - c * 0x60 & 0xff;
+		return sr = sr & ~0x15 | c << 4 | sr & !r << 2 | c, r;
 	}
 
 	void dbcc(bool cond) {
